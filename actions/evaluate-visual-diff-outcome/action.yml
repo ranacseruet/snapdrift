@@ -1,0 +1,45 @@
+name: Evaluate Visual Diff Outcome
+description: Evaluate the diff summary against diff.mode and fail when required.
+
+inputs:
+  summary-path:
+    description: Path to the visual diff summary JSON.
+    required: false
+    default: qa-artifacts/visual-diffs/current/visual-diff-summary.json
+
+outputs:
+  status:
+    description: Computed visual diff status.
+    value: ${{ steps.evaluate.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - name: Install shared action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
+    - id: evaluate
+      shell: bash
+      env:
+        SUMMARY_PATH: ${{ inputs.summary-path }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const { shouldFailVisualDiff, formatVisualDiffFailureMessage } = await import(pathToFileURL(modulePath));
+        const summary = JSON.parse(await fs.readFile(process.env.SUMMARY_PATH, 'utf8'));
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, `status=${summary.status || ''}\n`);
+
+        if (shouldFailVisualDiff(summary)) {
+          throw new Error(formatVisualDiffFailureMessage(summary.diffMode, summary));
+        }
+        EOF

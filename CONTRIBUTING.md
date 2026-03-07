@@ -1,0 +1,70 @@
+# Contributing
+
+Thanks for your interest in contributing! This guide covers the basics.
+
+## Reporting Bugs
+
+Open a [bug report issue](../../issues/new?template=bug_report.md) with:
+
+- Steps to reproduce
+- Expected vs actual behavior
+- Node version and OS
+
+## Suggesting Features
+
+Open a [feature request issue](../../issues/new?template=feature_request.md) describing the use case and proposed solution.
+
+## Development Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/user/snapdrift.git
+cd snapdrift
+
+# Install dependencies
+npm ci
+
+# Install Playwright browsers (needed for capture tests)
+npx playwright install --with-deps chromium
+```
+
+## Running Tests
+
+From the parent repo (while this module is still embedded):
+
+```bash
+NODE_OPTIONS='--experimental-vm-modules' npx jest scripts/visual-diff-smoke.test.js
+NODE_OPTIONS='--experimental-vm-modules' npx jest scripts/visual-diff-pr-comment.test.js
+```
+
+## Making Changes
+
+1. Fork the repo and create a branch from `main`.
+2. Make your changes.
+3. Add or update tests to cover the change.
+4. Run the test suite and confirm everything passes.
+5. Update documentation if your change affects contracts, inputs/outputs, or behavior.
+6. Update `CHANGELOG.md` under an `## Unreleased` section.
+7. Open a pull request.
+
+## Pull Request Guidelines
+
+- Keep PRs focused — one concern per PR.
+- Follow existing code style (ESM, no transpilation, JSDoc types).
+- Do not break frozen v1 contracts without discussion.
+- Add a clear description of what changed and why.
+
+## Contract Stability
+
+The v1 contracts (config schema, artifact structure, action inputs/outputs, viewport presets, readiness defaults) are frozen. Changes to these require a major version bump and prior discussion in an issue.
+
+## Code Style
+
+- ESM modules (`.mjs`) with `type: "module"` in package.json
+- JSDoc type annotations referencing `types/visual-diff-types.d.ts`
+- No transpilation or bundling — runs directly on Node >= 20
+- Composite GitHub Actions with inline shell or `actions/github-script`
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

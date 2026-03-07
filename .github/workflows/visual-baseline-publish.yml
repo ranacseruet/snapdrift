@@ -1,0 +1,67 @@
+name: Visual Baseline Publish Template
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: false
+        type: string
+        default: '23'
+      repo-config-path:
+        required: false
+        type: string
+        default: .github/visual-regression.json
+      artifact-retention-days:
+        required: false
+        type: number
+        default: 30
+      install-command:
+        required: false
+        type: string
+        default: npm ci
+      build-command:
+        required: false
+        type: string
+        default: npm run build
+      start-command:
+        required: true
+        type: string
+
+jobs:
+  publish-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build app
+        run: ${{ inputs.build-command }}
+
+      - name: Start app
+        run: |
+          set -euo pipefail
+          ${{ inputs.start-command }} > /tmp/visual-baseline-start.log 2>&1 &
+          echo "QA_SERVER_PID=$!" >> "$GITHUB_ENV"
+          trap 'kill "$QA_SERVER_PID" || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -sSf http://127.0.0.1:8080 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/visual-baseline-start.log || true
+          exit 1
+
+      - name: Publish visual baseline
+        id: publish
+        uses: ./actions/publish-visual-baseline
+        with:
+          repo-config-path: ${{ inputs.repo-config-path }}
+          artifact-retention-days: ${{ inputs.artifact-retention-days }}

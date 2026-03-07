@@ -1,0 +1,158 @@
+name: Compare Visual Results
+description: Compare the current visual capture against a baseline and emit the standard summary files.
+
+inputs:
+  repo-config-path:
+    description: Path to the visual regression config file.
+    required: false
+    default: .github/visual-regression.json
+  route-ids:
+    description: Optional comma-separated route ids to compare.
+    required: false
+    default: ''
+  baseline-results-path:
+    description: Absolute or workspace-relative path to the baseline results JSON.
+    required: true
+  baseline-manifest-path:
+    description: Absolute or workspace-relative path to the baseline screenshot manifest JSON.
+    required: true
+  current-results-path:
+    description: Absolute or workspace-relative path to the current results JSON.
+    required: false
+    default: ''
+  current-manifest-path:
+    description: Absolute or workspace-relative path to the current screenshot manifest JSON.
+    required: false
+    default: ''
+  baseline-run-dir:
+    description: Root directory that contains baseline screenshots.
+    required: true
+  current-run-dir:
+    description: Root directory that contains current screenshots.
+    required: false
+    default: ''
+  out-dir:
+    description: Directory where the diff summary files should be written.
+    required: false
+    default: qa-artifacts/visual-diffs/current
+  summary-path:
+    description: Optional explicit path for the diff summary JSON file.
+    required: false
+    default: ''
+  markdown-path:
+    description: Optional explicit path for the diff summary markdown file.
+    required: false
+    default: ''
+  baseline-artifact-name:
+    description: Optional baseline artifact label for the summary.
+    required: false
+    default: ''
+  baseline-source-sha:
+    description: Optional baseline source SHA for the summary.
+    required: false
+    default: ''
+  enforce-outcome:
+    description: Whether to fail according to diff.mode after writing the summary.
+    required: false
+    default: 'false'
+
+outputs:
+  summary-path:
+    description: Absolute path to the generated summary JSON file.
+    value: ${{ steps.compare.outputs.summary_path }}
+  markdown-path:
+    description: Absolute path to the generated summary markdown file.
+    value: ${{ steps.compare.outputs.markdown_path }}
+  status:
+    description: Computed visual diff status.
+    value: ${{ steps.compare.outputs.status }}
+  changed-screenshots:
+    description: Number of changed screenshots.
+    value: ${{ steps.compare.outputs.changed_screenshots }}
+  matched-screenshots:
+    description: Number of matched screenshots.
+    value: ${{ steps.compare.outputs.matched_screenshots }}
+  missing-in-baseline:
+    description: Number of screenshots missing in the baseline.
+    value: ${{ steps.compare.outputs.missing_in_baseline }}
+  missing-in-current:
+    description: Number of screenshots missing in the current capture.
+    value: ${{ steps.compare.outputs.missing_in_current }}
+  errors-count:
+    description: Number of comparison errors.
+    value: ${{ steps.compare.outputs.errors_count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - name: Install shared action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
+    - id: compare
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ inputs.route-ids }}
+        BASELINE_RESULTS_PATH: ${{ inputs.baseline-results-path }}
+        BASELINE_MANIFEST_PATH: ${{ inputs.baseline-manifest-path }}
+        CURRENT_RESULTS_PATH: ${{ inputs.current-results-path }}
+        CURRENT_MANIFEST_PATH: ${{ inputs.current-manifest-path }}
+        BASELINE_RUN_DIR: ${{ inputs.baseline-run-dir }}
+        CURRENT_RUN_DIR: ${{ inputs.current-run-dir }}
+        OUT_DIR: ${{ inputs.out-dir }}
+        SUMMARY_PATH: ${{ inputs.summary-path }}
+        MARKDOWN_PATH: ${{ inputs.markdown-path }}
+        BASELINE_ARTIFACT_NAME: ${{ inputs.baseline-artifact-name }}
+        BASELINE_SOURCE_SHA: ${{ inputs.baseline-source-sha }}
+        ENFORCE_OUTCOME: ${{ inputs.enforce-outcome }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const { runVisualDiffCli } = await import(pathToFileURL(modulePath));
+        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+
+        const resolvedOutDir = path.resolve(process.env.OUT_DIR || 'qa-artifacts/visual-diffs/current');
+        const resolvedSummaryPath = path.resolve(process.env.SUMMARY_PATH || path.join(resolvedOutDir, 'visual-diff-summary.json'));
+        const resolvedMarkdownPath = path.resolve(process.env.MARKDOWN_PATH || path.join(resolvedOutDir, 'visual-diff-summary.md'));
+
+        await runVisualDiffCli({
+          configPath: process.env.REPO_CONFIG_PATH || undefined,
+          baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
+          baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
+          currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
+          baselineRunDir: process.env.BASELINE_RUN_DIR || undefined,
+          currentRunDir: process.env.CURRENT_RUN_DIR || undefined,
+          outDir: resolvedOutDir,
+          summaryPath: resolvedSummaryPath,
+          markdownPath: resolvedMarkdownPath,
+          routeIds: splitCommaList(process.env.ROUTE_IDS),
+          baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
+          baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
+          enforceOutcome: process.env.ENFORCE_OUTCOME === 'true'
+        });
+
+        const summary = JSON.parse(await fs.readFile(resolvedSummaryPath, 'utf8'));
+        const outputs = [
+          `summary_path=${resolvedSummaryPath}`,
+          `markdown_path=${resolvedMarkdownPath}`,
+          `status=${summary.status || ''}`,
+          `changed_screenshots=${summary.changedScreenshots || 0}`,
+          `matched_screenshots=${summary.matchedScreenshots || 0}`,
+          `missing_in_baseline=${summary.missingInBaseline || 0}`,
+          `missing_in_current=${summary.missingInCurrent || 0}`,
+          `errors_count=${Array.isArray(summary.errors) ? summary.errors.length : 0}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF

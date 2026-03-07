@@ -1,0 +1,137 @@
+name: Publish Visual Baseline
+description: Capture configured routes, stage the baseline artifact, and upload it using the repo config artifact name.
+
+inputs:
+  repo-config-path:
+    description: Path to the visual regression config file.
+    required: false
+    default: .github/visual-regression.json
+  route-ids:
+    description: Optional comma-separated route ids to capture.
+    required: false
+    default: ''
+  artifact-retention-days:
+    description: Retention period for the uploaded baseline artifact.
+    required: false
+    default: '30'
+  upload-artifact:
+    description: Whether to upload the staged baseline artifact.
+    required: false
+    default: 'true'
+
+outputs:
+  artifact-name:
+    description: Artifact name loaded from the visual regression config.
+    value: ${{ steps.config.outputs.artifact_name }}
+  bundle-dir:
+    description: Staged artifact bundle directory.
+    value: ${{ steps.stage.outputs.bundle_dir }}
+  results-file:
+    description: Absolute path to the generated visual baseline results file.
+    value: ${{ steps.capture.outputs.results_file }}
+  manifest-file:
+    description: Absolute path to the generated screenshot manifest file.
+    value: ${{ steps.capture.outputs.manifest_file }}
+  screenshots-root:
+    description: Absolute path to the generated screenshots root.
+    value: ${{ steps.capture.outputs.screenshots_root }}
+  selected-route-ids:
+    description: Comma-separated route ids captured in this run.
+    value: ${{ steps.capture.outputs.selected_route_ids }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - id: config
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const { loadVisualRegressionConfig } = await import(pathToFileURL(modulePath));
+        const { config } = await loadVisualRegressionConfig(process.env.REPO_CONFIG_PATH || undefined);
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, `artifact_name=${config.baselineArtifactName}\n`);
+        EOF
+
+    - name: Install shared action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
+    - name: Install Playwright Chromium
+      shell: bash
+      run: |
+        "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
+
+    - id: capture
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ inputs.route-ids }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-visual-routes.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const { runVisualBaselineCapture } = await import(pathToFileURL(captureModulePath));
+        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+
+        const result = await runVisualBaselineCapture({
+          configPath: process.env.REPO_CONFIG_PATH || undefined,
+          routeIds: splitCommaList(process.env.ROUTE_IDS)
+        });
+
+        const outputs = [
+          `results_file=${result.resultsPath}`,
+          `manifest_file=${result.manifestPath}`,
+          `screenshots_root=${result.screenshotsRoot}`,
+          `selected_route_ids=${result.selectedRouteIds.join(',')}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - id: stage
+      shell: bash
+      env:
+        RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+        MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
+        SCREENSHOTS_DIR: ${{ steps.capture.outputs.screenshots_root }}/screenshots
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
+        const { stageVisualArtifacts } = await import(pathToFileURL(modulePath));
+
+        const result = await stageVisualArtifacts({
+          artifactType: 'baseline',
+          resultsPath: process.env.RESULTS_PATH || undefined,
+          manifestPath: process.env.MANIFEST_PATH || undefined,
+          screenshotsDir: process.env.SCREENSHOTS_DIR || undefined
+        });
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
+        EOF
+
+    - if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ steps.config.outputs.artifact_name }}
+        retention-days: ${{ inputs.artifact-retention-days }}
+        if-no-files-found: warn
+        path: ${{ steps.stage.outputs.bundle_dir }}

@@ -1,0 +1,595 @@
+name: Run Visual PR Diff
+description: Run the end-to-end PR visual diff pipeline, including scope resolution, skipped-summary handling, artifact upload, PR commenting, and enforcement.
+
+inputs:
+  github-token:
+    description: Token used to inspect pull request files, fetch baseline artifacts, and publish PR comments.
+    required: true
+  repo-config-path:
+    description: Path to the visual regression config file.
+    required: false
+    default: .github/visual-regression.json
+  pr-number:
+    description: Optional pull request number override.
+    required: false
+    default: ''
+  route-ids:
+    description: Optional comma-separated route ids. When provided, changed-file scope detection is skipped.
+    required: false
+    default: ''
+  force-run:
+    description: Whether to force a full run when route ids are not explicitly provided.
+    required: false
+    default: 'false'
+  force-run-reason:
+    description: Reason to report when force-run is enabled.
+    required: false
+    default: forced
+  baseline-repository:
+    description: Repository in owner/name format that publishes the baseline artifact.
+    required: false
+    default: ''
+  baseline-workflow-id:
+    description: Workflow id or filename to search for the baseline artifact.
+    required: false
+    default: ci.yml
+  baseline-branch:
+    description: Branch that publishes the baseline artifact.
+    required: false
+    default: main
+  artifact-retention-days:
+    description: Retention period for the uploaded diff artifact.
+    required: false
+    default: '30'
+  comment-on-pr:
+    description: Whether to publish the visual diff PR comment.
+    required: false
+    default: 'true'
+
+outputs:
+  should-run:
+    description: Whether the visual diff flow ran or intentionally skipped due to scope.
+    value: ${{ steps.finalize.outputs.should_run }}
+  scope-reason:
+    description: Reason for the final scope decision.
+    value: ${{ steps.finalize.outputs.scope_reason }}
+  selected-route-ids:
+    description: Comma-separated route ids selected for the run.
+    value: ${{ steps.finalize.outputs.selected_route_ids }}
+  baseline-found:
+    description: Whether a usable baseline artifact was found.
+    value: ${{ steps.finalize.outputs.baseline_found }}
+  status:
+    description: Final visual diff status.
+    value: ${{ steps.finalize.outputs.status }}
+  summary-path:
+    description: Path to the final summary JSON file.
+    value: ${{ steps.finalize.outputs.summary_path }}
+  markdown-path:
+    description: Path to the final summary markdown file.
+    value: ${{ steps.finalize.outputs.markdown_path }}
+  artifact-name:
+    description: Uploaded diff artifact name.
+    value: ${{ steps.context.outputs.artifact_name }}
+  bundle-dir:
+    description: Staged diff artifact bundle directory.
+    value: ${{ steps.finalize.outputs.bundle_dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - id: context
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const explicitPrNumber = (process.env.INPUT_PR_NUMBER || '').trim();
+          const prNumber = explicitPrNumber || String(context.payload.pull_request?.number || context.issue?.number || '');
+          const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          const artifactName = `pr-visual-diff-${prNumber || process.env.GITHUB_RUN_ID}`;
+
+          core.setOutput('pr_number', prNumber);
+          core.setOutput('run_url', runUrl);
+          core.setOutput('artifact_name', artifactName);
+
+    - id: scope
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ inputs.route-ids }}
+        FORCE_RUN: ${{ inputs.force-run }}
+        FORCE_RUN_REASON: ${{ inputs.force-run-reason }}
+        INPUT_PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const path = require('path');
+          const { pathToFileURL } = require('url');
+
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+          const { loadVisualRegressionConfig, selectConfiguredRoutes, selectRoutesForChangedFiles, splitCommaList } = await import(pathToFileURL(configModulePath));
+          const { config } = await loadVisualRegressionConfig(process.env.REPO_CONFIG_PATH || undefined);
+          const allRouteIds = (config.routes || []).map((route) => route.id);
+          const explicitRouteIds = splitCommaList(process.env.ROUTE_IDS);
+
+          function setOutputs(scope) {
+            core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
+            core.setOutput('reason', scope.reason);
+            core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));
+          }
+
+          if (explicitRouteIds.length > 0) {
+            const selected = selectConfiguredRoutes(config, explicitRouteIds);
+            setOutputs({
+              shouldRun: true,
+              reason: 'explicit_route_ids',
+              selectedRouteIds: selected.selectedRouteIds
+            });
+            return;
+          }
+
+          if (process.env.FORCE_RUN === 'true') {
+            setOutputs({
+              shouldRun: true,
+              reason: process.env.FORCE_RUN_REASON || 'forced',
+              selectedRouteIds: allRouteIds
+            });
+            return;
+          }
+
+          const prNumber = Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || '');
+          if (!Number.isFinite(prNumber) || prNumber <= 0) {
+            setOutputs({
+              shouldRun: true,
+              reason: 'missing_pr_number',
+              selectedRouteIds: allRouteIds
+            });
+            return;
+          }
+
+          try {
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 100
+            });
+
+            setOutputs(
+              selectRoutesForChangedFiles(
+                config,
+                files.map((file) => file.filename)
+              )
+            );
+          } catch (error) {
+            core.warning(`Unable to inspect PR files for visual diff scope; defaulting to run all visual checks. ${error.message}`);
+            setOutputs({
+              shouldRun: true,
+              reason: 'visual_scope_check_failed',
+              selectedRouteIds: allRouteIds
+            });
+          }
+
+    - id: baseline
+      if: steps.scope.outputs.should_run == 'true'
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        INPUT_ARTIFACT_NAME: ''
+        INPUT_REPOSITORY: ${{ inputs.baseline-repository }}
+        INPUT_WORKFLOW_ID: ${{ inputs.baseline-workflow-id }}
+        INPUT_BRANCH: ${{ inputs.baseline-branch }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
+          const [owner, repo] = repository.split('/');
+          const configPath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.REPO_CONFIG_PATH);
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
+
+          try {
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
+              branch: process.env.INPUT_BRANCH || 'main',
+              event: 'push',
+              per_page: 20
+            });
+
+            let selectedRun = null;
+            let selectedArtifact = null;
+
+            for (const run of runs) {
+              if (run.status !== 'completed' || run.conclusion !== 'success') {
+                continue;
+              }
+
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100
+              });
+
+              const match = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
+              if (match) {
+                selectedRun = run;
+                selectedArtifact = match;
+                break;
+              }
+            }
+
+            if (!selectedRun || !selectedArtifact) {
+              core.setOutput('found', 'false');
+              core.setOutput('artifact_name', artifactName);
+              core.setOutput('message', `No non-expired visual baseline artifact named ${artifactName} was found.`);
+              return;
+            }
+
+            core.setOutput('found', 'true');
+            core.setOutput('artifact_name', selectedArtifact.name);
+            core.setOutput('head_sha', selectedRun.head_sha);
+            core.setOutput('run_id', String(selectedRun.id));
+            core.setOutput('message', '');
+          } catch (error) {
+            core.setOutput('found', 'false');
+            core.setOutput('artifact_name', artifactName);
+            core.setOutput('message', `Unable to resolve baseline artifact: ${error.message}`);
+          }
+
+    - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ inputs.baseline-repository || github.repository }}
+        run-id: ${{ steps.baseline.outputs.run_id }}
+        name: ${{ steps.baseline.outputs.artifact_name }}
+        path: baseline-download
+
+    - id: baseline_paths
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        RESULTS_FILE="$(find baseline-download -type f -name 'visual-baseline-results.json' | head -n 1)"
+        MANIFEST_FILE="$(find baseline-download -type f -name 'visual-screenshot-manifest.json' | head -n 1)"
+        if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
+          echo "Downloaded artifact did not contain the expected baseline files."
+          find baseline-download -maxdepth 5 -type f | sort || true
+          exit 1
+        fi
+        {
+          echo "results_file=$RESULTS_FILE"
+          echo "manifest_file=$MANIFEST_FILE"
+          echo "run_dir=${GITHUB_WORKSPACE}/baseline-download"
+          echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Install shared action dependencies
+      if: steps.scope.outputs.should_run == 'true'
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
+    - name: Install Playwright Chromium
+      if: steps.scope.outputs.should_run == 'true'
+      shell: bash
+      run: |
+        "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
+
+    - id: capture
+      if: steps.scope.outputs.should_run == 'true'
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-visual-routes.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const { runVisualBaselineCapture } = await import(pathToFileURL(captureModulePath));
+        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+
+        const result = await runVisualBaselineCapture({
+          configPath: process.env.REPO_CONFIG_PATH || undefined,
+          routeIds: splitCommaList(process.env.ROUTE_IDS)
+        });
+
+        const outputs = [
+          `results_file=${result.resultsPath}`,
+          `manifest_file=${result.manifestPath}`,
+          `screenshots_root=${result.screenshotsRoot}`,
+          `selected_route_ids=${result.selectedRouteIds.join(',')}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - id: compare
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
+        BASELINE_RESULTS_PATH: ${{ steps.baseline_paths.outputs.results_file }}
+        BASELINE_MANIFEST_PATH: ${{ steps.baseline_paths.outputs.manifest_file }}
+        BASELINE_RUN_DIR: ${{ steps.baseline_paths.outputs.run_dir }}
+        BASELINE_ARTIFACT_NAME: ${{ steps.baseline.outputs.artifact_name }}
+        BASELINE_SOURCE_SHA: ${{ steps.baseline.outputs.head_sha }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const compareModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const { runVisualDiffCli } = await import(pathToFileURL(compareModulePath));
+        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+
+        const resolvedOutDir = path.resolve('qa-artifacts/visual-diffs/current');
+        const resolvedSummaryPath = path.join(resolvedOutDir, 'visual-diff-summary.json');
+        const resolvedMarkdownPath = path.join(resolvedOutDir, 'visual-diff-summary.md');
+
+        await runVisualDiffCli({
+          configPath: process.env.REPO_CONFIG_PATH || undefined,
+          baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
+          baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
+          baselineRunDir: process.env.BASELINE_RUN_DIR || undefined,
+          routeIds: splitCommaList(process.env.ROUTE_IDS),
+          baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
+          baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
+          enforceOutcome: false
+        });
+
+        const summary = JSON.parse(await fs.readFile(resolvedSummaryPath, 'utf8'));
+        const outputs = [
+          `summary_path=${resolvedSummaryPath}`,
+          `markdown_path=${resolvedMarkdownPath}`,
+          `status=${summary.status || ''}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - id: skipped_scope
+      if: steps.scope.outputs.should_run != 'true'
+      shell: bash
+      env:
+        REASON: ${{ steps.scope.outputs.reason }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
+        const { writeVisualDiffSummary } = await import(pathToFileURL(modulePath));
+
+        const result = await writeVisualDiffSummary({
+          reason: process.env.REASON || 'no_visual_relevant_changes',
+          selectedRouteIds: []
+        });
+
+        const outputs = [
+          `summary_path=${result.summaryPath}`,
+          `markdown_path=${result.markdownPath}`,
+          `status=${result.summary.status || ''}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - id: skipped_baseline
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true'
+      shell: bash
+      env:
+        MESSAGE: ${{ steps.baseline.outputs.message }}
+        CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+        SELECTED_ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
+        const { writeVisualDiffSummary } = await import(pathToFileURL(modulePath));
+
+        const result = await writeVisualDiffSummary({
+          reason: 'missing_main_baseline_artifact',
+          message: process.env.MESSAGE || undefined,
+          baselineAvailable: false,
+          currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+          selectedRouteIds: process.env.SELECTED_ROUTE_IDS || ''
+        });
+
+        const outputs = [
+          `summary_path=${result.summaryPath}`,
+          `markdown_path=${result.markdownPath}`,
+          `status=${result.summary.status || ''}`
+        ].join('\n') + '\n';
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - id: stage
+      shell: bash
+      env:
+        SUMMARY_JSON_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
+        SUMMARY_MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
+        BASELINE_RESULTS_PATH: ${{ steps.baseline_paths.outputs.results_file }}
+        CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+        BASELINE_MANIFEST_PATH: ${{ steps.baseline_paths.outputs.manifest_file }}
+        CURRENT_MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
+        BASELINE_SCREENSHOTS_DIR: ${{ steps.baseline_paths.outputs.screenshots_dir }}
+        CURRENT_SCREENSHOTS_DIR: ${{ steps.capture.outputs.screenshots_root != '' && format('{0}/screenshots', steps.capture.outputs.screenshots_root) || '' }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
+        const { stageVisualArtifacts } = await import(pathToFileURL(modulePath));
+
+        const result = await stageVisualArtifacts({
+          artifactType: 'diff',
+          summaryJsonPath: process.env.SUMMARY_JSON_PATH || undefined,
+          summaryMarkdownPath: process.env.SUMMARY_MARKDOWN_PATH || undefined,
+          baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
+          currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+          baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
+          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
+          baselineScreenshotsDir: process.env.BASELINE_SCREENSHOTS_DIR || undefined,
+          currentScreenshotsDir: process.env.CURRENT_SCREENSHOTS_DIR || undefined
+        });
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
+        EOF
+
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ steps.context.outputs.artifact_name }}
+        retention-days: ${{ inputs.artifact-retention-days }}
+        if-no-files-found: warn
+        path: ${{ steps.stage.outputs.bundle_dir }}
+
+    - if: always()
+      shell: bash
+      env:
+        SUMMARY_FILE: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
+      run: |
+        if [ -f "$SUMMARY_FILE" ]; then
+          cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - if: inputs.comment-on-pr == 'true'
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
+        ARTIFACT_NAME: ${{ steps.context.outputs.artifact_name }}
+        RUN_URL: ${{ steps.context.outputs.run_url }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const { pathToFileURL } = require('url');
+
+          const summaryPath = process.env.SUMMARY_PATH;
+          if (!summaryPath || !fs.existsSync(summaryPath)) {
+            core.warning(`Visual diff summary not found at ${summaryPath || '<missing>'}`);
+            return;
+          }
+
+          const issueNumber = Number(process.env.PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');
+          if (!Number.isFinite(issueNumber) || issueNumber <= 0) {
+            core.warning('Visual diff PR comment skipped because no pull request number was available.');
+            return;
+          }
+
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
+          const { buildPrCommentBody, PR_COMMENT_MARKER } = await import(pathToFileURL(modulePath));
+
+          const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+          const body = buildPrCommentBody(summary, {
+            artifactName: process.env.ARTIFACT_NAME || '',
+            runUrl: process.env.RUN_URL || ''
+          });
+
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issueNumber,
+            per_page: 100
+          });
+          const matchingComments = comments
+            .filter((comment) => comment.body && comment.body.includes(PR_COMMENT_MARKER))
+            .sort((left, right) => {
+              const leftTime = new Date(left.updated_at || left.created_at).getTime();
+              const rightTime = new Date(right.updated_at || right.created_at).getTime();
+              return rightTime - leftTime;
+            });
+          const existing = matchingComments[0];
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+          }
+
+          for (const duplicate of matchingComments.slice(1)) {
+            await github.rest.issues.deleteComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: duplicate.id
+            });
+          }
+
+    - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+      shell: bash
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const { shouldFailVisualDiff, formatVisualDiffFailureMessage } = await import(pathToFileURL(modulePath));
+        const summaryModulePath = path.resolve('qa-artifacts/visual-diffs/current/visual-diff-summary.json');
+        const summary = JSON.parse(await fs.readFile(summaryModulePath, 'utf8'));
+
+        if (shouldFailVisualDiff(summary)) {
+          throw new Error(formatVisualDiffFailureMessage(summary.diffMode, summary));
+        }
+        EOF
+
+    - id: finalize
+      if: always()
+      shell: bash
+      env:
+        SHOULD_RUN: ${{ steps.scope.outputs.should_run }}
+        SCOPE_REASON: ${{ steps.scope.outputs.reason }}
+        SELECTED_ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
+        BASELINE_FOUND: ${{ steps.baseline.outputs.found || 'false' }}
+        STATUS: ${{ steps.compare.outputs.status || steps.skipped_baseline.outputs.status || steps.skipped_scope.outputs.status || '' }}
+        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path || '' }}
+        MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path || '' }}
+        BUNDLE_DIR: ${{ steps.stage.outputs.bundle_dir }}
+      run: |
+        {
+          echo "should_run=${SHOULD_RUN:-false}"
+          echo "scope_reason=${SCOPE_REASON:-}"
+          echo "selected_route_ids=${SELECTED_ROUTE_IDS:-}"
+          echo "baseline_found=${BASELINE_FOUND:-false}"
+          echo "status=${STATUS:-}"
+          echo "summary_path=${SUMMARY_PATH:-}"
+          echo "markdown_path=${MARKDOWN_PATH:-}"
+          echo "bundle_dir=${BUNDLE_DIR:-}"
+        } >> "$GITHUB_OUTPUT"

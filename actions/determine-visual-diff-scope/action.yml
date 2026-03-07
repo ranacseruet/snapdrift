@@ -1,0 +1,107 @@
+name: Determine Visual Diff Scope
+description: Determine whether visual diff should run and which configured routes should be selected for the current change set.
+
+inputs:
+  github-token:
+    description: Token used to query pull request changed files.
+    required: true
+  repo-config-path:
+    description: Path to the visual regression config file.
+    required: false
+    default: .github/visual-regression.json
+  pr-number:
+    description: Pull request number for changed-file inspection. When omitted, the action falls back to running all routes.
+    required: false
+    default: ''
+  force-run:
+    description: Whether to force a full visual run without inspecting changed files.
+    required: false
+    default: 'false'
+  force-run-reason:
+    description: Reason to report when force-run is enabled.
+    required: false
+    default: 'forced'
+
+outputs:
+  should-run:
+    description: Whether visual diff should run.
+    value: ${{ steps.scope.outputs.should_run }}
+  reason:
+    description: Reason for the scope decision.
+    value: ${{ steps.scope.outputs.reason }}
+  selected-route-ids:
+    description: Comma-separated route ids selected for the run.
+    value: ${{ steps.scope.outputs.selected_route_ids }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - id: scope
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        FORCE_RUN: ${{ inputs.force-run }}
+        FORCE_RUN_REASON: ${{ inputs.force-run-reason }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const path = require('path');
+          const { pathToFileURL } = require('url');
+
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+          const { loadVisualRegressionConfig, selectRoutesForChangedFiles } = await import(pathToFileURL(configModulePath));
+          const { config } = await loadVisualRegressionConfig(process.env.REPO_CONFIG_PATH || undefined);
+
+          const allRouteIds = (config.routes || []).map((route) => route.id);
+          const resolvedPrNumber = Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || '');
+
+          function setOutputs(scope) {
+            core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
+            core.setOutput('reason', scope.reason);
+            core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));
+          }
+
+          if (process.env.FORCE_RUN === 'true') {
+            setOutputs({
+              shouldRun: true,
+              reason: process.env.FORCE_RUN_REASON || 'forced',
+              selectedRouteIds: allRouteIds
+            });
+            return;
+          }
+
+          if (!Number.isFinite(resolvedPrNumber) || resolvedPrNumber <= 0) {
+            setOutputs({
+              shouldRun: true,
+              reason: 'missing_pr_number',
+              selectedRouteIds: allRouteIds
+            });
+            return;
+          }
+
+          try {
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: resolvedPrNumber,
+              per_page: 100
+            });
+
+            const scope = selectRoutesForChangedFiles(
+              config,
+              files.map((file) => file.filename)
+            );
+            setOutputs(scope);
+          } catch (error) {
+            core.warning(`Unable to inspect PR files for visual diff scope; defaulting to run all visual checks. ${error.message}`);
+            setOutputs({
+              shouldRun: true,
+              reason: 'visual_scope_check_failed',
+              selectedRouteIds: allRouteIds
+            });
+          }

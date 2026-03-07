@@ -1,0 +1,164 @@
+name: Resolve Baseline Artifact
+description: Resolve and download the latest successful baseline artifact from main.
+
+inputs:
+  github-token:
+    description: Token used to query workflow runs and download artifacts.
+    required: true
+  repository:
+    description: Repository in owner/name format.
+    required: false
+    default: ''
+  repo-config-path:
+    description: Path to the visual regression config file.
+    required: false
+    default: .github/visual-regression.json
+  artifact-name:
+    description: Optional explicit baseline artifact name override.
+    required: false
+    default: ''
+  workflow-id:
+    description: Workflow id or filename to search.
+    required: false
+    default: ci.yml
+  branch:
+    description: Branch that publishes the baseline artifact.
+    required: false
+    default: main
+  download-path:
+    description: Directory where the artifact should be downloaded.
+    required: false
+    default: baseline-download
+
+outputs:
+  found:
+    description: Whether a non-expired baseline artifact was found.
+    value: ${{ steps.resolve.outputs.found }}
+  artifact-name:
+    description: Resolved artifact name.
+    value: ${{ steps.resolve.outputs.artifact_name }}
+  head-sha:
+    description: Head SHA of the baseline-producing run.
+    value: ${{ steps.resolve.outputs.head_sha }}
+  run-id:
+    description: Workflow run id that produced the baseline artifact.
+    value: ${{ steps.resolve.outputs.run_id }}
+  message:
+    description: Informational message when no artifact was found.
+    value: ${{ steps.resolve.outputs.message }}
+  results-file:
+    description: Path to the downloaded baseline results JSON.
+    value: ${{ steps.paths.outputs.results_file }}
+  manifest-file:
+    description: Path to the downloaded baseline screenshot manifest.
+    value: ${{ steps.paths.outputs.manifest_file }}
+  run-dir:
+    description: Root directory for the downloaded artifact.
+    value: ${{ steps.paths.outputs.run_dir }}
+  screenshots-dir:
+    description: Root directory containing downloaded baseline screenshots.
+    value: ${{ steps.paths.outputs.screenshots_dir }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_WORKFLOW_ID: ${{ inputs.workflow-id }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
+          const [owner, repo] = repository.split('/');
+          const configPath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.REPO_CONFIG_PATH);
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
+
+          try {
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
+              branch: process.env.INPUT_BRANCH || 'main',
+              event: 'push',
+              per_page: 20
+            });
+
+            let selectedRun = null;
+            let selectedArtifact = null;
+
+            for (const run of runs) {
+              if (run.status !== 'completed' || run.conclusion !== 'success') {
+                continue;
+              }
+
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100
+              });
+
+              const match = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
+              if (match) {
+                selectedRun = run;
+                selectedArtifact = match;
+                break;
+              }
+            }
+
+            if (!selectedRun || !selectedArtifact) {
+              core.setOutput('found', 'false');
+              core.setOutput('artifact_name', artifactName);
+              core.setOutput('message', `No non-expired visual baseline artifact named ${artifactName} was found.`);
+              return;
+            }
+
+            core.setOutput('found', 'true');
+            core.setOutput('artifact_name', selectedArtifact.name);
+            core.setOutput('head_sha', selectedRun.head_sha);
+            core.setOutput('run_id', String(selectedRun.id));
+            core.setOutput('message', '');
+          } catch (error) {
+            core.setOutput('found', 'false');
+            core.setOutput('artifact_name', artifactName);
+            core.setOutput('message', `Unable to resolve baseline artifact: ${error.message}`);
+          }
+
+    - if: steps.resolve.outputs.found == 'true'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ inputs.repository || github.repository }}
+        run-id: ${{ steps.resolve.outputs.run_id }}
+        name: ${{ steps.resolve.outputs.artifact_name }}
+        path: ${{ inputs.download-path }}
+
+    - id: paths
+      if: steps.resolve.outputs.found == 'true'
+      shell: bash
+      env:
+        DOWNLOAD_PATH: ${{ inputs.download-path }}
+      run: |
+        set -euo pipefail
+        RESULTS_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'visual-baseline-results.json' | head -n 1)"
+        MANIFEST_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'visual-screenshot-manifest.json' | head -n 1)"
+        if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
+          echo "Downloaded artifact did not contain the expected baseline files."
+          find "$DOWNLOAD_PATH" -maxdepth 5 -type f | sort || true
+          exit 1
+        fi
+        {
+          echo "results_file=$RESULTS_FILE"
+          echo "manifest_file=$MANIFEST_FILE"
+          echo "run_dir=${GITHUB_WORKSPACE}/${DOWNLOAD_PATH}"
+          echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
+        } >> "$GITHUB_OUTPUT"

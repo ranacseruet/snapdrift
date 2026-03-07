@@ -1,0 +1,61 @@
+{
+  "name": "snapdrift",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared visual regression capture, compare, and reporting for Node + Playwright projects.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/snapdrift.git"
+  },
+  "homepage": "https://github.com/user/snapdrift#readme",
+  "bugs": {
+    "url": "https://github.com/user/snapdrift/issues"
+  },
+  "author": "CodeSamplez",
+  "keywords": [
+    "github-actions",
+    "visual-regression",
+    "visual-diff",
+    "playwright",
+    "screenshot-testing"
+  ],
+  "scripts": {
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "js-yaml": "^4.1.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "transform": {}
+  },
+  "exports": {
+    "./lib/visual-regression-config.mjs": "./lib/visual-regression-config.mjs",
+    "./lib/capture-visual-routes.mjs": "./lib/capture-visual-routes.mjs",
+    "./lib/compare-visual-results.mjs": "./lib/compare-visual-results.mjs",
+    "./lib/stage-visual-artifacts.mjs": "./lib/stage-visual-artifacts.mjs",
+    "./lib/visual-diff-summary.mjs": "./lib/visual-diff-summary.mjs",
+    "./lib/visual-diff-pr-comment.mjs": "./lib/visual-diff-pr-comment.mjs"
+  },
+  "files": [
+    "actions/",
+    "lib/",
+    "types/",
+    "docs/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "pngjs": "^5.0.0"
+  }
+}

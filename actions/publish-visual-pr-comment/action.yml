@@ -1,0 +1,104 @@
+name: Publish Visual PR Comment
+description: Upsert a PR comment with the visual diff summary.
+
+inputs:
+  github-token:
+    description: Token used to update the pull request comment.
+    required: true
+  pr-number:
+    description: Pull request number to comment on.
+    required: false
+    default: ''
+  summary-path:
+    description: Path to the visual diff summary JSON.
+    required: true
+  run-url:
+    description: Workflow run URL to include in the comment.
+    required: false
+    default: ''
+  artifact-name:
+    description: Artifact label to include in the comment.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      env:
+        VISUAL_DIFF_SUMMARY_PATH: ${{ inputs.summary-path }}
+        VISUAL_DIFF_RUN_URL: ${{ inputs.run-url }}
+        VISUAL_DIFF_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const { pathToFileURL } = require('url');
+
+          const summaryPath = process.env.VISUAL_DIFF_SUMMARY_PATH;
+          if (!fs.existsSync(summaryPath)) {
+            core.warning(`Visual diff summary not found at ${summaryPath}`);
+            return;
+          }
+
+          const issueNumber = Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');
+          if (!Number.isFinite(issueNumber) || issueNumber <= 0) {
+            core.warning('Visual diff PR comment skipped because no pull request number was available.');
+            return;
+          }
+
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
+          const { buildPrCommentBody, PR_COMMENT_MARKER } = await import(pathToFileURL(modulePath));
+
+          const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+          const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+          const body = buildPrCommentBody(summary, {
+            artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
+            runUrl
+          });
+
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issueNumber,
+            per_page: 100
+          });
+          const matchingComments = comments
+            .filter((comment) => comment.body && comment.body.includes(PR_COMMENT_MARKER))
+            .sort((left, right) => {
+              const leftTime = new Date(left.updated_at || left.created_at).getTime();
+              const rightTime = new Date(right.updated_at || right.created_at).getTime();
+              return rightTime - leftTime;
+            });
+          const existing = matchingComments[0];
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+          }
+
+          for (const duplicate of matchingComments.slice(1)) {
+            await github.rest.issues.deleteComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: duplicate.id
+            });
+          }
