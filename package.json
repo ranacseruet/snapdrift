@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/snapdrift.git"
+    "url": "https://github.com/ranacseruet/snapdrift.git"
   },
-  "homepage": "https://github.com/user/snapdrift#readme",
+  "homepage": "https://github.com/ranacseruet/snapdrift#readme",
   "bugs": {
-    "url": "https://github.com/user/snapdrift/issues"
+    "url": "https://github.com/ranacseruet/snapdrift/issues"
   },
   "author": "CodeSamplez",
   "keywords": [

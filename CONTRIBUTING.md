@@ -18,7 +18,7 @@ Open a [feature request issue](../../issues/new?template=feature_request.md) des
 
 ```bash
 # Clone the repo
-git clone https://github.com/user/snapdrift.git
+git clone https://github.com/ranacseruet/snapdrift.git
 cd snapdrift
 
 # Install dependencies

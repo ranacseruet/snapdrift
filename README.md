@@ -25,7 +25,7 @@ The primary CI and PR workflows in this repo use the wrapper actions as the main
 Use these wrapper actions by cross-repo reference:
 
 ```yaml
-- uses: user/snapdrift/actions/publish-visual-baseline@v1
+- uses: ranacseruet/snapdrift/actions/publish-visual-baseline@v1
 ```
 
 Pin to a commit SHA or tag (e.g., `@v1`) instead of a moving branch when possible.
@@ -97,7 +97,7 @@ Example:
 
 ```yaml
 - name: Publish main visual baseline
-  uses: user/snapdrift/actions/publish-visual-baseline@v1
+  uses: ranacseruet/snapdrift/actions/publish-visual-baseline@v1
   with:
     repo-config-path: .github/visual-regression.json
     artifact-retention-days: '30'
@@ -130,7 +130,7 @@ Step example:
 
 ```yaml
 - name: Run visual PR diff
-  uses: user/snapdrift/actions/run-visual-pr-diff@v1
+  uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/visual-regression.json
@@ -171,7 +171,7 @@ jobs:
           done
 
       - name: Run visual PR diff
-        uses: user/snapdrift/actions/run-visual-pr-diff@v1
+        uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/visual-regression.json
