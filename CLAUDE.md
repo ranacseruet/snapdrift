@@ -18,7 +18,7 @@ NODE_OPTIONS='--experimental-vm-modules' npx jest tests/compare-visual-results.t
 for f in actions/*/action.yml; do python3 -c "import yaml; yaml.safe_load(open('$f'))"; done
 ```
 
-Tests require `--experimental-vm-modules` because the project uses ESM (`"type": "module"`).
+Tests require `--experimental-vm-modules` because the project uses ESM (`"type": "module"`). Node 22+ is required.
 
 ## Architecture
 
