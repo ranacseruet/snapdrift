@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in the visual diff actions
+about: Report a bug in SnapDrift
 labels: bug
 ---
 
@@ -25,7 +25,7 @@ What actually happened. Include error messages or screenshots if applicable.
 
 - Node version:
 - OS / runner:
-- Action version (SHA or tag):
+- Action commit SHA:
 - Enforcement mode (`diff.mode`):
 
 ## Additional context

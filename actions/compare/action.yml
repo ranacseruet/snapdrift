@@ -1,11 +1,11 @@
 name: SnapDrift Compare
-description: Compare the current visual capture against a baseline and emit the standard summary files.
+description: Compare the current capture against a baseline and emit the SnapDrift report files.
 
 inputs:
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   route-ids:
     description: Optional comma-separated route ids to compare.
     required: false
@@ -32,15 +32,15 @@ inputs:
     required: false
     default: ''
   out-dir:
-    description: Directory where the diff summary files should be written.
+    description: Directory where the SnapDrift report files should be written.
     required: false
-    default: qa-artifacts/visual-diffs/current
+    default: qa-artifacts/snapdrift/drift/current
   summary-path:
-    description: Optional explicit path for the diff summary JSON file.
+    description: Optional explicit path for the SnapDrift summary JSON file.
     required: false
     default: ''
   markdown-path:
-    description: Optional explicit path for the diff summary markdown file.
+    description: Optional explicit path for the SnapDrift summary markdown file.
     required: false
     default: ''
   baseline-artifact-name:
@@ -64,7 +64,7 @@ outputs:
     description: Absolute path to the generated summary markdown file.
     value: ${{ steps.compare.outputs.markdown_path }}
   status:
-    description: Computed visual diff status.
+    description: Computed SnapDrift status.
     value: ${{ steps.compare.outputs.status }}
   changed-screenshots:
     description: Number of changed screenshots.
@@ -121,9 +121,9 @@ runs:
         const { runVisualDiffCli } = await import(pathToFileURL(modulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
-        const resolvedOutDir = path.resolve(process.env.OUT_DIR || 'qa-artifacts/visual-diffs/current');
-        const resolvedSummaryPath = path.resolve(process.env.SUMMARY_PATH || path.join(resolvedOutDir, 'visual-diff-summary.json'));
-        const resolvedMarkdownPath = path.resolve(process.env.MARKDOWN_PATH || path.join(resolvedOutDir, 'visual-diff-summary.md'));
+        const resolvedOutDir = path.resolve(process.env.OUT_DIR || 'qa-artifacts/snapdrift/drift/current');
+        const resolvedSummaryPath = path.resolve(process.env.SUMMARY_PATH || path.join(resolvedOutDir, 'summary.json'));
+        const resolvedMarkdownPath = path.resolve(process.env.MARKDOWN_PATH || path.join(resolvedOutDir, 'summary.md'));
 
         await runVisualDiffCli({
           configPath: process.env.REPO_CONFIG_PATH || undefined,

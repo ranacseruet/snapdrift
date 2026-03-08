@@ -1,5 +1,5 @@
 name: SnapDrift Stage
-description: Stage baseline or diff artifacts into the standard bundle structure before upload.
+description: Stage baseline or drift artifacts into the SnapDrift bundle structure before upload.
 
 inputs:
   artifact-type:

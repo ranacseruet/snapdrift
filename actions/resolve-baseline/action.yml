@@ -1,5 +1,5 @@
 name: SnapDrift Resolve Baseline
-description: Resolve and download the latest successful baseline artifact from main.
+description: Resolve and download the latest successful SnapDrift baseline from main.
 
 inputs:
   github-token:
@@ -10,11 +10,11 @@ inputs:
     required: false
     default: ''
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   artifact-name:
-    description: Optional explicit baseline artifact name override.
+    description: Optional explicit baseline name override.
     required: false
     default: ''
   workflow-id:
@@ -22,17 +22,17 @@ inputs:
     required: false
     default: ci.yml
   branch:
-    description: Branch that publishes the baseline artifact.
+    description: Branch that publishes the baseline.
     required: false
     default: main
   download-path:
     description: Directory where the artifact should be downloaded.
     required: false
-    default: baseline-download
+    default: snapdrift-baseline-download
 
 outputs:
   found:
-    description: Whether a non-expired baseline artifact was found.
+    description: Whether a non-expired baseline was found.
     value: ${{ steps.resolve.outputs.found }}
   artifact-name:
     description: Resolved artifact name.
@@ -41,7 +41,7 @@ outputs:
     description: Head SHA of the baseline-producing run.
     value: ${{ steps.resolve.outputs.head_sha }}
   run-id:
-    description: Workflow run id that produced the baseline artifact.
+    description: Workflow run id that produced the baseline.
     value: ${{ steps.resolve.outputs.run_id }}
   message:
     description: Informational message when no artifact was found.
@@ -118,7 +118,7 @@ runs:
             if (!selectedRun || !selectedArtifact) {
               core.setOutput('found', 'false');
               core.setOutput('artifact_name', artifactName);
-              core.setOutput('message', `No non-expired visual baseline artifact named ${artifactName} was found.`);
+              core.setOutput('message', `No non-expired SnapDrift baseline artifact named ${artifactName} was found.`);
               return;
             }
 
@@ -130,7 +130,7 @@ runs:
           } catch (error) {
             core.setOutput('found', 'false');
             core.setOutput('artifact_name', artifactName);
-            core.setOutput('message', `Unable to resolve baseline artifact: ${error.message}`);
+            core.setOutput('message', `Unable to resolve the SnapDrift baseline artifact: ${error.message}`);
           }
 
     - if: steps.resolve.outputs.found == 'true'
@@ -149,10 +149,10 @@ runs:
         DOWNLOAD_PATH: ${{ inputs.download-path }}
       run: |
         set -euo pipefail
-        RESULTS_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'visual-baseline-results.json' | head -n 1)"
-        MANIFEST_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'visual-screenshot-manifest.json' | head -n 1)"
+        RESULTS_FILE="$(find "$DOWNLOAD_PATH" -type f \( -name 'results.json' -o -name 'visual-baseline-results.json' \) | head -n 1)"
+        MANIFEST_FILE="$(find "$DOWNLOAD_PATH" -type f \( -name 'manifest.json' -o -name 'visual-screenshot-manifest.json' \) | head -n 1)"
         if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
-          echo "Downloaded artifact did not contain the expected baseline files."
+          echo "Downloaded artifact did not contain the expected SnapDrift baseline files."
           find "$DOWNLOAD_PATH" -maxdepth 5 -type f | sort || true
           exit 1
         fi

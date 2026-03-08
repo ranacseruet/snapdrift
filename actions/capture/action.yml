@@ -1,11 +1,11 @@
 name: SnapDrift Capture
-description: Capture configured visual regression routes and emit the standard results and manifest files.
+description: Capture configured SnapDrift routes and emit the standard results and manifest files.
 
 inputs:
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   route-ids:
     description: Optional comma-separated route ids to capture.
     required: false
@@ -13,7 +13,7 @@ inputs:
 
 outputs:
   results-file:
-    description: Absolute path to the generated visual baseline results file.
+    description: Absolute path to the generated baseline results file.
     value: ${{ steps.capture.outputs.results_file }}
   manifest-file:
     description: Absolute path to the generated screenshot manifest file.

@@ -14,6 +14,10 @@ Open a [bug report issue](../../issues/new?template=bug_report.md) with:
 
 Open a [feature request issue](../../issues/new?template=feature_request.md) describing the use case and proposed solution.
 
+## Internal Testing Status
+
+SnapDrift is still being exercised through internal testing. When you reference the actions from another repository, pin a tested commit SHA instead of a tag or moving branch.
+
 ## Development Setup
 
 ```bash
@@ -54,12 +58,8 @@ The six test files in `tests/` cover config validation, capture, compare, stagin
 
 - Keep PRs focused — one concern per PR.
 - Follow existing code style (ESM, no transpilation, JSDoc types).
-- Do not break frozen v1 contracts without discussion.
+- Keep docs, generated report copy, and action metadata aligned with the SnapDrift brand voice.
 - Add a clear description of what changed and why.
-
-## Contract Stability
-
-The v1 contracts (config schema, artifact structure, action inputs/outputs, viewport presets, readiness defaults) are frozen. Changes to these require a major version bump and prior discussion in an issue.
 
 ## Code Style
 

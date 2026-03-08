@@ -1,9 +1,9 @@
 {
   "name": "snapdrift",
-  "version": "1.0.0",
+  "version": "0.0.0-internal",
   "private": false,
   "type": "module",
-  "description": "Shared visual regression capture, compare, and reporting for Node + Playwright projects.",
+  "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,9 +15,10 @@
   },
   "author": "CodeSamplez",
   "keywords": [
+    "snapdrift",
     "github-actions",
     "visual-regression",
-    "visual-diff",
+    "ui-drift",
     "playwright",
     "screenshot-testing"
   ],

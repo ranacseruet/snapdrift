@@ -1,14 +1,14 @@
 name: SnapDrift PR Diff
-description: Run the end-to-end PR diff pipeline, including scope resolution, skipped-summary handling, artifact upload, PR commenting, and enforcement.
+description: Run the end-to-end SnapDrift pull request pipeline, including scope resolution, skipped-report handling, artifact upload, PR reporting, and enforcement.
 
 inputs:
   github-token:
-    description: Token used to inspect pull request files, fetch baseline artifacts, and publish PR comments.
+    description: Token used to inspect pull request files, fetch baselines, and publish SnapDrift PR reports.
     required: true
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   pr-number:
     description: Optional pull request number override.
     required: false
@@ -26,15 +26,15 @@ inputs:
     required: false
     default: forced
   baseline-repository:
-    description: Repository in owner/name format that publishes the baseline artifact.
+    description: Repository in owner/name format that publishes the baseline.
     required: false
     default: ''
   baseline-workflow-id:
-    description: Workflow id or filename to search for the baseline artifact.
+    description: Workflow id or filename to search for the baseline.
     required: false
     default: ci.yml
   baseline-branch:
-    description: Branch that publishes the baseline artifact.
+    description: Branch that publishes the baseline.
     required: false
     default: main
   artifact-retention-days:
@@ -42,13 +42,13 @@ inputs:
     required: false
     default: '30'
   comment-on-pr:
-    description: Whether to publish the visual diff PR comment.
+    description: Whether to publish the SnapDrift PR report.
     required: false
     default: 'true'
 
 outputs:
   should-run:
-    description: Whether the visual diff flow ran or intentionally skipped due to scope.
+    description: Whether the SnapDrift flow ran or intentionally skipped due to scope.
     value: ${{ steps.finalize.outputs.should_run }}
   scope-reason:
     description: Reason for the final scope decision.
@@ -57,10 +57,10 @@ outputs:
     description: Comma-separated route ids selected for the run.
     value: ${{ steps.finalize.outputs.selected_route_ids }}
   baseline-found:
-    description: Whether a usable baseline artifact was found.
+    description: Whether a usable baseline was found.
     value: ${{ steps.finalize.outputs.baseline_found }}
   status:
-    description: Final visual diff status.
+    description: Final SnapDrift status.
     value: ${{ steps.finalize.outputs.status }}
   summary-path:
     description: Path to the final summary JSON file.
@@ -97,7 +97,7 @@ runs:
           const explicitPrNumber = (process.env.INPUT_PR_NUMBER || '').trim();
           const prNumber = explicitPrNumber || String(context.payload.pull_request?.number || context.issue?.number || '');
           const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-          const artifactName = `pr-visual-diff-${prNumber || process.env.GITHUB_RUN_ID}`;
+          const artifactName = `snapdrift-pr-${prNumber || process.env.GITHUB_RUN_ID}`;
 
           core.setOutput('pr_number', prNumber);
           core.setOutput('run_url', runUrl);
@@ -173,7 +173,7 @@ runs:
               )
             );
           } catch (error) {
-            core.warning(`Unable to inspect PR files for visual diff scope; defaulting to run all visual checks. ${error.message}`);
+            core.warning(`Unable to inspect PR files for SnapDrift scope; running all configured captures instead. ${error.message}`);
             setOutputs({
               shouldRun: true,
               reason: 'visual_scope_check_failed',
@@ -238,7 +238,7 @@ runs:
             if (!selectedRun || !selectedArtifact) {
               core.setOutput('found', 'false');
               core.setOutput('artifact_name', artifactName);
-              core.setOutput('message', `No non-expired visual baseline artifact named ${artifactName} was found.`);
+              core.setOutput('message', `No non-expired SnapDrift baseline artifact named ${artifactName} was found.`);
               return;
             }
 
@@ -250,7 +250,7 @@ runs:
           } catch (error) {
             core.setOutput('found', 'false');
             core.setOutput('artifact_name', artifactName);
-            core.setOutput('message', `Unable to resolve baseline artifact: ${error.message}`);
+            core.setOutput('message', `Unable to resolve the SnapDrift baseline artifact: ${error.message}`);
           }
 
     - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
@@ -260,24 +260,24 @@ runs:
         repository: ${{ inputs.baseline-repository || github.repository }}
         run-id: ${{ steps.baseline.outputs.run_id }}
         name: ${{ steps.baseline.outputs.artifact_name }}
-        path: baseline-download
+        path: snapdrift-baseline-download
 
     - id: baseline_paths
       if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
       shell: bash
       run: |
         set -euo pipefail
-        RESULTS_FILE="$(find baseline-download -type f -name 'visual-baseline-results.json' | head -n 1)"
-        MANIFEST_FILE="$(find baseline-download -type f -name 'visual-screenshot-manifest.json' | head -n 1)"
+        RESULTS_FILE="$(find snapdrift-baseline-download -type f \( -name 'results.json' -o -name 'visual-baseline-results.json' \) | head -n 1)"
+        MANIFEST_FILE="$(find snapdrift-baseline-download -type f \( -name 'manifest.json' -o -name 'visual-screenshot-manifest.json' \) | head -n 1)"
         if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
-          echo "Downloaded artifact did not contain the expected baseline files."
-          find baseline-download -maxdepth 5 -type f | sort || true
+          echo "Downloaded artifact did not contain the expected SnapDrift baseline files."
+          find snapdrift-baseline-download -maxdepth 5 -type f | sort || true
           exit 1
         fi
         {
           echo "results_file=$RESULTS_FILE"
           echo "manifest_file=$MANIFEST_FILE"
-          echo "run_dir=${GITHUB_WORKSPACE}/baseline-download"
+          echo "run_dir=${GITHUB_WORKSPACE}/snapdrift-baseline-download"
           echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
         } >> "$GITHUB_OUTPUT"
 
@@ -346,9 +346,9 @@ runs:
         const { runVisualDiffCli } = await import(pathToFileURL(compareModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
-        const resolvedOutDir = path.resolve('qa-artifacts/visual-diffs/current');
-        const resolvedSummaryPath = path.join(resolvedOutDir, 'visual-diff-summary.json');
-        const resolvedMarkdownPath = path.join(resolvedOutDir, 'visual-diff-summary.md');
+        const resolvedOutDir = path.resolve('qa-artifacts/snapdrift/drift/current');
+        const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
+        const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
 
         await runVisualDiffCli({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
@@ -497,18 +497,21 @@ runs:
           const path = require('path');
           const { pathToFileURL } = require('url');
 
-          const PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
+          const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
+          const LEGACY_PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
+          const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER];
+          const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
 
           const summaryPath = process.env.SUMMARY_PATH;
           const issueNumber = Number(process.env.PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');
           if (!Number.isFinite(issueNumber) || issueNumber <= 0) {
-            core.warning('Visual diff PR comment skipped because no pull request number was available.');
+            core.warning('SnapDrift PR report skipped because no pull request number was available.');
             return;
           }
 
           if (!summaryPath || !fs.existsSync(summaryPath)) {
             const runUrl = process.env.RUN_URL || '';
-            const body = `${PR_COMMENT_MARKER}\n### ⚠️ Visual Diff — Capture Failed\n\nThe visual diff pipeline did not produce a summary. This usually means the screenshot capture step failed before completing.\n\n[View workflow run](${runUrl}) for details.`;
+            const body = `${PR_COMMENT_MARKER}\n<img src="${iconUrl}" alt="SnapDrift" width="20" height="20" />\n\n### ⚠️ SnapDrift Report — Capture Failed\n\nSnapDrift did not produce a summary. This usually means capture failed before the report could be assembled.\n\n[View run](${runUrl}) for details.\n\n<div align="right"><sub>Powered by <a href="${repoUrl}">SnapDrift</a></sub></div>`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -534,7 +537,7 @@ runs:
             per_page: 100
           });
           const matchingComments = comments
-            .filter((comment) => comment.body && comment.body.includes(PR_COMMENT_MARKER))
+            .filter((comment) => comment.body && PR_COMMENT_MARKERS.some((marker) => comment.body.includes(marker)))
             .sort((left, right) => {
               const leftTime = new Date(left.updated_at || left.created_at).getTime();
               const rightTime = new Date(right.updated_at || right.created_at).getTime();
@@ -576,7 +579,7 @@ runs:
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
         const { shouldFailVisualDiff, formatVisualDiffFailureMessage } = await import(pathToFileURL(modulePath));
-        const summaryModulePath = path.resolve('qa-artifacts/visual-diffs/current/visual-diff-summary.json');
+        const summaryModulePath = path.resolve('qa-artifacts/snapdrift/drift/current/summary.json');
         const summary = JSON.parse(await fs.readFile(summaryModulePath, 'utf8'));
 
         if (shouldFailVisualDiff(summary)) {

@@ -1,11 +1,11 @@
 name: SnapDrift Baseline
-description: Capture configured routes, stage the baseline artifact, and upload it using the repo config artifact name.
+description: Capture configured routes, stage a SnapDrift baseline, and upload it with the configured artifact name.
 
 inputs:
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   route-ids:
     description: Optional comma-separated route ids to capture.
     required: false
@@ -21,16 +21,16 @@ inputs:
 
 outputs:
   artifact-name:
-    description: Artifact name loaded from the visual regression config.
+    description: Artifact name loaded from the SnapDrift config.
     value: ${{ steps.config.outputs.artifact_name }}
   bundle-dir:
     description: Staged artifact bundle directory.
     value: ${{ steps.stage.outputs.bundle_dir }}
   results-file:
-    description: Absolute path to the generated visual baseline results file.
+    description: Absolute path to the generated baseline results file.
     value: ${{ steps.capture.outputs.results_file }}
   manifest-file:
-    description: Absolute path to the generated screenshot manifest file.
+    description: Absolute path to the generated baseline manifest file.
     value: ${{ steps.capture.outputs.manifest_file }}
   screenshots-root:
     description: Absolute path to the generated screenshots root.
