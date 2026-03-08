@@ -76,6 +76,7 @@ Start with `report-only` to accumulate baselines without affecting build status.
 ## Known limitations
 
 - **Node apps only (v1)** — the runner must have Node 22+ available and the consumer app is expected to be Node-based; non-Node consumers (Python, Go, Ruby, etc.) are not yet supported
+- **Ubuntu runners only (v1)** — Playwright's system dependency installer (`--with-deps`) requires apt; `windows-latest` and `macos-latest` runners are not supported
 - Full-page capture only — no sub-region masking or cropping
 - Fixed viewport presets: `desktop` (1440×900) and `mobile` (390×844)
 - Single `diff.threshold` applies to all routes — no per-route overrides
