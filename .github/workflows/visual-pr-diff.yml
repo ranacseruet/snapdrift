@@ -52,14 +52,29 @@ jobs:
       - name: Build app
         run: ${{ inputs.build-command }}
 
+      - name: Read readiness config
+        env:
+          REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs/promises';
+          const configPath = process.env.REPO_CONFIG_PATH || '.github/visual-regression.json';
+          const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+          const readyUrl = config.readyUrl;
+          const readyTimeoutSeconds = config.readyTimeoutSeconds;
+          if (!readyUrl || typeof readyUrl !== 'string') throw new Error(`visual-regression.json missing required string field: readyUrl`);
+          if (!Number.isFinite(readyTimeoutSeconds) || readyTimeoutSeconds <= 0) throw new Error(`visual-regression.json missing required positive number field: readyTimeoutSeconds`);
+          await fs.appendFile(process.env.GITHUB_ENV, `QA_READY_URL=${readyUrl}\nQA_READY_TIMEOUT_SECONDS=${readyTimeoutSeconds}\n`);
+          EOF
+
       - name: Start app
         run: |
           set -euo pipefail
           ${{ inputs.start-command }} > /tmp/visual-pr-diff-start.log 2>&1 &
           echo "QA_SERVER_PID=$!" >> "$GITHUB_ENV"
           trap 'kill "$QA_SERVER_PID" || true' EXIT
-          for i in $(seq 1 45); do
-            if curl -sSf http://127.0.0.1:8080 >/dev/null; then
+          for i in $(seq 1 "$QA_READY_TIMEOUT_SECONDS"); do
+            if curl -sSf "$QA_READY_URL" >/dev/null; then
               exit 0
             fi
             sleep 1
