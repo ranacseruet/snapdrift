@@ -4,16 +4,16 @@ This guide walks through setting up SnapDrift in a consumer repo from scratch.
 
 ## Prerequisites
 
-> **v1 supports Node-based apps on Ubuntu runners only.**
-> - The runner must have Node 22+ available; SnapDrift uses it internally for its own scripts.
-> - The consumer app is expected to be a Node project. Non-Node consumers (Python, Go, Ruby, etc.) are not yet supported.
+> **v1 supports any app stack on Ubuntu runners.**
+> - SnapDrift self-provisions Node 22 internally — your consumer workflow does not need to set up Node.
+> - The consumer app can be any language or framework (Node, Python, Go, Ruby, etc.). SnapDrift only needs the app to be running and reachable at `baseUrl`.
 > - The runner must be Ubuntu-compatible (`ubuntu-latest` or equivalent). SnapDrift installs Playwright's Chromium and system dependencies via `apt`; `windows-latest` and `macos-latest` runners are not supported in v1.
 > - Playwright Chromium is installed automatically by SnapDrift on each run (~150 MB, takes 1–2 min). No manual Playwright setup is required, but the runner must have outbound network access to reach the Playwright CDN.
 
 Your repo must handle its own:
 
 - Checkout
-- Node setup (≥22) and dependency installation
+- Dependency installation (in whatever language/tool your app uses)
 - App build
 - App startup and readiness wait
 - App shutdown
@@ -83,7 +83,7 @@ Then add the diff step after your app is running:
     repo-config-path: .github/visual-regression.json
 ```
 
-### Complete example workflow
+### Complete example workflow (Node app)
 
 ```yaml
 name: PR Visual Diff
@@ -123,6 +123,49 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/visual-regression.json
 ```
+
+### Complete example workflow (Python app)
+
+SnapDrift handles its own Node setup, so a Python (or Go, Ruby, etc.) consumer workflow looks identical — just swap out the build/start steps for your stack:
+
+```yaml
+name: PR Visual Diff
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  visual-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+
+      - name: Start app
+        run: |
+          gunicorn myapp:app --bind 127.0.0.1:8080 &
+          for i in $(seq 1 45); do
+            curl -sf http://127.0.0.1:8080 && break || sleep 1
+          done
+
+      - name: Run visual PR diff
+        uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-config-path: .github/visual-regression.json
+```
+
+No `actions/setup-node` step needed — SnapDrift provisions Node 22 internally.
 
 ### What the wrapper does
 

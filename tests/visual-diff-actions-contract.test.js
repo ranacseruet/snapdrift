@@ -66,4 +66,18 @@ describe('visual diff action contracts', () => {
         expect(runPrDiff.outputs['summary-path']).toBeTruthy();
         expect(runPrDiff.outputs['bundle-dir']).toBeTruthy();
     });
+
+    it('wrapper actions self-provision Node so non-Node consumers do not need to', async () => {
+        const publishBaseline = await readAction('actions/publish-visual-baseline/action.yml');
+        const runPrDiff = await readAction('actions/run-visual-pr-diff/action.yml');
+
+        function hasSetupNodeStep(action) {
+            return (action.runs?.steps || []).some(
+                (step) => typeof step.uses === 'string' && step.uses.startsWith('actions/setup-node@')
+            );
+        }
+
+        expect(hasSetupNodeStep(publishBaseline)).toBe(true);
+        expect(hasSetupNodeStep(runPrDiff)).toBe(true);
+    });
 });
