@@ -108,8 +108,7 @@ describe('buildPrCommentBody', () => {
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
             {
                 artifactName: 'snapdrift-pr-42',
-                runUrl: 'https://github.com/example/runs/123',
-                repoUrl: 'https://github.com/example/snapdrift-fork'
+                runUrl: 'https://github.com/example/runs/123'
             }
         );
         expect(body).toContain('artifact `snapdrift-pr-42`');
@@ -117,7 +116,7 @@ describe('buildPrCommentBody', () => {
         expect(body).toContain('sha `abc1234`');
         expect(body).toContain('[View run](https://github.com/example/runs/123)');
         expect(body).toContain('<sub>SnapDrift ·');
-        expect(body).toContain('<div align="right"><sub>Powered by <a href="https://github.com/example/snapdrift-fork">SnapDrift</a></sub></div>');
+        expect(body).toContain('<div align="right"><sub>Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a></sub></div>');
     });
 
     it('keeps the powered-by footer when no metadata is available', () => {

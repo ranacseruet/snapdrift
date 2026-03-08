@@ -500,7 +500,6 @@ runs:
           const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
           const LEGACY_PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
           const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER];
-          const repoUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
           const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
 
           const summaryPath = process.env.SUMMARY_PATH;
@@ -528,8 +527,7 @@ runs:
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const body = buildPrCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
-            runUrl: process.env.RUN_URL || '',
-            repoUrl
+            runUrl: process.env.RUN_URL || ''
           });
 
           const comments = await github.paginate(github.rest.issues.listComments, {
