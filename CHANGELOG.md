@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- (no changes yet)
+
 ## v1.0.0
 
 Initial stable release of the shared visual regression module.

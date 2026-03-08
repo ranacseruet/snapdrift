@@ -1,5 +1,7 @@
 # SnapDrift
 
+![CI](https://github.com/ranacseruet/snapdrift/actions/workflows/ci.yml/badge.svg)
+
 This module contains the shared visual regression implementation for `Node + Playwright` projects.
 
 ## What lives here
