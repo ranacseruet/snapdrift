@@ -216,6 +216,7 @@ Use the low-level actions only when you need custom orchestration that the wrapp
 
 The pixel diff engine has the following known limitations:
 
+- **Capture failures appear in `errors[]`, not `missing[]`**: When Playwright fails to navigate to or screenshot a route (e.g. navigation timeout, app not responding), that route's result has `status: 'failed'` in the results JSON and appears in the `errors[]` array of the diff summary — not in `missing[]`. Check the workflow logs for the underlying Playwright error.
 - **Viewport dimension changes skip diff**: When a PR changes page content such that the captured screenshot dimensions differ from the baseline (e.g., adding or removing sections that change page height), pixel-level comparison is skipped for that route. These are reported as "dimension changes" in the summary, not as errors. The recommended workflow is to merge the PR and let the main CI re-capture the baseline with the new dimensions.
 - **Full-page capture dependency**: Screenshot dimensions depend on the full rendered page height at capture time. Any layout change that affects the document height — even outside the visually changed area — will trigger a dimension mismatch for that route.
 - **No sub-region diffing**: The engine compares entire screenshots pixel-by-pixel. There is no support for cropping or masking specific regions before comparison.
@@ -259,3 +260,10 @@ When the module moves to a dedicated repo or cuts a new version:
 **Screenshots have different dimensions**
 - Expected when a PR changes page content such that the captured dimensions differ from the baseline (e.g., adding or removing sections that change page height). Recorded as a "dimension change" in the diff summary; pixel comparison is skipped for that route.
 - Merge the PR and let the main CI re-capture the baseline with the new dimensions.
+
+**Route appears in `errors[]` in the diff summary**
+- The Playwright capture for that route failed (navigation timeout, app not ready, crash). Check the workflow run logs for the full error.
+- Ensure the app is fully started and `baseUrl` is reachable before the action runs.
+
+**`readyUrl` or `readyTimeoutSeconds` seem to be ignored**
+- These fields are read by the reusable workflow templates (`visual-baseline-publish.yml`, `visual-pr-diff.yml`) to drive the app readiness poll. If you are using the composite actions directly (not the reusable templates), you are responsible for implementing the readiness wait in your own workflow steps.

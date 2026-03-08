@@ -15,7 +15,7 @@ npm test
 NODE_OPTIONS='--experimental-vm-modules' npx jest tests/compare-visual-results.test.js
 
 # Validate action YAML files (as CI does)
-for f in actions/*/action.yml; do python3 -c "import yaml; yaml.safe_load(open('$f'))"; done
+for f in actions/*/action.yml; do python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f"; done
 ```
 
 Tests require `--experimental-vm-modules` because the project uses ESM (`"type": "module"`). Node 22+ is required.
@@ -73,4 +73,13 @@ Action steps load `lib/` modules at runtime using `node --input-type=module` wit
 
 ### Testing
 
-Tests in `tests/` use Jest with `"transform": {}` (no transpilation). Tests are unit/contract-level — they do not run Playwright or require a live app. CI runs the suite on Node 20 and 22.
+Tests in `tests/` use Jest with `"transform": {}` (no transpilation). Tests are unit/contract-level — they do not run Playwright or require a live app. CI runs the suite on Node 22.
+
+| Test file | What it covers |
+|-----------|---------------|
+| `visual-diff-smoke.test.js` | Config validation, enforcement modes, viewport/readiness contracts, lib exports, artifact bundle structure |
+| `compare-visual-results.test.js` | Pixel diff logic, dimension mismatch, missing screenshots, file index cache, route scoping |
+| `stage-visual-artifacts.test.js` | Baseline and diff bundle staging |
+| `visual-diff-summary.test.js` | Skipped-summary generation for scope and missing-baseline cases |
+| `visual-diff-pr-comment.test.js` | PR comment body construction |
+| `visual-diff-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract |

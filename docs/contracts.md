@@ -13,8 +13,8 @@ The shared layer reads runtime visual regression behavior from `.github/visual-r
 | `baselineArtifactName` | `string` | Name for the uploaded baseline artifact |
 | `workingDirectory` | `string` | Root directory for resolving relative paths |
 | `baseUrl` | `string` | Base URL the running app is reachable at |
-| `readyUrl` | `string` | URL to poll for readiness (consumer-owned) |
-| `readyTimeoutSeconds` | `number` | Max seconds to wait for readiness (consumer-owned) |
+| `readyUrl` | `string` | URL to poll for app readiness. Used by the reusable workflow templates; not read by the `lib/` modules themselves. |
+| `readyTimeoutSeconds` | `number` | Max seconds to wait for the app to become ready. Used by the reusable workflow templates; not read by the `lib/` modules themselves. |
 | `resultsFile` | `string` | Path (relative to `workingDirectory`) for capture results JSON |
 | `manifestFile` | `string` | Path (relative to `workingDirectory`) for screenshot manifest JSON |
 | `screenshotsRoot` | `string` | Parent directory for screenshot output (relative to `workingDirectory`); actual PNGs are written to `{screenshotsRoot}/screenshots/{id}.png` |
@@ -201,3 +201,24 @@ Primary integration path:
 - `actions/run-visual-pr-diff` — end-to-end PR diff pipeline
 
 The lower-level actions remain available for advanced consumers, but new consumers should prefer the wrapper actions.
+
+## Environment variables (advanced / low-level usage)
+
+The `lib/` modules read the following environment variables as fallbacks when options are not passed programmatically. These are set automatically by the wrapper actions and do not need to be set manually when using `publish-visual-baseline` or `run-visual-pr-diff`. They are documented here for consumers building custom orchestration on top of the low-level actions.
+
+| Variable | Module | Description |
+|:---------|:-------|:------------|
+| `QA_VISUAL_CONFIG_PATH` | `visual-regression-config.mjs` | Override path to `visual-regression.json` |
+| `QA_VISUAL_ROUTE_IDS` | `capture-visual-routes.mjs`, `compare-visual-results.mjs` | Comma-separated route ids to capture/compare |
+| `QA_VISUAL_BASELINE_RESULTS_PATH` | `compare-visual-results.mjs` | Path to baseline `visual-baseline-results.json` |
+| `QA_VISUAL_BASELINE_MANIFEST_PATH` | `compare-visual-results.mjs` | Path to baseline `visual-screenshot-manifest.json` |
+| `QA_VISUAL_CURRENT_RESULTS_PATH` | `compare-visual-results.mjs` | Path to current `visual-baseline-results.json` |
+| `QA_VISUAL_CURRENT_MANIFEST_PATH` | `compare-visual-results.mjs` | Path to current `visual-screenshot-manifest.json` |
+| `QA_VISUAL_BASELINE_RUN_DIR` | `compare-visual-results.mjs` | Root directory for resolving baseline screenshot paths (default: `baseline`) |
+| `QA_VISUAL_CURRENT_RUN_DIR` | `compare-visual-results.mjs` | Root directory for resolving current screenshot paths |
+| `QA_VISUAL_DIFF_OUT_DIR` | `compare-visual-results.mjs` | Output directory for diff summary files (default: `qa-artifacts/visual-diffs/current`) |
+| `QA_VISUAL_DIFF_SUMMARY_PATH` | `compare-visual-results.mjs` | Override path for `visual-diff-summary.json` |
+| `QA_VISUAL_DIFF_SUMMARY_MARKDOWN` | `compare-visual-results.mjs` | Override path for `visual-diff-summary.md` |
+| `QA_VISUAL_BASELINE_ARTIFACT_NAME` | `compare-visual-results.mjs` | Baseline artifact name to embed in the summary |
+| `QA_VISUAL_BASELINE_SOURCE_SHA` | `compare-visual-results.mjs` | Baseline source SHA to embed in the summary |
+| `QA_VISUAL_ENFORCE_OUTCOME` | `compare-visual-results.mjs` | Set to `0` to disable enforcement when running `runVisualDiffCli` directly (default: enforces) |
