@@ -53,7 +53,7 @@ runs:
           const path = require('path');
           const { pathToFileURL } = require('url');
 
-          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
           const { loadSnapdriftConfig, selectRoutesForChangedFiles } = await import(pathToFileURL(configModulePath));
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
 

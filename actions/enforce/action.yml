@@ -33,7 +33,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
         const { shouldFailDriftCheck, formatDriftFailureMessage } = await import(pathToFileURL(modulePath));
         const summary = JSON.parse(await fs.readFile(process.env.SUMMARY_PATH, 'utf8'));
 

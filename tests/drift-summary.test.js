@@ -18,7 +18,7 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('writes the no-drift-relevant-changes skipped summary with default messaging', async () => {
-        const { writeDriftSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { writeDriftSummary } = await import('../lib/drift-summary.mjs');
 
         const result = await writeDriftSummary({
             reason: 'no_snapdrift_relevant_changes',
@@ -42,7 +42,7 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('writes the missing-baseline skipped summary with current run metadata', async () => {
-        const { writeDriftSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { writeDriftSummary } = await import('../lib/drift-summary.mjs');
 
         const result = await writeDriftSummary({
             reason: 'missing_main_baseline_artifact',
@@ -69,7 +69,7 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('falls back to an underscore-decoded reason string for unknown skip reasons', async () => {
-        const { buildDriftSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { buildDriftSummary } = await import('../lib/drift-summary.mjs');
 
         const { summary, markdown } = buildDriftSummary({
             status: 'incomplete',

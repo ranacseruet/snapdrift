@@ -12,7 +12,7 @@ npm ci
 npm test
 
 # Run a single test file
-NODE_OPTIONS='--experimental-vm-modules' npx jest tests/compare-visual-results.test.js
+NODE_OPTIONS='--experimental-vm-modules' npx jest tests/compare-results.test.js
 
 # Validate action YAML files (as CI does)
 for f in actions/*/action.yml; do python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f"; done
@@ -27,12 +27,12 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
 ### Two integration layers
 
 1. **`lib/`** — Pure ESM modules consumed directly by action steps via dynamic `import()` at runtime. All modules are exported via `package.json` `exports`.
-   - `visual-regression-config.mjs` — Loads and validates `.github/visual-regression.json`; exports viewport presets, route selection logic, and `splitCommaList`
-   - `capture-visual-routes.mjs` — Launches headless Chromium via Playwright, captures full-page screenshots per route, writes results JSON + manifest JSON
-   - `compare-visual-results.mjs` — Pixel-level diff using `pngjs`; produces `visual-diff-summary.json` + `.md`; contains enforcement logic (`shouldFailVisualDiff`)
-   - `stage-visual-artifacts.mjs` — Assembles baseline or diff artifact bundles into a temp directory for upload
-   - `visual-diff-summary.mjs` — Writes skipped-summary JSON/markdown when diff is intentionally skipped
-   - `visual-diff-pr-comment.mjs` — Builds and upserts the PR comment body from a diff summary
+   - `snapdrift-config.mjs` — Loads and validates `.github/visual-regression.json`; exports viewport presets, route selection logic, and `splitCommaList`
+   - `capture-routes.mjs` — Launches headless Chromium via Playwright, captures full-page screenshots per route, writes results JSON + manifest JSON
+   - `compare-results.mjs` — Pixel-level diff using `pngjs`; produces drift summary JSON + markdown; contains enforcement logic
+   - `stage-artifacts.mjs` — Assembles baseline or diff artifact bundles into a temp directory for upload
+   - `drift-summary.mjs` — Writes skipped-summary JSON/markdown when diff is intentionally skipped
+   - `pr-comment.mjs` — Builds and upserts the PR comment body from a diff summary
 
 2. **`actions/`** — GitHub composite actions. Two primary wrapper actions orchestrate the full pipeline:
    - `publish-visual-baseline` — Reads config → installs deps → captures routes → stages bundle → uploads artifact
@@ -77,9 +77,9 @@ Tests in `tests/` use Jest with `"transform": {}` (no transpilation). Tests are 
 
 | Test file | What it covers |
 |-----------|---------------|
-| `visual-diff-smoke.test.js` | Config validation, enforcement modes, viewport/readiness contracts, lib exports, artifact bundle structure |
-| `compare-visual-results.test.js` | Pixel diff logic, dimension mismatch, missing screenshots, file index cache, route scoping |
-| `stage-visual-artifacts.test.js` | Baseline and diff bundle staging |
-| `visual-diff-summary.test.js` | Skipped-summary generation for scope and missing-baseline cases |
-| `visual-diff-pr-comment.test.js` | PR comment body construction |
-| `visual-diff-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract |
+| `snapdrift-smoke.test.js` | Config validation, enforcement modes, viewport/readiness contracts, lib exports, artifact bundle structure |
+| `compare-results.test.js` | Pixel diff logic, dimension mismatch, missing screenshots, file index cache, route scoping |
+| `stage-artifacts.test.js` | Baseline and diff bundle staging |
+| `drift-summary.test.js` | Skipped-summary generation for scope and missing-baseline cases |
+| `pr-comment.test.js` | PR comment body construction |
+| `snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract |

@@ -54,7 +54,7 @@ npm test
 npm run test:coverage
 
 # Run a single test file
-NODE_OPTIONS='--experimental-vm-modules' npx jest tests/visual-diff-smoke.test.js
+NODE_OPTIONS='--experimental-vm-modules' npx jest tests/snapdrift-smoke.test.js
 ```
 
 The six test files in `tests/` cover config validation, capture, compare, staging, PR comment generation, and action contract integrity. Tests are unit-level — they do not run Playwright or require a live app.

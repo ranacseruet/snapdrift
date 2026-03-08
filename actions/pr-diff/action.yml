@@ -117,7 +117,7 @@ runs:
           const path = require('path');
           const { pathToFileURL } = require('url');
 
-          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
           const { loadSnapdriftConfig, selectConfiguredRoutes, selectRoutesForChangedFiles, splitCommaList } = await import(pathToFileURL(configModulePath));
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const allRouteIds = (config.routes || []).map((route) => route.id);
@@ -304,8 +304,8 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-visual-routes.mjs');
-        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-routes.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
         const { runBaselineCapture } = await import(pathToFileURL(captureModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
@@ -341,8 +341,8 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const compareModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
-        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const compareModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
         const { runDriftCheckCli } = await import(pathToFileURL(compareModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
@@ -382,7 +382,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/drift-summary.mjs');
         const { writeDriftSummary } = await import(pathToFileURL(modulePath));
 
         const result = await writeDriftSummary({
@@ -412,7 +412,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/drift-summary.mjs');
         const { writeDriftSummary } = await import(pathToFileURL(modulePath));
 
         const result = await writeDriftSummary({
@@ -449,7 +449,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-artifacts.mjs');
         const { stageArtifacts } = await import(pathToFileURL(modulePath));
 
         const result = await stageArtifacts({
@@ -521,7 +521,7 @@ runs:
             return;
           }
 
-          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
           const { buildReportCommentBody } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
@@ -577,7 +577,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
         const { shouldFailDriftCheck, formatDriftFailureMessage } = await import(pathToFileURL(modulePath));
         const summaryModulePath = path.resolve('qa-artifacts/snapdrift/drift/current/summary.json');
         const summary = JSON.parse(await fs.readFile(summaryModulePath, 'utf8'));

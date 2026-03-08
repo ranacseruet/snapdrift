@@ -88,7 +88,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-artifacts.mjs');
         const { stageArtifacts } = await import(pathToFileURL(modulePath));
 
         const result = await stageArtifacts({

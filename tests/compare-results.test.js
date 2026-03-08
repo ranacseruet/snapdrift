@@ -121,7 +121,7 @@ describe('determineDriftStatus', () => {
     let determineDriftStatus;
 
     beforeAll(async () => {
-        ({ determineDriftStatus } = await import('../lib/compare-visual-results.mjs'));
+        ({ determineDriftStatus } = await import('../lib/compare-results.mjs'));
     });
 
     const base = { errors: [], dimensionChanges: [], missingInBaseline: 0, missingInCurrent: 0, changedScreenshots: 0 };
@@ -157,7 +157,7 @@ describe('shouldFailDriftCheck', () => {
     let shouldFailDriftCheck;
 
     beforeAll(async () => {
-        ({ shouldFailDriftCheck } = await import('../lib/compare-visual-results.mjs'));
+        ({ shouldFailDriftCheck } = await import('../lib/compare-results.mjs'));
     });
 
     const clean = { errors: [], dimensionChanges: [], missingInBaseline: 0, missingInCurrent: 0, changedScreenshots: 0 };
@@ -213,7 +213,7 @@ describe('formatDriftFailureMessage', () => {
     let formatDriftFailureMessage;
 
     beforeAll(async () => {
-        ({ formatDriftFailureMessage } = await import('../lib/compare-visual-results.mjs'));
+        ({ formatDriftFailureMessage } = await import('../lib/compare-results.mjs'));
     });
 
     it('fail-on-changes includes the screenshot count', () => {
@@ -242,7 +242,7 @@ describe('generateDriftReport', () => {
     let tempDir;
 
     beforeAll(async () => {
-        ({ generateDriftReport } = await import('../lib/compare-visual-results.mjs'));
+        ({ generateDriftReport } = await import('../lib/compare-results.mjs'));
     });
 
     beforeEach(async () => {
@@ -813,7 +813,7 @@ describe('runDriftCheckCli', () => {
     let tempDir;
 
     beforeAll(async () => {
-        ({ runDriftCheckCli } = await import('../lib/compare-visual-results.mjs'));
+        ({ runDriftCheckCli } = await import('../lib/compare-results.mjs'));
     });
 
     beforeEach(async () => {

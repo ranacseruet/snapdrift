@@ -53,7 +53,7 @@ runs:
             return;
           }
 
-          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
           const { buildReportCommentBody, PR_COMMENT_MARKERS } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));

@@ -27,7 +27,7 @@ describe('SnapDrift action contracts', () => {
     });
 
     it('uses artifact-type-specific default bundle directories at runtime', async () => {
-        const { stageArtifacts } = await import('../lib/stage-visual-artifacts.mjs');
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
         const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-stage-defaults-'));
         const originalCwd = process.cwd();
 

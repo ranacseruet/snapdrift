@@ -27,7 +27,7 @@ describe('stage artifact bundles helper', () => {
     });
 
     it('stages a baseline bundle and recursively copies only png screenshots', async () => {
-        const { stageArtifacts } = await import('../lib/stage-visual-artifacts.mjs');
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
 
         const resultsPath = path.join(tempDir, 'inputs', 'results.json');
         const manifestPath = path.join(tempDir, 'inputs', 'manifest.json');
@@ -54,7 +54,7 @@ describe('stage artifact bundles helper', () => {
     });
 
     it('stages a drift bundle, supports custom bundle dirs, and tolerates missing optional inputs', async () => {
-        const { stageArtifacts } = await import('../lib/stage-visual-artifacts.mjs');
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
 
         const bundleDir = path.join(tempDir, 'custom-bundle');
         const summaryJsonPath = path.join(tempDir, 'inputs', 'summary.json');

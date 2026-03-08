@@ -61,7 +61,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
         const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
 
@@ -88,8 +88,8 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-visual-routes.mjs');
-        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
+        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-routes.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
         const { runBaselineCapture } = await import(pathToFileURL(captureModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
@@ -120,7 +120,7 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-artifacts.mjs');
         const { stageArtifacts } = await import(pathToFileURL(modulePath));
 
         const result = await stageArtifacts({

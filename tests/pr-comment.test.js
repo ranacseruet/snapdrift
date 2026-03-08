@@ -6,7 +6,7 @@ describe('buildReportCommentBody', () => {
     let LEGACY_REPORT_COMMENT_MARKER;
 
     beforeAll(async () => {
-        ({ buildReportCommentBody, PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER } = await import('../lib/visual-diff-pr-comment.mjs'));
+        ({ buildReportCommentBody, PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER } = await import('../lib/pr-comment.mjs'));
     });
 
     const cleanSummary = {

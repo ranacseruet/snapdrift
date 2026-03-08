@@ -149,7 +149,7 @@ describe('viewport presets match contract', () => {
     let SNAPDRIFT_VIEWPORT_PRESETS;
 
     beforeAll(async () => {
-        ({ SNAPDRIFT_VIEWPORT_PRESETS } = await import('../lib/visual-regression-config.mjs'));
+        ({ SNAPDRIFT_VIEWPORT_PRESETS } = await import('../lib/snapdrift-config.mjs'));
     });
 
     it('desktop preset matches the documented contract', () => {
@@ -186,7 +186,7 @@ describe('capture defaults match contract', () => {
     let SNAPDRIFT_SETTLE_DELAY_MS;
 
     beforeAll(async () => {
-        ({ SNAPDRIFT_NAVIGATION_TIMEOUT_MS, SNAPDRIFT_SETTLE_DELAY_MS } = await import('../lib/visual-regression-config.mjs'));
+        ({ SNAPDRIFT_NAVIGATION_TIMEOUT_MS, SNAPDRIFT_SETTLE_DELAY_MS } = await import('../lib/snapdrift-config.mjs'));
     });
 
     it('navigation timeout is 30000ms', () => {
@@ -207,7 +207,7 @@ describe('config schema validation', () => {
     let tempDir;
 
     beforeAll(async () => {
-        ({ loadSnapdriftConfig } = await import('../lib/visual-regression-config.mjs'));
+        ({ loadSnapdriftConfig } = await import('../lib/snapdrift-config.mjs'));
     });
 
     beforeEach(async () => {
@@ -382,7 +382,7 @@ describe('enforcement modes cover the full contract', () => {
     let shouldFailDriftCheck;
 
     beforeAll(async () => {
-        ({ shouldFailDriftCheck } = await import('../lib/compare-visual-results.mjs'));
+        ({ shouldFailDriftCheck } = await import('../lib/compare-results.mjs'));
     });
 
     const clean = {
@@ -406,7 +406,7 @@ describe('enforcement modes cover the full contract', () => {
 
 describe('lib module exports are stable', () => {
     it('config module exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-regression-config.mjs');
+        const mod = await import('../lib/snapdrift-config.mjs');
         expect(typeof mod.loadSnapdriftConfig).toBe('function');
         expect(typeof mod.validateSnapdriftConfig).toBe('function');
         expect(typeof mod.readFirstDefinedEnv).toBe('function');
@@ -423,7 +423,7 @@ describe('lib module exports are stable', () => {
     });
 
     it('drift comparison module exports all expected symbols', async () => {
-        const mod = await import('../lib/compare-visual-results.mjs');
+        const mod = await import('../lib/compare-results.mjs');
         expect(typeof mod.determineDriftStatus).toBe('function');
         expect(typeof mod.shouldFailDriftCheck).toBe('function');
         expect(typeof mod.formatDriftFailureMessage).toBe('function');
@@ -432,24 +432,24 @@ describe('lib module exports are stable', () => {
     });
 
     it('artifact staging module exports all expected symbols', async () => {
-        const mod = await import('../lib/stage-visual-artifacts.mjs');
+        const mod = await import('../lib/stage-artifacts.mjs');
         expect(typeof mod.stageArtifacts).toBe('function');
         expect(typeof mod.getDefaultArtifactBundleDir).toBe('function');
     });
 
     it('summary module exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-diff-summary.mjs');
+        const mod = await import('../lib/drift-summary.mjs');
         expect(typeof mod.buildDriftSummary).toBe('function');
         expect(typeof mod.writeDriftSummary).toBe('function');
     });
 
     it('capture module exports runBaselineCapture', async () => {
-        const mod = await import('../lib/capture-visual-routes.mjs');
+        const mod = await import('../lib/capture-routes.mjs');
         expect(typeof mod.runBaselineCapture).toBe('function');
     });
 
     it('comment module exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-diff-pr-comment.mjs');
+        const mod = await import('../lib/pr-comment.mjs');
         expect(typeof mod.buildReportCommentBody).toBe('function');
         expect(typeof mod.PR_COMMENT_MARKER).toBe('string');
         expect(typeof mod.LEGACY_REPORT_COMMENT_MARKER).toBe('string');
@@ -467,7 +467,7 @@ describe('artifact bundle directory structure', () => {
     let tempDir;
 
     beforeAll(async () => {
-        ({ stageArtifacts } = await import('../lib/stage-visual-artifacts.mjs'));
+        ({ stageArtifacts } = await import('../lib/stage-artifacts.mjs'));
     });
 
     beforeEach(async () => {

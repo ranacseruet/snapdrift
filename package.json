@@ -62,12 +62,18 @@
     }
   },
   "exports": {
-    "./lib/visual-regression-config.mjs": "./lib/visual-regression-config.mjs",
-    "./lib/capture-visual-routes.mjs": "./lib/capture-visual-routes.mjs",
-    "./lib/compare-visual-results.mjs": "./lib/compare-visual-results.mjs",
-    "./lib/stage-visual-artifacts.mjs": "./lib/stage-visual-artifacts.mjs",
-    "./lib/visual-diff-summary.mjs": "./lib/visual-diff-summary.mjs",
-    "./lib/visual-diff-pr-comment.mjs": "./lib/visual-diff-pr-comment.mjs"
+    "./lib/snapdrift-config.mjs": "./lib/snapdrift-config.mjs",
+    "./lib/capture-routes.mjs": "./lib/capture-routes.mjs",
+    "./lib/compare-results.mjs": "./lib/compare-results.mjs",
+    "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
+    "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
+    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
+    "./lib/visual-regression-config.mjs": "./lib/snapdrift-config.mjs",
+    "./lib/capture-visual-routes.mjs": "./lib/capture-routes.mjs",
+    "./lib/compare-visual-results.mjs": "./lib/compare-results.mjs",
+    "./lib/stage-visual-artifacts.mjs": "./lib/stage-artifacts.mjs",
+    "./lib/visual-diff-summary.mjs": "./lib/drift-summary.mjs",
+    "./lib/visual-diff-pr-comment.mjs": "./lib/pr-comment.mjs"
   },
   "files": [
     "actions/",
