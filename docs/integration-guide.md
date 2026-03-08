@@ -4,10 +4,12 @@ This guide walks through setting up SnapDrift in a consumer repo from scratch.
 
 ## Prerequisites
 
+> **v1 supports Node-based apps only.** The runner must have Node 22+ available (SnapDrift uses it internally for its own scripts), and the consumer app is expected to be a Node project. Support for non-Node consumers (Python, Go, Ruby, etc.) is planned for a future release.
+
 Your repo must handle its own:
 
 - Checkout
-- Node setup and dependency installation
+- Node setup (≥22) and dependency installation
 - App build
 - App startup and readiness wait
 - App shutdown
