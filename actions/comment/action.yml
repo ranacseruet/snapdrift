@@ -53,13 +53,13 @@ runs:
             return;
           }
 
-          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
-          const { buildPrCommentBody, PR_COMMENT_MARKERS } = await import(pathToFileURL(modulePath));
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
+          const { buildReportCommentBody, PR_COMMENT_MARKERS } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
-          const body = buildPrCommentBody(summary, {
+          const body = buildReportCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
             runUrl
           });

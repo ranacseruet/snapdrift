@@ -23,29 +23,57 @@
     "screenshot-testing"
   ],
   "scripts": {
-    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
+    "lint": "eslint .",
+    "typecheck": "tsc --project tsconfig.json",
+    "validate:actions": "node scripts/validate-actions.mjs",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage --runInBand",
+    "pack:check": "npm pack --dry-run --cache .npm-cache",
+    "ci": "npm run lint && npm run typecheck && npm run validate:actions && npm run test:coverage && npm run pack:check"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.3.5",
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
     "jest": "^30.2.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "typescript": "^5.9.3"
   },
   "jest": {
     "testEnvironment": "node",
     "testMatch": [
       "**/tests/**/*.test.js"
     ],
-    "transform": {}
+    "transform": {},
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 80,
+        "statements": 80
+      }
+    }
   },
   "exports": {
-    "./lib/visual-regression-config.mjs": "./lib/visual-regression-config.mjs",
-    "./lib/capture-visual-routes.mjs": "./lib/capture-visual-routes.mjs",
-    "./lib/compare-visual-results.mjs": "./lib/compare-visual-results.mjs",
-    "./lib/stage-visual-artifacts.mjs": "./lib/stage-visual-artifacts.mjs",
-    "./lib/visual-diff-summary.mjs": "./lib/visual-diff-summary.mjs",
-    "./lib/visual-diff-pr-comment.mjs": "./lib/visual-diff-pr-comment.mjs"
+    "./lib/snapdrift-config.mjs": "./lib/snapdrift-config.mjs",
+    "./lib/capture-routes.mjs": "./lib/capture-routes.mjs",
+    "./lib/compare-results.mjs": "./lib/compare-results.mjs",
+    "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
+    "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
+    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
+    "./lib/visual-regression-config.mjs": "./lib/snapdrift-config.mjs",
+    "./lib/capture-visual-routes.mjs": "./lib/capture-routes.mjs",
+    "./lib/compare-visual-results.mjs": "./lib/compare-results.mjs",
+    "./lib/stage-visual-artifacts.mjs": "./lib/stage-artifacts.mjs",
+    "./lib/visual-diff-summary.mjs": "./lib/drift-summary.mjs",
+    "./lib/visual-diff-pr-comment.mjs": "./lib/pr-comment.mjs"
   },
   "files": [
     "actions/",

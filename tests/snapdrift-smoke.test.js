@@ -68,7 +68,7 @@ describe('action YML structural integrity', () => {
     it('all required inputs are marked required', () => {
         for (const dir of actionDirs) {
             const inputs = actions[dir].inputs || {};
-            for (const [inputName, inputDef] of Object.entries(inputs)) {
+            for (const inputDef of Object.values(inputs)) {
                 if (inputDef.required === true) {
                     expect(inputDef.default).toBeUndefined();
                 }
@@ -146,14 +146,14 @@ describe('wrapper action completeness', () => {
 // ---------------------------------------------------------------------------
 
 describe('viewport presets match contract', () => {
-    let VIEWPORT_PRESETS;
+    let SNAPDRIFT_VIEWPORT_PRESETS;
 
     beforeAll(async () => {
-        ({ VIEWPORT_PRESETS } = await import('../lib/visual-regression-config.mjs'));
+        ({ SNAPDRIFT_VIEWPORT_PRESETS } = await import('../lib/snapdrift-config.mjs'));
     });
 
     it('desktop preset matches the documented contract', () => {
-        expect(VIEWPORT_PRESETS.desktop).toEqual({
+        expect(SNAPDRIFT_VIEWPORT_PRESETS.desktop).toEqual({
             width: 1440,
             height: 900,
             deviceScaleFactor: 1,
@@ -163,7 +163,7 @@ describe('viewport presets match contract', () => {
     });
 
     it('mobile preset matches the documented contract', () => {
-        expect(VIEWPORT_PRESETS.mobile).toEqual({
+        expect(SNAPDRIFT_VIEWPORT_PRESETS.mobile).toEqual({
             width: 390,
             height: 844,
             deviceScaleFactor: 3,
@@ -173,7 +173,7 @@ describe('viewport presets match contract', () => {
     });
 
     it('only desktop and mobile presets exist', () => {
-        expect(Object.keys(VIEWPORT_PRESETS).sort()).toEqual(['desktop', 'mobile']);
+        expect(Object.keys(SNAPDRIFT_VIEWPORT_PRESETS).sort()).toEqual(['desktop', 'mobile']);
     });
 });
 
@@ -182,19 +182,19 @@ describe('viewport presets match contract', () => {
 // ---------------------------------------------------------------------------
 
 describe('capture defaults match contract', () => {
-    let VISUAL_NAVIGATION_TIMEOUT_MS;
-    let VISUAL_SETTLE_DELAY_MS;
+    let SNAPDRIFT_NAVIGATION_TIMEOUT_MS;
+    let SNAPDRIFT_SETTLE_DELAY_MS;
 
     beforeAll(async () => {
-        ({ VISUAL_NAVIGATION_TIMEOUT_MS, VISUAL_SETTLE_DELAY_MS } = await import('../lib/visual-regression-config.mjs'));
+        ({ SNAPDRIFT_NAVIGATION_TIMEOUT_MS, SNAPDRIFT_SETTLE_DELAY_MS } = await import('../lib/snapdrift-config.mjs'));
     });
 
     it('navigation timeout is 30000ms', () => {
-        expect(VISUAL_NAVIGATION_TIMEOUT_MS).toBe(30000);
+        expect(SNAPDRIFT_NAVIGATION_TIMEOUT_MS).toBe(30000);
     });
 
     it('settle delay is 300ms', () => {
-        expect(VISUAL_SETTLE_DELAY_MS).toBe(300);
+        expect(SNAPDRIFT_SETTLE_DELAY_MS).toBe(300);
     });
 });
 
@@ -203,15 +203,15 @@ describe('capture defaults match contract', () => {
 // ---------------------------------------------------------------------------
 
 describe('config schema validation', () => {
-    let loadVisualRegressionConfig;
+    let loadSnapdriftConfig;
     let tempDir;
 
     beforeAll(async () => {
-        ({ loadVisualRegressionConfig } = await import('../lib/visual-regression-config.mjs'));
+        ({ loadSnapdriftConfig } = await import('../lib/snapdrift-config.mjs'));
     });
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-smoke-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-smoke-'));
     });
 
     afterEach(async () => {
@@ -233,8 +233,24 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'valid.json');
         await fs.writeFile(configPath, JSON.stringify(validConfig));
 
-        const { config } = await loadVisualRegressionConfig(configPath);
+        const { config } = await loadSnapdriftConfig(configPath);
         expect(config.baselineArtifactName).toBe('test-baseline');
+    });
+
+    it('accepts optional route selection metadata when it is well formed', async () => {
+        const configPath = path.join(tempDir, 'valid-with-selection.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'desktop', changePaths: ['src/pages/home'] }],
+            selection: {
+                sharedPrefixes: ['src/components'],
+                sharedExact: ['package-lock.json']
+            }
+        }));
+
+        const { config } = await loadSnapdriftConfig(configPath);
+        expect(config.selection.sharedPrefixes).toEqual(['src/components']);
+        expect(config.routes[0].changePaths).toEqual(['src/pages/home']);
     });
 
     it('rejects config missing baselineArtifactName', async () => {
@@ -242,7 +258,7 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
     it('rejects config missing workingDirectory', async () => {
@@ -250,7 +266,7 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
     it('rejects config missing routes', async () => {
@@ -258,7 +274,7 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
     it('rejects config missing diff', async () => {
@@ -266,7 +282,73 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
+    });
+
+    it('rejects config with duplicate route ids', async () => {
+        const configPath = path.join(tempDir, 'duplicate-route-ids.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [
+                { id: 'home', path: '/', viewport: 'desktop' },
+                { id: 'home', path: '/mobile', viewport: 'mobile' }
+            ]
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/duplicate/i);
+    });
+
+    it('rejects config with an unsupported viewport preset', async () => {
+        const configPath = path.join(tempDir, 'invalid-viewport.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'tablet' }]
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/viewport/i);
+    });
+
+    it('rejects config with an unsupported diff mode', async () => {
+        const configPath = path.join(tempDir, 'invalid-diff-mode.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            diff: { threshold: 0.01, mode: 'warn-only' }
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/diff\.mode/i);
+    });
+
+    it('rejects config with an out-of-range diff threshold', async () => {
+        const configPath = path.join(tempDir, 'invalid-threshold.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            diff: { threshold: 1.5, mode: 'report-only' }
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/between 0 and 1/i);
+    });
+
+    it('rejects config with malformed change path selectors', async () => {
+        const configPath = path.join(tempDir, 'invalid-change-paths.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'desktop', changePaths: ['src/pages', ''] }]
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/changePaths/i);
+    });
+
+    it('rejects config with malformed shared selection rules', async () => {
+        const configPath = path.join(tempDir, 'invalid-selection.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            selection: {
+                sharedPrefixes: ['src/components', ''],
+                sharedExact: ['README.md']
+            }
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/sharedPrefixes/i);
     });
 
     it('rejects config missing manifestFile', async () => {
@@ -274,7 +356,7 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
     it('rejects config missing screenshotsRoot', async () => {
@@ -282,12 +364,12 @@ describe('config schema validation', () => {
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
     it('rejects a nonexistent config path', async () => {
         await expect(
-            loadVisualRegressionConfig(path.join(tempDir, 'nonexistent.json'))
+            loadSnapdriftConfig(path.join(tempDir, 'nonexistent.json'))
         ).rejects.toThrow();
     });
 });
@@ -297,10 +379,10 @@ describe('config schema validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('enforcement modes cover the full contract', () => {
-    let shouldFailVisualDiff;
+    let shouldFailDriftCheck;
 
     beforeAll(async () => {
-        ({ shouldFailVisualDiff } = await import('../lib/compare-visual-results.mjs'));
+        ({ shouldFailDriftCheck } = await import('../lib/compare-results.mjs'));
     });
 
     const clean = {
@@ -313,7 +395,7 @@ describe('enforcement modes cover the full contract', () => {
 
     for (const mode of ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict']) {
         it(`handles ${mode} mode without throwing`, () => {
-            expect(() => shouldFailVisualDiff({ ...clean, diffMode: mode })).not.toThrow();
+            expect(() => shouldFailDriftCheck({ ...clean, diffMode: mode })).not.toThrow();
         });
     }
 });
@@ -323,9 +405,10 @@ describe('enforcement modes cover the full contract', () => {
 // ---------------------------------------------------------------------------
 
 describe('lib module exports are stable', () => {
-    it('visual-regression-config exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-regression-config.mjs');
-        expect(typeof mod.loadVisualRegressionConfig).toBe('function');
+    it('config module exports all expected symbols', async () => {
+        const mod = await import('../lib/snapdrift-config.mjs');
+        expect(typeof mod.loadSnapdriftConfig).toBe('function');
+        expect(typeof mod.validateSnapdriftConfig).toBe('function');
         expect(typeof mod.readFirstDefinedEnv).toBe('function');
         expect(typeof mod.resolveFromWorkingDirectory).toBe('function');
         expect(typeof mod.selectConfiguredRoutes).toBe('function');
@@ -333,42 +416,43 @@ describe('lib module exports are stable', () => {
         expect(typeof mod.splitCommaList).toBe('function');
         expect(typeof mod.DEFAULT_CONFIG_PATH).toBe('string');
         expect(typeof mod.LEGACY_CONFIG_PATH).toBe('string');
-        expect(mod.VIEWPORT_PRESETS).toBeDefined();
-        expect(typeof mod.VISUAL_NAVIGATION_TIMEOUT_MS).toBe('number');
-        expect(typeof mod.VISUAL_SETTLE_DELAY_MS).toBe('number');
+        expect(Array.isArray(mod.VALID_DIFF_MODES)).toBe(true);
+        expect(mod.SNAPDRIFT_VIEWPORT_PRESETS).toBeDefined();
+        expect(typeof mod.SNAPDRIFT_NAVIGATION_TIMEOUT_MS).toBe('number');
+        expect(typeof mod.SNAPDRIFT_SETTLE_DELAY_MS).toBe('number');
     });
 
-    it('compare-visual-results exports all expected symbols', async () => {
-        const mod = await import('../lib/compare-visual-results.mjs');
-        expect(typeof mod.determineVisualDiffStatus).toBe('function');
-        expect(typeof mod.shouldFailVisualDiff).toBe('function');
-        expect(typeof mod.formatVisualDiffFailureMessage).toBe('function');
-        expect(typeof mod.generateVisualDiffReport).toBe('function');
-        expect(typeof mod.runVisualDiffCli).toBe('function');
+    it('drift comparison module exports all expected symbols', async () => {
+        const mod = await import('../lib/compare-results.mjs');
+        expect(typeof mod.determineDriftStatus).toBe('function');
+        expect(typeof mod.shouldFailDriftCheck).toBe('function');
+        expect(typeof mod.formatDriftFailureMessage).toBe('function');
+        expect(typeof mod.generateDriftReport).toBe('function');
+        expect(typeof mod.runDriftCheckCli).toBe('function');
     });
 
-    it('stage-visual-artifacts exports all expected symbols', async () => {
-        const mod = await import('../lib/stage-visual-artifacts.mjs');
-        expect(typeof mod.stageVisualArtifacts).toBe('function');
-        expect(typeof mod.getDefaultVisualArtifactBundleDir).toBe('function');
+    it('artifact staging module exports all expected symbols', async () => {
+        const mod = await import('../lib/stage-artifacts.mjs');
+        expect(typeof mod.stageArtifacts).toBe('function');
+        expect(typeof mod.getDefaultArtifactBundleDir).toBe('function');
     });
 
-    it('visual-diff-summary exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-diff-summary.mjs');
-        expect(typeof mod.buildVisualDiffSummary).toBe('function');
-        expect(typeof mod.writeVisualDiffSummary).toBe('function');
+    it('summary module exports all expected symbols', async () => {
+        const mod = await import('../lib/drift-summary.mjs');
+        expect(typeof mod.buildDriftSummary).toBe('function');
+        expect(typeof mod.writeDriftSummary).toBe('function');
     });
 
-    it('capture-visual-routes exports runVisualBaselineCapture', async () => {
-        const mod = await import('../lib/capture-visual-routes.mjs');
-        expect(typeof mod.runVisualBaselineCapture).toBe('function');
+    it('capture module exports runBaselineCapture', async () => {
+        const mod = await import('../lib/capture-routes.mjs');
+        expect(typeof mod.runBaselineCapture).toBe('function');
     });
 
-    it('visual-diff-pr-comment exports all expected symbols', async () => {
-        const mod = await import('../lib/visual-diff-pr-comment.mjs');
-        expect(typeof mod.buildPrCommentBody).toBe('function');
+    it('comment module exports all expected symbols', async () => {
+        const mod = await import('../lib/pr-comment.mjs');
+        expect(typeof mod.buildReportCommentBody).toBe('function');
         expect(typeof mod.PR_COMMENT_MARKER).toBe('string');
-        expect(typeof mod.LEGACY_PR_COMMENT_MARKER).toBe('string');
+        expect(typeof mod.LEGACY_REPORT_COMMENT_MARKER).toBe('string');
         expect(Array.isArray(mod.PR_COMMENT_MARKERS)).toBe(true);
         expect(mod.PR_COMMENT_MARKER).toContain('snapdrift-report');
     });
@@ -379,15 +463,15 @@ describe('lib module exports are stable', () => {
 // ---------------------------------------------------------------------------
 
 describe('artifact bundle directory structure', () => {
-    let stageVisualArtifacts;
+    let stageArtifacts;
     let tempDir;
 
     beforeAll(async () => {
-        ({ stageVisualArtifacts } = await import('../lib/stage-visual-artifacts.mjs'));
+        ({ stageArtifacts } = await import('../lib/stage-artifacts.mjs'));
     });
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-smoke-bundle-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-smoke-bundle-'));
     });
 
     afterEach(async () => {
@@ -396,7 +480,7 @@ describe('artifact bundle directory structure', () => {
 
     it('baseline bundle creates the contract directory structure', async () => {
         const bundleDir = path.join(tempDir, 'baseline-bundle');
-        await stageVisualArtifacts({ artifactType: 'baseline', bundleDir });
+        await stageArtifacts({ artifactType: 'baseline', bundleDir });
 
         const entries = await fs.readdir(bundleDir);
         expect(entries).toContain('screenshots');
@@ -404,7 +488,7 @@ describe('artifact bundle directory structure', () => {
 
     it('diff bundle creates the contract directory structure', async () => {
         const bundleDir = path.join(tempDir, 'diff-bundle');
-        await stageVisualArtifacts({ artifactType: 'diff', bundleDir });
+        await stageArtifacts({ artifactType: 'diff', bundleDir });
 
         const entries = await fs.readdir(bundleDir);
         expect(entries).toContain('baseline');

@@ -146,7 +146,7 @@ Legacy readers still accept the previous flat drift bundle layout.
 ```json
 {
   "status": "skipped",
-  "reason": "no_visual_relevant_changes",
+  "reason": "no_snapdrift_relevant_changes",
   "message": "No drift-relevant changes were detected in this pull request.",
   "selectedRoutes": []
 }
@@ -198,17 +198,17 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 
 | Variable | Module | Description |
 |:---------|:-------|:------------|
-| `SNAPDRIFT_CONFIG_PATH` | `visual-regression-config.mjs` | Override config path |
-| `SNAPDRIFT_ROUTE_IDS` | `capture-visual-routes.mjs`, `compare-visual-results.mjs` | Comma-separated route ids |
-| `SNAPDRIFT_BASELINE_RESULTS_PATH` | `compare-visual-results.mjs` | Baseline results path |
-| `SNAPDRIFT_BASELINE_MANIFEST_PATH` | `compare-visual-results.mjs` | Baseline manifest path |
-| `SNAPDRIFT_CURRENT_RESULTS_PATH` | `compare-visual-results.mjs` | Current results path |
-| `SNAPDRIFT_CURRENT_MANIFEST_PATH` | `compare-visual-results.mjs` | Current manifest path |
-| `SNAPDRIFT_BASELINE_RUN_DIR` | `compare-visual-results.mjs` | Baseline screenshot root |
-| `SNAPDRIFT_CURRENT_RUN_DIR` | `compare-visual-results.mjs` | Current screenshot root |
-| `SNAPDRIFT_DRIFT_OUT_DIR` | `compare-visual-results.mjs` | Drift report output directory |
-| `SNAPDRIFT_SUMMARY_PATH` | `compare-visual-results.mjs` | Summary JSON path |
-| `SNAPDRIFT_SUMMARY_MARKDOWN_PATH` | `compare-visual-results.mjs` | Summary markdown path |
-| `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-visual-results.mjs` | Baseline artifact label to embed in the report |
-| `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-visual-results.mjs` | Baseline source SHA to embed in the report |
-| `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-visual-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
+| `SNAPDRIFT_CONFIG_PATH` | `snapdrift-config.mjs` | Override config path |
+| `SNAPDRIFT_ROUTE_IDS` | `capture-routes.mjs`, `compare-results.mjs` | Comma-separated route ids |
+| `SNAPDRIFT_BASELINE_RESULTS_PATH` | `compare-results.mjs` | Baseline results path |
+| `SNAPDRIFT_BASELINE_MANIFEST_PATH` | `compare-results.mjs` | Baseline manifest path |
+| `SNAPDRIFT_CURRENT_RESULTS_PATH` | `compare-results.mjs` | Current results path |
+| `SNAPDRIFT_CURRENT_MANIFEST_PATH` | `compare-results.mjs` | Current manifest path |
+| `SNAPDRIFT_BASELINE_RUN_DIR` | `compare-results.mjs` | Baseline screenshot root |
+| `SNAPDRIFT_CURRENT_RUN_DIR` | `compare-results.mjs` | Current screenshot root |
+| `SNAPDRIFT_DRIFT_OUT_DIR` | `compare-results.mjs` | Drift report output directory |
+| `SNAPDRIFT_SUMMARY_PATH` | `compare-results.mjs` | Summary JSON path |
+| `SNAPDRIFT_SUMMARY_MARKDOWN_PATH` | `compare-results.mjs` | Summary markdown path |
+| `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-results.mjs` | Baseline artifact label to embed in the report |
+| `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
+| `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |

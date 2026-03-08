@@ -33,13 +33,13 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
-        const { shouldFailVisualDiff, formatVisualDiffFailureMessage } = await import(pathToFileURL(modulePath));
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
+        const { shouldFailDriftCheck, formatDriftFailureMessage } = await import(pathToFileURL(modulePath));
         const summary = JSON.parse(await fs.readFile(process.env.SUMMARY_PATH, 'utf8'));
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, `status=${summary.status || ''}\n`);
 
-        if (shouldFailVisualDiff(summary)) {
-          throw new Error(formatVisualDiffFailureMessage(summary.diffMode, summary));
+        if (shouldFailDriftCheck(summary)) {
+          throw new Error(formatDriftFailureMessage(summary.diffMode, summary));
         }
         EOF

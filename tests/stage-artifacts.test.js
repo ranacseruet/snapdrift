@@ -9,12 +9,12 @@ async function writeFile(filePath, content = '') {
     await fs.writeFile(filePath, content);
 }
 
-describe('stage visual artifacts helper', () => {
+describe('stage artifact bundles helper', () => {
     let tempDir;
     let originalCwd;
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stage-visual-artifacts-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stage-snapdrift-artifacts-'));
         originalCwd = process.cwd();
         process.chdir(tempDir);
     });
@@ -27,7 +27,7 @@ describe('stage visual artifacts helper', () => {
     });
 
     it('stages a baseline bundle and recursively copies only png screenshots', async () => {
-        const { stageVisualArtifacts } = await import('../lib/stage-visual-artifacts.mjs');
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
 
         const resultsPath = path.join(tempDir, 'inputs', 'results.json');
         const manifestPath = path.join(tempDir, 'inputs', 'manifest.json');
@@ -39,7 +39,7 @@ describe('stage visual artifacts helper', () => {
         await writeFile(path.join(screenshotsDir, 'nested', 'root-index-mobile.png'), 'mobile-png');
         await writeFile(path.join(screenshotsDir, 'nested', 'readme.txt'), 'ignore-me');
 
-        const result = await stageVisualArtifacts({
+        const result = await stageArtifacts({
             artifactType: 'baseline',
             resultsPath,
             manifestPath,
@@ -54,7 +54,7 @@ describe('stage visual artifacts helper', () => {
     });
 
     it('stages a drift bundle, supports custom bundle dirs, and tolerates missing optional inputs', async () => {
-        const { stageVisualArtifacts } = await import('../lib/stage-visual-artifacts.mjs');
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
 
         const bundleDir = path.join(tempDir, 'custom-bundle');
         const summaryJsonPath = path.join(tempDir, 'inputs', 'summary.json');
@@ -67,7 +67,7 @@ describe('stage visual artifacts helper', () => {
         await writeFile(baselineManifestPath, '{"screenshots":[]}\n');
         await writeFile(path.join(currentScreenshotsDir, 'tool-desktop.png'), 'tool-png');
 
-        const result = await stageVisualArtifacts({
+        const result = await stageArtifacts({
             artifactType: 'diff',
             bundleDir,
             summaryJsonPath,

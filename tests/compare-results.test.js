@@ -46,7 +46,7 @@ async function writePng(filePath, width, height, r, g, b) {
  */
 function makeConfig(routes, diff = {}) {
     return {
-        baselineArtifactName: 'test-visual-baseline',
+        baselineArtifactName: 'test-snapdrift-baseline',
         workingDirectory: '.',
         baseUrl: 'http://localhost:3000',
         resultsFile: 'qa-artifacts/snapdrift/baseline/current/results.json',
@@ -62,7 +62,7 @@ function makeResults(routeIds) {
     return {
         startedAt: new Date().toISOString(),
         baseUrl: 'http://localhost:3000',
-        suite: 'visual',
+        suite: 'snapdrift',
         routes: routeIds.map((id) => ({
             id,
             path: `/${id}`,
@@ -78,7 +78,7 @@ function makeManifestEntry(id, viewport, imagePath, width, height) {
 }
 
 /**
- * Writes all fixture files needed by generateVisualDiffReport / runVisualDiffCli.
+ * Writes all fixture files needed by generateDriftReport / runDriftCheckCli.
  */
 async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries, baselinePngs = [], currentPngs = [], diffMode, threshold }) {
     const configPath = path.join(tempDir, 'snapdrift.json');
@@ -117,136 +117,136 @@ async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries,
 // Pure helper tests
 // ---------------------------------------------------------------------------
 
-describe('determineVisualDiffStatus', () => {
-    let determineVisualDiffStatus;
+describe('determineDriftStatus', () => {
+    let determineDriftStatus;
 
     beforeAll(async () => {
-        ({ determineVisualDiffStatus } = await import('../lib/compare-visual-results.mjs'));
+        ({ determineDriftStatus } = await import('../lib/compare-results.mjs'));
     });
 
     const base = { errors: [], dimensionChanges: [], missingInBaseline: 0, missingInCurrent: 0, changedScreenshots: 0 };
 
     it('returns incomplete when there are errors', () => {
-        expect(determineVisualDiffStatus({ ...base, errors: [{ id: 'x', status: 'error', message: 'oops' }] })).toBe('incomplete');
+        expect(determineDriftStatus({ ...base, errors: [{ id: 'x', status: 'error', message: 'oops' }] })).toBe('incomplete');
     });
 
     it('returns incomplete when there are dimension changes', () => {
-        expect(determineVisualDiffStatus({ ...base, dimensionChanges: [{ id: 'x', status: 'dimension-changed' }] })).toBe('incomplete');
+        expect(determineDriftStatus({ ...base, dimensionChanges: [{ id: 'x', status: 'dimension-changed' }] })).toBe('incomplete');
     });
 
     it('returns incomplete when there are screenshots missing in baseline', () => {
-        expect(determineVisualDiffStatus({ ...base, missingInBaseline: 1 })).toBe('incomplete');
+        expect(determineDriftStatus({ ...base, missingInBaseline: 1 })).toBe('incomplete');
     });
 
     it('returns incomplete when there are screenshots missing in current', () => {
-        expect(determineVisualDiffStatus({ ...base, missingInCurrent: 1 })).toBe('incomplete');
+        expect(determineDriftStatus({ ...base, missingInCurrent: 1 })).toBe('incomplete');
     });
 
     it('returns changes-detected when changedScreenshots > 0', () => {
-        expect(determineVisualDiffStatus({ ...base, changedScreenshots: 2 })).toBe('changes-detected');
+        expect(determineDriftStatus({ ...base, changedScreenshots: 2 })).toBe('changes-detected');
     });
 
     it('returns clean when everything is fine', () => {
-        expect(determineVisualDiffStatus(base)).toBe('clean');
+        expect(determineDriftStatus(base)).toBe('clean');
     });
 });
 
 // ---------------------------------------------------------------------------
 
-describe('shouldFailVisualDiff', () => {
-    let shouldFailVisualDiff;
+describe('shouldFailDriftCheck', () => {
+    let shouldFailDriftCheck;
 
     beforeAll(async () => {
-        ({ shouldFailVisualDiff } = await import('../lib/compare-visual-results.mjs'));
+        ({ shouldFailDriftCheck } = await import('../lib/compare-results.mjs'));
     });
 
     const clean = { errors: [], dimensionChanges: [], missingInBaseline: 0, missingInCurrent: 0, changedScreenshots: 0 };
 
     it('report-only never fails regardless of changes or errors', () => {
-        expect(shouldFailVisualDiff({ ...clean, changedScreenshots: 1, diffMode: 'report-only' })).toBe(false);
-        expect(shouldFailVisualDiff({ ...clean, errors: [{}], diffMode: 'report-only' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, changedScreenshots: 1, diffMode: 'report-only' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, errors: [{}], diffMode: 'report-only' })).toBe(false);
     });
 
     it('fail-on-changes fails only on changed screenshots', () => {
-        expect(shouldFailVisualDiff({ ...clean, changedScreenshots: 1, diffMode: 'fail-on-changes' })).toBe(true);
-        expect(shouldFailVisualDiff({ ...clean, errors: [{}], diffMode: 'fail-on-changes' })).toBe(false);
-        expect(shouldFailVisualDiff({ ...clean, diffMode: 'fail-on-changes' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, changedScreenshots: 1, diffMode: 'fail-on-changes' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, errors: [{}], diffMode: 'fail-on-changes' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, diffMode: 'fail-on-changes' })).toBe(false);
     });
 
     it('fail-on-incomplete fails on comparison errors', () => {
-        expect(shouldFailVisualDiff({ ...clean, errors: [{}], diffMode: 'fail-on-incomplete' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, errors: [{}], diffMode: 'fail-on-incomplete' })).toBe(true);
     });
 
     it('fail-on-incomplete fails on dimension changes', () => {
-        expect(shouldFailVisualDiff({ ...clean, dimensionChanges: [{}], diffMode: 'fail-on-incomplete' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, dimensionChanges: [{}], diffMode: 'fail-on-incomplete' })).toBe(true);
     });
 
     it('fail-on-incomplete fails on missing screenshots', () => {
-        expect(shouldFailVisualDiff({ ...clean, missingInBaseline: 1, diffMode: 'fail-on-incomplete' })).toBe(true);
-        expect(shouldFailVisualDiff({ ...clean, missingInCurrent: 1, diffMode: 'fail-on-incomplete' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, missingInBaseline: 1, diffMode: 'fail-on-incomplete' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, missingInCurrent: 1, diffMode: 'fail-on-incomplete' })).toBe(true);
     });
 
     it('fail-on-incomplete passes when everything is clean', () => {
-        expect(shouldFailVisualDiff({ ...clean, diffMode: 'fail-on-incomplete' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, diffMode: 'fail-on-incomplete' })).toBe(false);
     });
 
     it('strict fails on changed screenshots', () => {
-        expect(shouldFailVisualDiff({ ...clean, changedScreenshots: 1, diffMode: 'strict' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, changedScreenshots: 1, diffMode: 'strict' })).toBe(true);
     });
 
     it('strict fails on dimension changes', () => {
-        expect(shouldFailVisualDiff({ ...clean, dimensionChanges: [{}], diffMode: 'strict' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, dimensionChanges: [{}], diffMode: 'strict' })).toBe(true);
     });
 
     it('strict fails on missing screenshots', () => {
-        expect(shouldFailVisualDiff({ ...clean, missingInBaseline: 1, diffMode: 'strict' })).toBe(true);
+        expect(shouldFailDriftCheck({ ...clean, missingInBaseline: 1, diffMode: 'strict' })).toBe(true);
     });
 
     it('strict passes when everything is clean', () => {
-        expect(shouldFailVisualDiff({ ...clean, diffMode: 'strict' })).toBe(false);
+        expect(shouldFailDriftCheck({ ...clean, diffMode: 'strict' })).toBe(false);
     });
 });
 
 // ---------------------------------------------------------------------------
 
-describe('formatVisualDiffFailureMessage', () => {
-    let formatVisualDiffFailureMessage;
+describe('formatDriftFailureMessage', () => {
+    let formatDriftFailureMessage;
 
     beforeAll(async () => {
-        ({ formatVisualDiffFailureMessage } = await import('../lib/compare-visual-results.mjs'));
+        ({ formatDriftFailureMessage } = await import('../lib/compare-results.mjs'));
     });
 
     it('fail-on-changes includes the screenshot count', () => {
-        const msg = formatVisualDiffFailureMessage('fail-on-changes', { changedScreenshots: 3 });
+        const msg = formatDriftFailureMessage('fail-on-changes', { changedScreenshots: 3 });
         expect(msg).toContain('3');
         expect(msg).toMatch(/capture|drift/i);
     });
 
     it('fail-on-incomplete mentions incomplete comparison', () => {
-        const msg = formatVisualDiffFailureMessage('fail-on-incomplete', { changedScreenshots: 0 });
+        const msg = formatDriftFailureMessage('fail-on-incomplete', { changedScreenshots: 0 });
         expect(msg).toMatch(/incomplete/i);
     });
 
     it('strict and unknown modes return a generic strict message', () => {
-        const msg = formatVisualDiffFailureMessage('strict', { changedScreenshots: 1 });
+        const msg = formatDriftFailureMessage('strict', { changedScreenshots: 1 });
         expect(msg).toMatch(/strict/i);
     });
 });
 
 // ---------------------------------------------------------------------------
-// generateVisualDiffReport integration tests
+// generateDriftReport integration tests
 // ---------------------------------------------------------------------------
 
-describe('generateVisualDiffReport', () => {
-    let generateVisualDiffReport;
+describe('generateDriftReport', () => {
+    let generateDriftReport;
     let tempDir;
 
     beforeAll(async () => {
-        ({ generateVisualDiffReport } = await import('../lib/compare-visual-results.mjs'));
+        ({ generateDriftReport } = await import('../lib/compare-results.mjs'));
     });
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compare-visual-results-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compare-drift-results-'));
     });
 
     afterEach(async () => {
@@ -265,7 +265,7 @@ describe('generateVisualDiffReport', () => {
             currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 200, g: 200, b: 200 }]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('clean');
         expect(summary.matchedScreenshots).toBe(1);
@@ -308,7 +308,7 @@ describe('generateVisualDiffReport', () => {
         await writeJson(baselineManifestPath, { generatedAt: new Date().toISOString(), baseUrl: 'http://localhost', screenshots: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10)] });
         await writeJson(currentManifestPath, { generatedAt: new Date().toISOString(), baseUrl: 'http://localhost', screenshots: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10)] });
 
-        const { summary } = await generateVisualDiffReport({
+        const { summary } = await generateDriftReport({
             configPath,
             baselineResultsPath,
             baselineManifestPath,
@@ -335,7 +335,7 @@ describe('generateVisualDiffReport', () => {
             currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 0, g: 0, b: 0 }]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('changes-detected');
         expect(summary.changedScreenshots).toBe(1);
@@ -357,7 +357,7 @@ describe('generateVisualDiffReport', () => {
             // No PNG files created — dimension check happens before any PNG read.
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('incomplete');
         expect(summary.dimensionChanges).toHaveLength(1);
@@ -384,7 +384,7 @@ describe('generateVisualDiffReport', () => {
             currentEntries: []
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('incomplete');
         expect(summary.missingInCurrent).toBe(1);
@@ -401,7 +401,7 @@ describe('generateVisualDiffReport', () => {
             currentEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10)]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('incomplete');
         expect(summary.missingInBaseline).toBe(1);
@@ -417,7 +417,7 @@ describe('generateVisualDiffReport', () => {
             currentEntries: []
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('incomplete');
         expect(summary.errors).toHaveLength(1);
@@ -440,14 +440,14 @@ describe('generateVisualDiffReport', () => {
         await writeJson(baselineResultsPath, {
             startedAt: new Date().toISOString(),
             baseUrl: 'http://localhost',
-            suite: 'visual',
+            suite: 'snapdrift',
             routes: [{ id: routeId, path: '/', viewport: 'desktop', status: 'failed', durationMs: 10, error: 'Navigation timeout' }]
         });
         await writeJson(currentResultsPath, makeResults([routeId]));
         await writeJson(baselineManifestPath, { generatedAt: new Date().toISOString(), baseUrl: 'http://localhost', screenshots: [] });
         await writeJson(currentManifestPath, { generatedAt: new Date().toISOString(), baseUrl: 'http://localhost', screenshots: [] });
 
-        const { summary } = await generateVisualDiffReport({
+        const { summary } = await generateDriftReport({
             configPath,
             baselineResultsPath,
             baselineManifestPath,
@@ -473,7 +473,7 @@ describe('generateVisualDiffReport', () => {
             // No PNG files written — both entries exist in manifests, dimensions match, but images are absent.
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('incomplete');
         expect(summary.errors).toHaveLength(1);
@@ -495,7 +495,7 @@ describe('generateVisualDiffReport', () => {
             currentPngs: [{ relPath: 'screenshots/nested/r.png', width: 10, height: 10, r: 100, g: 100, b: 100 }]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.status).toBe('clean');
         expect(summary.matchedScreenshots).toBe(1);
@@ -534,7 +534,7 @@ describe('generateVisualDiffReport', () => {
             ]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: routes.map((r) => r.id) });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: routes.map((r) => r.id) });
 
         expect(summary.matchedScreenshots).toBe(1);
         expect(summary.changedScreenshots).toBe(1);
@@ -559,7 +559,7 @@ describe('generateVisualDiffReport', () => {
             currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }]
         });
 
-        const { summary } = await generateVisualDiffReport({
+        const { summary } = await generateDriftReport({
             ...opts,
             routeIds: [routeId],
             baselineArtifactName: 'my-baseline-artifact',
@@ -576,7 +576,7 @@ describe('generateVisualDiffReport', () => {
         await writeJson(configPath, makeConfig([{ id: routeId, path: '/', viewport: 'desktop' }]));
 
         await expect(
-            generateVisualDiffReport({
+            generateDriftReport({
                 configPath,
                 baselineResultsPath: path.join(tempDir, 'missing.json'),
                 baselineManifestPath: path.join(tempDir, 'missing.json'),
@@ -614,7 +614,7 @@ describe('generateVisualDiffReport', () => {
         });
 
         // Only request the selected route — the extra entry should be ignored.
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [selectedId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [selectedId] });
 
         expect(summary.matchedScreenshots).toBe(1);
         expect(summary.totalScreenshots).toBe(1);
@@ -650,7 +650,7 @@ describe('generateVisualDiffReport', () => {
             ]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeA, routeB] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeA, routeB] });
 
         expect(summary.matchedScreenshots).toBe(2);
     });
@@ -677,7 +677,7 @@ describe('generateVisualDiffReport', () => {
             ]
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         // Both sides resolve to captures/route-b/r.png (same colour) → matched.
         expect(summary.matchedScreenshots).toBe(1);
@@ -698,7 +698,7 @@ describe('generateVisualDiffReport', () => {
             currentPngs: [{ relPath: imagePath, width: 10, height: 20, r: 100, g: 100, b: 100 }]  // actual PNG is 10x20
         });
 
-        const { summary } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
         expect(summary.errors).toHaveLength(1);
         expect(summary.errors[0].message).toMatch(/Dimension mismatch/);
@@ -718,7 +718,7 @@ describe('generateVisualDiffReport', () => {
         });
 
         await expect(
-            generateVisualDiffReport({ ...opts, routeIds: [routeId] })
+            generateDriftReport({ ...opts, routeIds: [routeId] })
         ).rejects.toThrow(/Duplicate screenshot id/);
     });
 
@@ -735,7 +735,7 @@ describe('generateVisualDiffReport', () => {
                 currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 255, g: 255, b: 255 }]
             });
 
-            const { markdown } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+            const { markdown } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
             expect(markdown).toContain('SnapDrift Report');
             expect(markdown).toContain('Clean');
@@ -756,7 +756,7 @@ describe('generateVisualDiffReport', () => {
                 currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 0, g: 0, b: 0 }]
             });
 
-            const { markdown } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+            const { markdown } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
             expect(markdown).toContain(routeId);
             expect(markdown).toContain('Mismatch');
@@ -771,7 +771,7 @@ describe('generateVisualDiffReport', () => {
                 currentEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 1440, 1092)]
             });
 
-            const { markdown } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
+            const { markdown } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
             expect(markdown).toContain('1440×1266');
             expect(markdown).toContain('1440×1092');
@@ -791,7 +791,7 @@ describe('generateVisualDiffReport', () => {
                 currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 0, g: 0, b: 0 }]
             });
 
-            const { markdown } = await generateVisualDiffReport({
+            const { markdown } = await generateDriftReport({
                 ...opts,
                 routeIds: [routeId],
                 baselineArtifactName: 'my-artifact',
@@ -805,19 +805,19 @@ describe('generateVisualDiffReport', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runVisualDiffCli integration tests
+// runDriftCheckCli integration tests
 // ---------------------------------------------------------------------------
 
-describe('runVisualDiffCli', () => {
-    let runVisualDiffCli;
+describe('runDriftCheckCli', () => {
+    let runDriftCheckCli;
     let tempDir;
 
     beforeAll(async () => {
-        ({ runVisualDiffCli } = await import('../lib/compare-visual-results.mjs'));
+        ({ runDriftCheckCli } = await import('../lib/compare-results.mjs'));
     });
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compare-visual-cli-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compare-drift-cli-'));
     });
 
     afterEach(async () => {
@@ -849,7 +849,7 @@ describe('runVisualDiffCli', () => {
     it('writes summary JSON and markdown files to the output directory', async () => {
         const opts = await buildCleanOpts();
 
-        await runVisualDiffCli({ ...opts, enforceOutcome: false });
+        await runDriftCheckCli({ ...opts, enforceOutcome: false });
 
         const summary = JSON.parse(await fs.readFile(opts.summaryPath, 'utf8'));
         const markdown = await fs.readFile(opts.markdownPath, 'utf8');
@@ -871,7 +871,7 @@ describe('runVisualDiffCli', () => {
         });
 
         await expect(
-            runVisualDiffCli({ ...fixtures, ...cliOutputPaths(path.join(tempDir, 'out')), routeIds: [routeId], enforceOutcome: true })
+            runDriftCheckCli({ ...fixtures, ...cliOutputPaths(path.join(tempDir, 'out')), routeIds: [routeId], enforceOutcome: true })
         ).resolves.toBeUndefined();
     });
 
@@ -888,7 +888,7 @@ describe('runVisualDiffCli', () => {
         });
 
         await expect(
-            runVisualDiffCli({ ...fixtures, ...cliOutputPaths(path.join(tempDir, 'out')), routeIds: [routeId], enforceOutcome: true })
+            runDriftCheckCli({ ...fixtures, ...cliOutputPaths(path.join(tempDir, 'out')), routeIds: [routeId], enforceOutcome: true })
         ).rejects.toThrow(/capture|drift/i);
     });
 
@@ -896,7 +896,7 @@ describe('runVisualDiffCli', () => {
         const opts = await buildCleanOpts('fail-on-changes');
 
         await expect(
-            runVisualDiffCli({ ...opts, enforceOutcome: true })
+            runDriftCheckCli({ ...opts, enforceOutcome: true })
         ).resolves.toBeUndefined();
     });
 });
