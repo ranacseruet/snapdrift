@@ -17,7 +17,7 @@ The shared layer reads runtime visual regression behavior from `.github/visual-r
 | `readyTimeoutSeconds` | `number` | Max seconds to wait for readiness (consumer-owned) |
 | `resultsFile` | `string` | Path (relative to `workingDirectory`) for capture results JSON |
 | `manifestFile` | `string` | Path (relative to `workingDirectory`) for screenshot manifest JSON |
-| `screenshotsRoot` | `string` | Path (relative to `workingDirectory`) for captured screenshot directory |
+| `screenshotsRoot` | `string` | Parent directory for screenshot output (relative to `workingDirectory`); actual PNGs are written to `{screenshotsRoot}/screenshots/{id}.png` |
 | `routes` | `array` | List of route entries to capture |
 | `diff.threshold` | `number` | Max allowed mismatch ratio per screenshot (e.g. `0.01` = 1%) |
 | `diff.mode` | `string` | One of: `report-only`, `fail-on-changes`, `fail-on-incomplete`, `strict` |
