@@ -500,6 +500,8 @@ runs:
           const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
           const LEGACY_PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
           const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER];
+          const repoUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
+          const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
 
           const summaryPath = process.env.SUMMARY_PATH;
           const issueNumber = Number(process.env.PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');
@@ -510,7 +512,7 @@ runs:
 
           if (!summaryPath || !fs.existsSync(summaryPath)) {
             const runUrl = process.env.RUN_URL || '';
-            const body = `${PR_COMMENT_MARKER}\n### ⚠️ SnapDrift Report — Capture Failed\n\nSnapDrift did not produce a summary. This usually means capture failed before the report could be assembled.\n\n[View run](${runUrl}) for details.`;
+            const body = `${PR_COMMENT_MARKER}\n<img src="${iconUrl}" alt="SnapDrift" width="20" height="20" />\n\n### ⚠️ SnapDrift Report — Capture Failed\n\nSnapDrift did not produce a summary. This usually means capture failed before the report could be assembled.\n\n[View run](${runUrl}) for details.\n\n<div align="right"><sub>Powered by <a href="${repoUrl}">SnapDrift</a></sub></div>`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -526,7 +528,8 @@ runs:
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const body = buildPrCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
-            runUrl: process.env.RUN_URL || ''
+            runUrl: process.env.RUN_URL || '',
+            repoUrl
           });
 
           const comments = await github.paginate(github.rest.issues.listComments, {

@@ -36,6 +36,7 @@ describe('buildPrCommentBody', () => {
 
     it('shows status icon and label in heading', () => {
         const body = buildPrCommentBody(cleanSummary);
+        expect(body).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="20" height="20" />');
         expect(body).toContain('## ✅ SnapDrift Report — Clean');
     });
 
@@ -105,18 +106,24 @@ describe('buildPrCommentBody', () => {
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
         const body = buildPrCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
-            { artifactName: 'snapdrift-pr-42', runUrl: 'https://github.com/example/runs/123' }
+            {
+                artifactName: 'snapdrift-pr-42',
+                runUrl: 'https://github.com/example/runs/123',
+                repoUrl: 'https://github.com/example/snapdrift-fork'
+            }
         );
         expect(body).toContain('artifact `snapdrift-pr-42`');
         expect(body).toContain('baseline `my-baseline`');
         expect(body).toContain('sha `abc1234`');
         expect(body).toContain('[View run](https://github.com/example/runs/123)');
         expect(body).toContain('<sub>SnapDrift ·');
+        expect(body).toContain('<div align="right"><sub>Powered by <a href="https://github.com/example/snapdrift-fork">SnapDrift</a></sub></div>');
     });
 
-    it('omits metadata footer when no metadata is available', () => {
+    it('keeps the powered-by footer when no metadata is available', () => {
         const body = buildPrCommentBody(cleanSummary);
-        expect(body).not.toContain('<sub>');
+        expect(body).not.toContain('<sub>SnapDrift ·');
+        expect(body).toContain('Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a>');
     });
 
     it('omits drift details when none changed', () => {

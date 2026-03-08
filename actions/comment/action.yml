@@ -58,10 +58,12 @@ runs:
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          const repoUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
 
           const body = buildPrCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
-            runUrl
+            runUrl,
+            repoUrl
           });
 
           const comments = await github.paginate(github.rest.issues.listComments, {
