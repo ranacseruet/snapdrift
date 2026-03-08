@@ -132,12 +132,12 @@ describe('wrapper action completeness', () => {
         expect(prDiff.inputs['github-token'].required).toBe(true);
     });
 
-    it('baseline defaults repo-config-path to .github/visual-regression.json', () => {
-        expect(baseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+    it('baseline defaults repo-config-path to .github/snapdrift.json', () => {
+        expect(baseline.inputs['repo-config-path'].default).toBe('.github/snapdrift.json');
     });
 
-    it('pr-diff defaults repo-config-path to .github/visual-regression.json', () => {
-        expect(prDiff.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+    it('pr-diff defaults repo-config-path to .github/snapdrift.json', () => {
+        expect(prDiff.inputs['repo-config-path'].default).toBe('.github/snapdrift.json');
     });
 });
 
@@ -152,7 +152,7 @@ describe('viewport presets match contract', () => {
         ({ VIEWPORT_PRESETS } = await import('../lib/visual-regression-config.mjs'));
     });
 
-    it('desktop preset matches the v1 contract', () => {
+    it('desktop preset matches the documented contract', () => {
         expect(VIEWPORT_PRESETS.desktop).toEqual({
             width: 1440,
             height: 900,
@@ -162,7 +162,7 @@ describe('viewport presets match contract', () => {
         });
     });
 
-    it('mobile preset matches the v1 contract', () => {
+    it('mobile preset matches the documented contract', () => {
         expect(VIEWPORT_PRESETS.mobile).toEqual({
             width: 390,
             height: 844,
@@ -172,7 +172,7 @@ describe('viewport presets match contract', () => {
         });
     });
 
-    it('only desktop and mobile presets exist in v1', () => {
+    it('only desktop and mobile presets exist', () => {
         expect(Object.keys(VIEWPORT_PRESETS).sort()).toEqual(['desktop', 'mobile']);
     });
 });
@@ -326,10 +326,13 @@ describe('lib module exports are stable', () => {
     it('visual-regression-config exports all expected symbols', async () => {
         const mod = await import('../lib/visual-regression-config.mjs');
         expect(typeof mod.loadVisualRegressionConfig).toBe('function');
+        expect(typeof mod.readFirstDefinedEnv).toBe('function');
         expect(typeof mod.resolveFromWorkingDirectory).toBe('function');
         expect(typeof mod.selectConfiguredRoutes).toBe('function');
         expect(typeof mod.selectRoutesForChangedFiles).toBe('function');
         expect(typeof mod.splitCommaList).toBe('function');
+        expect(typeof mod.DEFAULT_CONFIG_PATH).toBe('string');
+        expect(typeof mod.LEGACY_CONFIG_PATH).toBe('string');
         expect(mod.VIEWPORT_PRESETS).toBeDefined();
         expect(typeof mod.VISUAL_NAVIGATION_TIMEOUT_MS).toBe('number');
         expect(typeof mod.VISUAL_SETTLE_DELAY_MS).toBe('number');
@@ -365,7 +368,9 @@ describe('lib module exports are stable', () => {
         const mod = await import('../lib/visual-diff-pr-comment.mjs');
         expect(typeof mod.buildPrCommentBody).toBe('function');
         expect(typeof mod.PR_COMMENT_MARKER).toBe('string');
-        expect(mod.PR_COMMENT_MARKER).toContain('pr-visual-diff-summary');
+        expect(typeof mod.LEGACY_PR_COMMENT_MARKER).toBe('string');
+        expect(Array.isArray(mod.PR_COMMENT_MARKERS)).toBe(true);
+        expect(mod.PR_COMMENT_MARKER).toContain('snapdrift-report');
     });
 });
 
@@ -402,7 +407,7 @@ describe('artifact bundle directory structure', () => {
         await stageVisualArtifacts({ artifactType: 'diff', bundleDir });
 
         const entries = await fs.readdir(bundleDir);
-        expect(entries).toContain('baseline-screenshots');
-        expect(entries).toContain('current-screenshots');
+        expect(entries).toContain('baseline');
+        expect(entries).toContain('current');
     });
 });

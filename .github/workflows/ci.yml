@@ -1,4 +1,4 @@
-name: CI
+name: SnapDrift Checks
 
 on:
   push:
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   test:
+    name: SnapDrift Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,6 +27,7 @@ jobs:
         run: npm test
 
   action-lint:
+    name: SnapDrift Action Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

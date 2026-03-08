@@ -3,9 +3,10 @@
 describe('buildPrCommentBody', () => {
     let buildPrCommentBody;
     let PR_COMMENT_MARKER;
+    let LEGACY_PR_COMMENT_MARKER;
 
     beforeAll(async () => {
-        ({ buildPrCommentBody, PR_COMMENT_MARKER } = await import('../lib/visual-diff-pr-comment.mjs'));
+        ({ buildPrCommentBody, PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER } = await import('../lib/visual-diff-pr-comment.mjs'));
     });
 
     const cleanSummary = {
@@ -20,47 +21,48 @@ describe('buildPrCommentBody', () => {
         changed: []
     };
 
-    it('starts with the PR comment marker', () => {
+    it('starts with the SnapDrift marker and keeps the legacy marker available', () => {
         const body = buildPrCommentBody(cleanSummary);
         expect(body.startsWith(PR_COMMENT_MARKER)).toBe(true);
+        expect(LEGACY_PR_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
     });
 
     it('uses tabular format for metrics', () => {
         const body = buildPrCommentBody(cleanSummary);
-        expect(body).toContain('| Metric | Count |');
-        expect(body).toContain('| Matched | 2 |');
-        expect(body).toContain('| Changed | 0 |');
+        expect(body).toContain('| Signal | Count |');
+        expect(body).toContain('| Stable captures | 2 |');
+        expect(body).toContain('| Drift signals | 0 |');
     });
 
     it('shows status icon and label in heading', () => {
         const body = buildPrCommentBody(cleanSummary);
-        expect(body).toContain('## ✅ Visual Diff — Clean');
+        expect(body).toContain('## ✅ SnapDrift Report — Clean');
     });
 
-    it('shows changes-detected status', () => {
+    it('shows drift-detected status', () => {
         const body = buildPrCommentBody({ ...cleanSummary, status: 'changes-detected', changedScreenshots: 1 });
-        expect(body).toContain('🟡 Visual Diff — Changes detected');
+        expect(body).toContain('🟡 SnapDrift Report — Drift detected');
     });
 
     it('shows skipped status', () => {
         const body = buildPrCommentBody({
             status: 'skipped',
             selectedRoutes: [],
-            message: 'No visual-relevant changes.',
+            message: 'No drift-relevant changes.',
             errors: []
         });
-        expect(body).toContain('⏭️ Visual Diff — Skipped');
-        expect(body).toContain('> **Note:** No visual-relevant changes.');
+        expect(body).toContain('⏭️ SnapDrift Report — Skipped');
+        expect(body).toContain('> **Note:** No drift-relevant changes.');
     });
 
-    it('includes changed screenshots in a details section with table', () => {
+    it('includes drift signals in a details section with table', () => {
         const body = buildPrCommentBody({
             ...cleanSummary,
             status: 'changes-detected',
             changedScreenshots: 1,
             changed: [{ id: 'home-desktop', viewport: 'desktop', mismatchRatio: 0.0523 }]
         });
-        expect(body).toContain('<details><summary>Changed screenshots</summary>');
+        expect(body).toContain('<details><summary>Drift signals</summary>');
         expect(body).toContain('| Route | Viewport | Mismatch |');
         expect(body).toContain('| home-desktop | desktop | 5.23% |');
     });
@@ -81,7 +83,7 @@ describe('buildPrCommentBody', () => {
         expect(body).toContain('...and 5 more');
     });
 
-    it('includes dimension changes in a details section', () => {
+    it('includes dimension shifts in a details section', () => {
         const body = buildPrCommentBody({
             ...cleanSummary,
             status: 'incomplete',
@@ -94,22 +96,22 @@ describe('buildPrCommentBody', () => {
                 currentHeight: 1092
             }]
         });
-        expect(body).toContain('Viewport dimension changes');
+        expect(body).toContain('Dimension shifts');
         expect(body).toContain('1440×1266');
         expect(body).toContain('1440×1092');
         expect(body).toContain('Next step');
     });
 
-    it('includes metadata footer with artifact name, baseline info, and run link', () => {
+    it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
         const body = buildPrCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
-            { artifactName: 'pr-visual-diff-42', runUrl: 'https://github.com/example/runs/123' }
+            { artifactName: 'snapdrift-pr-42', runUrl: 'https://github.com/example/runs/123' }
         );
-        expect(body).toContain('Artifact: `pr-visual-diff-42`');
-        expect(body).toContain('Baseline: `my-baseline`');
-        expect(body).toContain('Baseline SHA: `abc1234`');
+        expect(body).toContain('artifact `snapdrift-pr-42`');
+        expect(body).toContain('baseline `my-baseline`');
+        expect(body).toContain('sha `abc1234`');
         expect(body).toContain('[View run](https://github.com/example/runs/123)');
-        expect(body).toContain('<sub>');
+        expect(body).toContain('<sub>SnapDrift ·');
     });
 
     it('omits metadata footer when no metadata is available', () => {
@@ -117,14 +119,9 @@ describe('buildPrCommentBody', () => {
         expect(body).not.toContain('<sub>');
     });
 
-    it('omits changed screenshots section when none changed', () => {
+    it('omits drift details when none changed', () => {
         const body = buildPrCommentBody(cleanSummary);
         expect(body).not.toContain('<details>');
-    });
-
-    it('omits dimension changes section when none present', () => {
-        const body = buildPrCommentBody(cleanSummary);
-        expect(body).not.toContain('Viewport dimension changes');
     });
 
     it('shows selected route count from array length', () => {

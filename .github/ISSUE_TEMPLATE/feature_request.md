@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an enhancement or new feature
+about: Suggest a SnapDrift enhancement
 labels: enhancement
 ---
 

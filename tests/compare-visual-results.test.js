@@ -40,7 +40,7 @@ async function writePng(filePath, width, height, r, g, b) {
 }
 
 /**
- * Minimal valid visual-regression.json config.
+ * Minimal valid SnapDrift config.
  * @param {Array<{ id: string, path: string, viewport: string }>} routes
  * @param {{ mode?: string, threshold?: number }} [diff]
  */
@@ -49,9 +49,9 @@ function makeConfig(routes, diff = {}) {
         baselineArtifactName: 'test-visual-baseline',
         workingDirectory: '.',
         baseUrl: 'http://localhost:3000',
-        resultsFile: 'visual-baseline-results.json',
-        manifestFile: 'visual-screenshot-manifest.json',
-        screenshotsRoot: '.',
+        resultsFile: 'qa-artifacts/snapdrift/baseline/current/results.json',
+        manifestFile: 'qa-artifacts/snapdrift/baseline/current/manifest.json',
+        screenshotsRoot: 'qa-artifacts/snapdrift/baseline/current',
         routes,
         diff: { threshold: diff.threshold ?? 0.01, mode: diff.mode ?? 'report-only' }
     };
@@ -81,11 +81,11 @@ function makeManifestEntry(id, viewport, imagePath, width, height) {
  * Writes all fixture files needed by generateVisualDiffReport / runVisualDiffCli.
  */
 async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries, baselinePngs = [], currentPngs = [], diffMode, threshold }) {
-    const configPath = path.join(tempDir, 'visual-regression.json');
-    const baselineResultsPath = path.join(tempDir, 'baseline', 'visual-baseline-results.json');
-    const baselineManifestPath = path.join(tempDir, 'baseline', 'visual-screenshot-manifest.json');
-    const currentResultsPath = path.join(tempDir, 'current', 'visual-baseline-results.json');
-    const currentManifestPath = path.join(tempDir, 'current', 'visual-screenshot-manifest.json');
+    const configPath = path.join(tempDir, 'snapdrift.json');
+    const baselineResultsPath = path.join(tempDir, 'baseline', 'results.json');
+    const baselineManifestPath = path.join(tempDir, 'baseline', 'manifest.json');
+    const currentResultsPath = path.join(tempDir, 'current', 'results.json');
+    const currentManifestPath = path.join(tempDir, 'current', 'manifest.json');
     const baselineRunDir = path.join(tempDir, 'baseline');
     const currentRunDir = path.join(tempDir, 'current');
 
@@ -219,7 +219,7 @@ describe('formatVisualDiffFailureMessage', () => {
     it('fail-on-changes includes the screenshot count', () => {
         const msg = formatVisualDiffFailureMessage('fail-on-changes', { changedScreenshots: 3 });
         expect(msg).toContain('3');
-        expect(msg).toMatch(/screenshot/i);
+        expect(msg).toMatch(/capture|drift/i);
     });
 
     it('fail-on-incomplete mentions incomplete comparison', () => {
@@ -297,7 +297,7 @@ describe('generateVisualDiffReport', () => {
         await fs.writeFile(path.join(baselineDir, 'r.png'), PNG.sync.write(baselinePng));
         await fs.writeFile(path.join(currentDir, 'r.png'), PNG.sync.write(currentPng));
 
-        const configPath = path.join(tempDir, 'visual-regression.json');
+        const configPath = path.join(tempDir, 'snapdrift.json');
         await writeJson(configPath, makeConfig([{ id: routeId, path: '/', viewport: 'desktop' }], { threshold: 0.01 }));
         const baselineResultsPath = path.join(tempDir, 'baseline', 'results.json');
         const currentResultsPath = path.join(tempDir, 'current', 'results.json');
@@ -428,7 +428,7 @@ describe('generateVisualDiffReport', () => {
 
     it('records an error when the baseline capture failed (reflected in results)', async () => {
         const routeId = 'root-index-desktop';
-        const configPath = path.join(tempDir, 'visual-regression.json');
+        const configPath = path.join(tempDir, 'snapdrift.json');
         await writeJson(configPath, makeConfig([{ id: routeId, path: '/', viewport: 'desktop' }]));
 
         const baselineResultsPath = path.join(tempDir, 'baseline', 'results.json');
@@ -572,7 +572,7 @@ describe('generateVisualDiffReport', () => {
 
     it('throws when a manifest JSON file cannot be loaded', async () => {
         const routeId = 'root-index-desktop';
-        const configPath = path.join(tempDir, 'visual-regression.json');
+        const configPath = path.join(tempDir, 'snapdrift.json');
         await writeJson(configPath, makeConfig([{ id: routeId, path: '/', viewport: 'desktop' }]));
 
         await expect(
@@ -737,10 +737,10 @@ describe('generateVisualDiffReport', () => {
 
             const { markdown } = await generateVisualDiffReport({ ...opts, routeIds: [routeId] });
 
-            expect(markdown).toContain('Visual Diff Summary');
+            expect(markdown).toContain('SnapDrift Report');
             expect(markdown).toContain('Clean');
-            expect(markdown).toContain('## Changed screenshots');
-            expect(markdown).toContain('## Viewport dimension changes');
+            expect(markdown).toContain('## Drift signals');
+            expect(markdown).toContain('## Dimension shifts');
             expect(markdown).toContain('## Comparison errors');
         });
 
@@ -776,7 +776,7 @@ describe('generateVisualDiffReport', () => {
             expect(markdown).toContain('1440×1266');
             expect(markdown).toContain('1440×1092');
             expect(markdown).toMatch(/Next step/i);
-            expect(markdown).toMatch(/re-capture/i);
+            expect(markdown).toMatch(/refresh the baseline/i);
         });
 
         it('includes baseline artifact name and SHA when provided', async () => {
@@ -827,8 +827,8 @@ describe('runVisualDiffCli', () => {
     function cliOutputPaths(dir) {
         return {
             outDir: dir,
-            summaryPath: path.join(dir, 'visual-diff-summary.json'),
-            markdownPath: path.join(dir, 'visual-diff-summary.md')
+            summaryPath: path.join(dir, 'summary.json'),
+            markdownPath: path.join(dir, 'summary.md')
         };
     }
 
@@ -855,7 +855,7 @@ describe('runVisualDiffCli', () => {
         const markdown = await fs.readFile(opts.markdownPath, 'utf8');
 
         expect(summary.status).toBe('clean');
-        expect(markdown).toContain('Visual Diff Summary');
+        expect(markdown).toContain('SnapDrift Report');
     });
 
     it('does not throw in report-only mode even when screenshots have changed', async () => {
@@ -889,7 +889,7 @@ describe('runVisualDiffCli', () => {
 
         await expect(
             runVisualDiffCli({ ...fixtures, ...cliOutputPaths(path.join(tempDir, 'out')), routeIds: [routeId], enforceOutcome: true })
-        ).rejects.toThrow(/screenshot/i);
+        ).rejects.toThrow(/capture|drift/i);
     });
 
     it('does not throw in fail-on-changes mode when all screenshots are clean', async () => {

@@ -9,7 +9,7 @@ async function readAction(actionPath) {
     return yaml.load(await fs.readFile(actionPath, 'utf8'));
 }
 
-describe('visual diff action contracts', () => {
+describe('SnapDrift action contracts', () => {
     it('keeps the low-level defaulted inputs ergonomic', async () => {
         const determineScope = await readAction('actions/scope/action.yml');
         const publishComment = await readAction('actions/comment/action.yml');
@@ -23,7 +23,7 @@ describe('visual diff action contracts', () => {
         expect(compare.inputs['current-manifest-path'].default).toBe('');
         expect(compare.inputs['current-run-dir'].default).toBe('');
         expect(stage.inputs['bundle-dir'].default).toBe('');
-        expect(evaluate.inputs['summary-path'].default).toBe('qa-artifacts/visual-diffs/current/visual-diff-summary.json');
+        expect(evaluate.inputs['summary-path'].default).toBe('qa-artifacts/snapdrift/drift/current/summary.json');
     });
 
     it('uses artifact-type-specific default bundle directories at runtime', async () => {
@@ -36,8 +36,8 @@ describe('visual diff action contracts', () => {
 
             const baseline = await stageVisualArtifacts({ artifactType: 'baseline' });
             const diff = await stageVisualArtifacts({ artifactType: 'diff' });
-            const expectedBaselineDir = await fs.realpath(path.join(tempDir, 'qa-artifacts', 'visual-baseline-artifact'));
-            const expectedDiffDir = await fs.realpath(path.join(tempDir, 'qa-artifacts', 'visual-diff-artifact'));
+            const expectedBaselineDir = await fs.realpath(path.join(tempDir, 'qa-artifacts', 'snapdrift', 'bundles', 'baseline'));
+            const expectedDiffDir = await fs.realpath(path.join(tempDir, 'qa-artifacts', 'snapdrift', 'bundles', 'drift'));
 
             expect(baseline.bundleDir).toBe(expectedBaselineDir);
             expect(diff.bundleDir).toBe(expectedDiffDir);
@@ -51,7 +51,7 @@ describe('visual diff action contracts', () => {
         const baseline = await readAction('actions/baseline/action.yml');
         const prDiff = await readAction('actions/pr-diff/action.yml');
 
-        expect(baseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+        expect(baseline.inputs['repo-config-path'].default).toBe('.github/snapdrift.json');
         expect(baseline.inputs['route-ids'].default).toBe('');
         expect(baseline.inputs['artifact-retention-days'].default).toBe('30');
         expect(baseline.inputs['upload-artifact'].default).toBe('true');

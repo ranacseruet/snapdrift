@@ -1,15 +1,15 @@
 name: SnapDrift Enforce
-description: Evaluate the diff summary against diff.mode and fail when required.
+description: Evaluate the SnapDrift summary against diff.mode and fail when required.
 
 inputs:
   summary-path:
-    description: Path to the visual diff summary JSON.
+    description: Path to the SnapDrift summary JSON.
     required: false
-    default: qa-artifacts/visual-diffs/current/visual-diff-summary.json
+    default: qa-artifacts/snapdrift/drift/current/summary.json
 
 outputs:
   status:
-    description: Computed visual diff status.
+    description: Computed SnapDrift status.
     value: ${{ steps.evaluate.outputs.status }}
 
 runs:

@@ -1,40 +1,39 @@
 # Integration Guide
 
-This guide walks through setting up SnapDrift in a consumer repo from scratch.
+This guide covers integrating SnapDrift into a consumer repository during internal testing.
+
+Pin a tested commit SHA in every `uses:` reference. Do not rely on tags or moving refs while the integration is still evolving.
 
 ## Prerequisites
 
-> **v1 supports any app stack on Ubuntu runners.**
-> - SnapDrift self-provisions Node 22 internally — your consumer workflow does not need to set up Node.
-> - The consumer app can be any language or framework (Node, Python, Go, Ruby, etc.). SnapDrift only needs the app to be running and reachable at `baseUrl`.
-> - The runner must be Ubuntu-compatible (`ubuntu-latest` or equivalent). SnapDrift installs Playwright's Chromium and system dependencies via `apt`; `windows-latest` and `macos-latest` runners are not supported in v1.
-> - Playwright Chromium is installed automatically by SnapDrift on each run (~150 MB, takes 1–2 min). No manual Playwright setup is required, but the runner must have outbound network access to reach the Playwright CDN.
+- SnapDrift provisions Node 22 internally.
+- The consumer app can use any stack as long as it can be started and reached at `baseUrl`.
+- The runner must be Ubuntu-compatible because Playwright Chromium is installed with system dependencies.
+- The runner must have outbound network access to fetch Playwright Chromium.
 
-Your repo must handle its own:
+Your repository still owns:
 
 - Checkout
-- Dependency installation (in whatever language/tool your app uses)
+- Dependency installation
 - App build
-- App startup and readiness wait
+- App startup and readiness
 - App shutdown
 
-SnapDrift owns everything after the app is running: route selection, capture, compare, skipped-summary generation, artifact staging, artifact upload, PR comment publication, and diff-mode enforcement.
+SnapDrift owns route selection, capture, comparison, skipped-report generation, artifact staging, artifact upload, PR reporting, and drift enforcement.
 
-## Step 1: Add `.github/visual-regression.json`
-
-This file is the single source of truth for route coverage, output paths, and enforcement policy.
+## Step 1: Add `.github/snapdrift.json`
 
 ```json
 {
-  "baselineArtifactName": "my-app-visual-baseline",
+  "baselineArtifactName": "my-app-snapdrift-baseline",
   "workingDirectory": ".",
   "baseUrl": "http://127.0.0.1:8080",
-  "resultsFile": "qa-artifacts/visual-baselines/current/visual-baseline-results.json",
-  "manifestFile": "qa-artifacts/visual-baselines/current/visual-screenshot-manifest.json",
-  "screenshotsRoot": "qa-artifacts/visual-baselines/current",
+  "resultsFile": "qa-artifacts/snapdrift/baseline/current/results.json",
+  "manifestFile": "qa-artifacts/snapdrift/baseline/current/manifest.json",
+  "screenshotsRoot": "qa-artifacts/snapdrift/baseline/current",
   "routes": [
     { "id": "home-desktop", "path": "/", "viewport": "desktop" },
-    { "id": "home-mobile",  "path": "/", "viewport": "mobile"  }
+    { "id": "home-mobile", "path": "/", "viewport": "mobile" }
   ],
   "diff": {
     "threshold": 0.01,
@@ -43,48 +42,46 @@ This file is the single source of truth for route coverage, output paths, and en
 }
 ```
 
-For the full config schema — including optional `selection.sharedPrefixes`, `selection.sharedExact`, and per-route `changePaths` for changed-file scoping — see [contracts.md](contracts.md).
+SnapDrift still accepts `.github/visual-regression.json` during the transition, but new integrations should standardize on `.github/snapdrift.json`.
 
-## Step 2: Publish the baseline on push to `main`
-
-In your main CI workflow, after the app is started and reachable:
+## Step 2: Publish a baseline on `main`
 
 ```yaml
-- name: Publish visual baseline
-  uses: ranacseruet/snapdrift/actions/baseline@v1
+- name: SnapDrift Baseline
+  uses: ranacseruet/snapdrift/actions/baseline@<tested-commit-sha>
   with:
-    repo-config-path: .github/visual-regression.json
+    repo-config-path: .github/snapdrift.json
     artifact-retention-days: '30'
 ```
 
-If you want to capture only a subset of routes, pass `route-ids` as a comma-separated list. Otherwise all configured routes are captured.
+If you want only part of the route set, pass `route-ids`.
 
-## Step 3: Run the visual diff on pull requests
+## Step 3: Run the pull request report
 
-The PR workflow requires write permissions to download baseline artifacts and post PR comments:
+The PR workflow needs permission to download baselines and upsert the report comment:
 
 ```yaml
 permissions:
   contents: read
-  actions: read        # required to download the baseline artifact
-  issues: write        # required to post/update the PR comment
-  pull-requests: write # required to post/update the PR comment
+  actions: read
+  issues: write
+  pull-requests: write
 ```
 
-Then add the diff step after your app is running:
+Then add SnapDrift after the app is running:
 
 ```yaml
-- name: Run visual PR diff
-  uses: ranacseruet/snapdrift/actions/pr-diff@v1
+- name: SnapDrift Report
+  uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
-    repo-config-path: .github/visual-regression.json
+    repo-config-path: .github/snapdrift.json
 ```
 
-### Complete example workflow (Node app)
+## Example workflow (Node app)
 
 ```yaml
-name: PR Visual Diff
+name: SnapDrift Pull Request
 
 on:
   pull_request:
@@ -97,7 +94,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  visual-diff:
+  snapdrift:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,19 +112,17 @@ jobs:
             curl -sf http://127.0.0.1:8080 && break || sleep 1
           done
 
-      - name: Run visual PR diff
-        uses: ranacseruet/snapdrift/actions/pr-diff@v1
+      - name: SnapDrift Report
+        uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-config-path: .github/visual-regression.json
+          repo-config-path: .github/snapdrift.json
 ```
 
-### Complete example workflow (Python app)
-
-SnapDrift handles its own Node setup, so a Python (or Go, Ruby, etc.) consumer workflow looks identical — just swap out the build/start steps for your stack:
+## Example workflow (Python app)
 
 ```yaml
-name: PR Visual Diff
+name: SnapDrift Pull Request
 
 on:
   pull_request:
@@ -140,7 +135,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  visual-diff:
+  snapdrift:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -156,52 +151,39 @@ jobs:
             curl -sf http://127.0.0.1:8080 && break || sleep 1
           done
 
-      - name: Run visual PR diff
-        uses: ranacseruet/snapdrift/actions/pr-diff@v1
+      - name: SnapDrift Report
+        uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-config-path: .github/visual-regression.json
+          repo-config-path: .github/snapdrift.json
 ```
 
-No `actions/setup-node` step needed — SnapDrift provisions Node 22 internally.
+## What the wrapper does
 
-### What the wrapper does
-
-- Resolves PR scope (changed-file-based route selection) unless you explicitly pass `route-ids`
-- Downloads the latest successful `main` baseline artifact
-- Captures current screenshots
-- Writes a skipped summary when scope is irrelevant or the baseline is unavailable
-- Stages and uploads the diff artifact
+- Resolves route scope unless `route-ids` is passed explicitly
+- Downloads the latest successful `main` baseline
+- Captures current frames
+- Writes a skipped report when scope is irrelevant or the baseline is missing
+- Stages and uploads the drift artifact
 - Publishes the workflow summary
-- Comments on the PR (set `comment-on-pr: false` to suppress)
-- Enforces `diff.mode` only after artifacts and comments are published
+- Upserts the PR report
+- Enforces `diff.mode` after publication completes
 
-### Useful input overrides
+## Useful overrides
 
 | Input | Purpose |
 |-------|---------|
 | `pr-number` | Explicit PR number override |
-| `route-ids` | Override scope detection and capture specific routes |
-| `force-run` | Force a full run regardless of changed files |
-| `baseline-repository` | Fetch baselines from another repo |
-| `baseline-workflow-id` | Override the publishing workflow ID |
-| `baseline-branch` | Override the publishing branch |
-| `comment-on-pr` | Set to `false` to suppress the PR comment |
+| `route-ids` | Bypass scope detection and capture named routes |
+| `force-run` | Run the full route set |
+| `baseline-repository` | Read baselines from another repo |
+| `baseline-workflow-id` | Override the baseline workflow id |
+| `baseline-branch` | Override the baseline branch |
+| `comment-on-pr` | Set to `false` to suppress the PR report |
 
-## Enforcement modes
+## Low-level actions
 
-Start with `report-only` to accumulate baselines without affecting build status. Once baselines are stable, switch to `fail-on-changes` to catch visual regressions.
-
-| Mode | Fails when |
-|------|-----------|
-| `report-only` | Never |
-| `fail-on-changes` | `changedScreenshots > 0` |
-| `fail-on-incomplete` | Errors, dimension changes, or missing screenshots |
-| `strict` | Any of the above |
-
-## Advanced: low-level actions
-
-The low-level actions are available for custom orchestration when the wrappers don't cover your use case:
+For custom orchestration:
 
 - `actions/capture`
 - `actions/compare`
@@ -211,22 +193,16 @@ The low-level actions are available for custom orchestration when the wrappers d
 - `actions/resolve-baseline`
 - `actions/stage`
 
-## Upgrading
-
-1. Update the `uses:` reference in your workflow to the new tag.
-2. Check [CHANGELOG.md](../CHANGELOG.md) for any contract changes.
-3. Minor version bumps do not require changes to `.github/visual-regression.json`.
-
 ## Troubleshooting
 
-**"No non-expired visual baseline artifact was found"**
-The main CI workflow has not run successfully yet, or the artifact has expired. Run it on `main` and wait for it to complete.
+**"No non-expired SnapDrift baseline artifact was found"**  
+The baseline workflow has not completed successfully on `main`, or the artifact expired.
 
-**403 when posting PR comments**
-Add `issues: write` and `pull-requests: write` permissions to the PR workflow job.
+**403 when posting the PR report**  
+Grant `issues: write` and `pull-requests: write` to the job.
 
-**Screenshots have different dimensions**
-Expected when a PR adds or removes content that changes page height. Recorded as a "dimension change" in the diff summary; pixel comparison is skipped. Merge the PR and let the main CI re-capture the baseline with the new dimensions.
+**Screenshots have different dimensions**  
+SnapDrift reports this as a dimension shift and skips pixel comparison for that route. Refresh the baseline after the change lands.
 
-**Route appears in `errors[]` in the diff summary**
-The Playwright capture failed (navigation timeout, app not ready, crash). Check the workflow logs. Ensure the app is fully started and `baseUrl` is reachable before the action runs. The navigation timeout is fixed at 30 seconds — if your app or a specific route consistently takes longer to load, the app must be fully warm before the action step runs.
+**A route appears in `errors[]`**  
+Capture failed before comparison. Confirm the app is fully ready and reachable before SnapDrift runs.

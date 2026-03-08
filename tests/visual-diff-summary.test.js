@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-describe('visual diff skipped summary helpers', () => {
+describe('SnapDrift skipped summary helpers', () => {
     let tempDir;
 
     beforeEach(async () => {
@@ -17,7 +17,7 @@ describe('visual diff skipped summary helpers', () => {
         }
     });
 
-    it('writes the no-visual-relevant-changes skipped summary with default messaging', async () => {
+    it('writes the no-drift-relevant-changes skipped summary with default messaging', async () => {
         const { writeVisualDiffSummary } = await import('../lib/visual-diff-summary.mjs');
 
         const result = await writeVisualDiffSummary({
@@ -31,11 +31,14 @@ describe('visual diff skipped summary helpers', () => {
         expect(summary).toEqual({
             status: 'skipped',
             reason: 'no_visual_relevant_changes',
-            message: 'No visual-relevant changes were detected in this pull request.',
+            message: 'No drift-relevant changes were detected in this pull request.',
             selectedRoutes: []
         });
+        expect(path.basename(result.summaryPath)).toBe('summary.json');
+        expect(path.basename(result.markdownPath)).toBe('summary.md');
+        expect(markdown).toContain('# SnapDrift Report');
         expect(markdown).toContain('- Status: skipped');
-        expect(markdown).toContain('- Reason: no visual-relevant changes were detected in this pull request');
+        expect(markdown).toContain('- Reason: no drift-relevant changes were detected in this pull request');
     });
 
     it('writes the missing-baseline skipped summary with current run metadata', async () => {
@@ -43,7 +46,7 @@ describe('visual diff skipped summary helpers', () => {
 
         const result = await writeVisualDiffSummary({
             reason: 'missing_main_baseline_artifact',
-            message: 'No non-expired visual baseline artifact named ui-foundation-visual-baseline was found.',
+            message: 'No non-expired SnapDrift baseline artifact named ui-foundation-snapdrift-baseline was found.',
             baselineAvailable: false,
             currentResultsPath: '/tmp/current-results.json',
             selectedRouteIds: 'root-index-desktop,root-index-mobile',
@@ -56,12 +59,12 @@ describe('visual diff skipped summary helpers', () => {
         expect(summary).toEqual({
             status: 'skipped',
             reason: 'missing_main_baseline_artifact',
-            message: 'No non-expired visual baseline artifact named ui-foundation-visual-baseline was found.',
+            message: 'No non-expired SnapDrift baseline artifact named ui-foundation-snapdrift-baseline was found.',
             selectedRoutes: ['root-index-desktop', 'root-index-mobile'],
             baselineAvailable: false,
             currentResultsPath: '/tmp/current-results.json'
         });
-        expect(markdown).toContain('- Current run: `/tmp/current-results.json`');
+        expect(markdown).toContain('- Current capture: `/tmp/current-results.json`');
         expect(markdown).toContain('## Next action');
     });
 

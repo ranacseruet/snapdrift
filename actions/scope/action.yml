@@ -1,14 +1,14 @@
 name: SnapDrift Scope
-description: Determine whether visual diff should run and which configured routes should be selected for the current change set.
+description: Determine whether SnapDrift should run and which configured routes should be selected for the current change set.
 
 inputs:
   github-token:
     description: Token used to query pull request changed files.
     required: true
   repo-config-path:
-    description: Path to the visual regression config file.
+    description: Path to the SnapDrift config file.
     required: false
-    default: .github/visual-regression.json
+    default: .github/snapdrift.json
   pr-number:
     description: Pull request number for changed-file inspection. When omitted, the action falls back to running all routes.
     required: false
@@ -24,7 +24,7 @@ inputs:
 
 outputs:
   should-run:
-    description: Whether visual diff should run.
+    description: Whether SnapDrift should run.
     value: ${{ steps.scope.outputs.should_run }}
   reason:
     description: Reason for the scope decision.
@@ -98,7 +98,7 @@ runs:
             );
             setOutputs(scope);
           } catch (error) {
-            core.warning(`Unable to inspect PR files for visual diff scope; defaulting to run all visual checks. ${error.message}`);
+            core.warning(`Unable to inspect PR files for SnapDrift scope; running all configured captures instead. ${error.message}`);
             setOutputs({
               shouldRun: true,
               reason: 'visual_scope_check_failed',
