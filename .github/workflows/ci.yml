@@ -6,34 +6,67 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: SnapDrift Tests
+  quality:
+    name: SnapDrift Quality (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [22]
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-      - run: npm ci
-      - name: Run smoke tests
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint source
+        run: npm run lint
+      - name: Typecheck JSDoc contracts
+        run: npm run typecheck
+      - name: Run unit tests
         run: npm test
+      - name: Validate published package shape
+        run: npm run pack:check
 
-  action-lint:
+  coverage:
+    name: SnapDrift Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run coverage suite
+        run: npm run test:coverage
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: snapdrift-coverage
+          if-no-files-found: error
+          path: coverage
+
+  action-audit:
     name: SnapDrift Action Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       - name: Validate action YML files
-        run: |
-          for f in actions/*/action.yml; do
-            echo "Checking $f ..."
-            python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f"
-          done
+        run: npm run validate:actions

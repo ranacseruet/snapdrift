@@ -136,7 +136,7 @@ describe('buildPrCommentBody', () => {
     });
 
     it('shows "all" when selectedRoutes is not an array', () => {
-        const { selectedRoutes, ...noRoutes } = cleanSummary;
+        const { selectedRoutes: _selectedRoutes, ...noRoutes } = cleanSummary;
         const body = buildPrCommentBody({ ...noRoutes, errors: [] });
         expect(body).toContain('| Selected routes | all |');
     });

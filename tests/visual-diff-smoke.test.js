@@ -68,7 +68,7 @@ describe('action YML structural integrity', () => {
     it('all required inputs are marked required', () => {
         for (const dir of actionDirs) {
             const inputs = actions[dir].inputs || {};
-            for (const [inputName, inputDef] of Object.entries(inputs)) {
+            for (const inputDef of Object.values(inputs)) {
                 if (inputDef.required === true) {
                     expect(inputDef.default).toBeUndefined();
                 }
@@ -237,6 +237,22 @@ describe('config schema validation', () => {
         expect(config.baselineArtifactName).toBe('test-baseline');
     });
 
+    it('accepts optional route selection metadata when it is well formed', async () => {
+        const configPath = path.join(tempDir, 'valid-with-selection.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'desktop', changePaths: ['src/pages/home'] }],
+            selection: {
+                sharedPrefixes: ['src/components'],
+                sharedExact: ['package-lock.json']
+            }
+        }));
+
+        const { config } = await loadVisualRegressionConfig(configPath);
+        expect(config.selection.sharedPrefixes).toEqual(['src/components']);
+        expect(config.routes[0].changePaths).toEqual(['src/pages/home']);
+    });
+
     it('rejects config missing baselineArtifactName', async () => {
         const { baselineArtifactName, ...invalid } = validConfig;
         const configPath = path.join(tempDir, 'invalid.json');
@@ -267,6 +283,72 @@ describe('config schema validation', () => {
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
         await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+    });
+
+    it('rejects config with duplicate route ids', async () => {
+        const configPath = path.join(tempDir, 'duplicate-route-ids.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [
+                { id: 'home', path: '/', viewport: 'desktop' },
+                { id: 'home', path: '/mobile', viewport: 'mobile' }
+            ]
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/duplicate/i);
+    });
+
+    it('rejects config with an unsupported viewport preset', async () => {
+        const configPath = path.join(tempDir, 'invalid-viewport.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'tablet' }]
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/viewport/i);
+    });
+
+    it('rejects config with an unsupported diff mode', async () => {
+        const configPath = path.join(tempDir, 'invalid-diff-mode.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            diff: { threshold: 0.01, mode: 'warn-only' }
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/diff\.mode/i);
+    });
+
+    it('rejects config with an out-of-range diff threshold', async () => {
+        const configPath = path.join(tempDir, 'invalid-threshold.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            diff: { threshold: 1.5, mode: 'report-only' }
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/between 0 and 1/i);
+    });
+
+    it('rejects config with malformed change path selectors', async () => {
+        const configPath = path.join(tempDir, 'invalid-change-paths.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'home', path: '/', viewport: 'desktop', changePaths: ['src/pages', ''] }]
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/changePaths/i);
+    });
+
+    it('rejects config with malformed shared selection rules', async () => {
+        const configPath = path.join(tempDir, 'invalid-selection.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            selection: {
+                sharedPrefixes: ['src/components', ''],
+                sharedExact: ['README.md']
+            }
+        }));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/sharedPrefixes/i);
     });
 
     it('rejects config missing manifestFile', async () => {
@@ -326,6 +408,7 @@ describe('lib module exports are stable', () => {
     it('visual-regression-config exports all expected symbols', async () => {
         const mod = await import('../lib/visual-regression-config.mjs');
         expect(typeof mod.loadVisualRegressionConfig).toBe('function');
+        expect(typeof mod.validateVisualRegressionConfig).toBe('function');
         expect(typeof mod.readFirstDefinedEnv).toBe('function');
         expect(typeof mod.resolveFromWorkingDirectory).toBe('function');
         expect(typeof mod.selectConfiguredRoutes).toBe('function');
@@ -333,6 +416,7 @@ describe('lib module exports are stable', () => {
         expect(typeof mod.splitCommaList).toBe('function');
         expect(typeof mod.DEFAULT_CONFIG_PATH).toBe('string');
         expect(typeof mod.LEGACY_CONFIG_PATH).toBe('string');
+        expect(Array.isArray(mod.VALID_DIFF_MODES)).toBe(true);
         expect(mod.VIEWPORT_PRESETS).toBeDefined();
         expect(typeof mod.VISUAL_NAVIGATION_TIMEOUT_MS).toBe('number');
         expect(typeof mod.VISUAL_SETTLE_DELAY_MS).toBe('number');
