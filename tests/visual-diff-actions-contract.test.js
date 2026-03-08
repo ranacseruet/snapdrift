@@ -11,11 +11,11 @@ async function readAction(actionPath) {
 
 describe('visual diff action contracts', () => {
     it('keeps the low-level defaulted inputs ergonomic', async () => {
-        const determineScope = await readAction('actions/determine-visual-diff-scope/action.yml');
-        const publishComment = await readAction('actions/publish-visual-pr-comment/action.yml');
-        const compare = await readAction('actions/compare-visual-results/action.yml');
-        const stage = await readAction('actions/stage-visual-artifacts/action.yml');
-        const evaluate = await readAction('actions/evaluate-visual-diff-outcome/action.yml');
+        const determineScope = await readAction('actions/scope/action.yml');
+        const publishComment = await readAction('actions/comment/action.yml');
+        const compare = await readAction('actions/compare/action.yml');
+        const stage = await readAction('actions/stage/action.yml');
+        const evaluate = await readAction('actions/enforce/action.yml');
 
         expect(determineScope.inputs['pr-number'].required).toBe(false);
         expect(publishComment.inputs['pr-number'].required).toBe(false);

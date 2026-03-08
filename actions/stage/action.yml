@@ -1,4 +1,4 @@
-name: Stage Visual Artifacts
+name: SnapDrift Stage
 description: Stage baseline or diff artifacts into the standard bundle structure before upload.
 
 inputs:

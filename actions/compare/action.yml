@@ -1,4 +1,4 @@
-name: Compare Visual Results
+name: SnapDrift Compare
 description: Compare the current visual capture against a baseline and emit the standard summary files.
 
 inputs:

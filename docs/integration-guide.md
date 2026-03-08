@@ -203,13 +203,13 @@ Start with `report-only` to accumulate baselines without affecting build status.
 
 The low-level actions are available for custom orchestration when the wrappers don't cover your use case:
 
-- `actions/capture-visual-routes`
-- `actions/compare-visual-results`
-- `actions/determine-visual-diff-scope`
-- `actions/evaluate-visual-diff-outcome`
-- `actions/publish-visual-pr-comment`
-- `actions/resolve-baseline-artifact`
-- `actions/stage-visual-artifacts`
+- `actions/capture`
+- `actions/compare`
+- `actions/scope`
+- `actions/enforce`
+- `actions/comment`
+- `actions/resolve-baseline`
+- `actions/stage`
 
 ## Upgrading
 

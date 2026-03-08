@@ -79,14 +79,14 @@ describe('action YML structural integrity', () => {
     it('covers the expected set of action directories', () => {
         const expected = [
             'baseline',
-            'capture-visual-routes',
-            'compare-visual-results',
-            'determine-visual-diff-scope',
-            'evaluate-visual-diff-outcome',
+            'capture',
+            'comment',
+            'compare',
+            'enforce',
             'pr-diff',
-            'publish-visual-pr-comment',
-            'resolve-baseline-artifact',
-            'stage-visual-artifacts'
+            'resolve-baseline',
+            'scope',
+            'stage'
         ];
         expect(actionDirs.sort()).toEqual(expected.sort());
     });

@@ -1,4 +1,4 @@
-name: Resolve Baseline Artifact
+name: SnapDrift Resolve Baseline
 description: Resolve and download the latest successful baseline artifact from main.
 
 inputs:

@@ -1,4 +1,4 @@
-name: Determine Visual Diff Scope
+name: SnapDrift Scope
 description: Determine whether visual diff should run and which configured routes should be selected for the current change set.
 
 inputs:
