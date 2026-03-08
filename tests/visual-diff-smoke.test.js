@@ -247,6 +247,22 @@ describe('config schema validation', () => {
         await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
     });
 
+    it('rejects config missing workingDirectory', async () => {
+        const { workingDirectory, ...invalid } = validConfig;
+        const configPath = path.join(tempDir, 'invalid.json');
+        await fs.writeFile(configPath, JSON.stringify(invalid));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+    });
+
+    it('rejects config missing readyTimeoutSeconds', async () => {
+        const { readyTimeoutSeconds, ...invalid } = validConfig;
+        const configPath = path.join(tempDir, 'invalid.json');
+        await fs.writeFile(configPath, JSON.stringify(invalid));
+
+        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
+    });
+
     it('rejects config missing routes', async () => {
         const { routes, ...invalid } = validConfig;
         const configPath = path.join(tempDir, 'invalid.json');
