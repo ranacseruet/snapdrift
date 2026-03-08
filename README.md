@@ -1,6 +1,9 @@
 # SnapDrift
 
 ![CI](https://github.com/ranacseruet/snapdrift/actions/workflows/ci.yml/badge.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+![Version](https://img.shields.io/badge/version-v1.0.0-informational)
 
 This module contains the shared visual regression implementation for `Node + Playwright` projects.
 
