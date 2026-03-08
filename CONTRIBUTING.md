@@ -30,12 +30,15 @@ npx playwright install --with-deps chromium
 
 ## Running Tests
 
-From the parent repo (while this module is still embedded):
-
 ```bash
-NODE_OPTIONS='--experimental-vm-modules' npx jest scripts/visual-diff-smoke.test.js
-NODE_OPTIONS='--experimental-vm-modules' npx jest scripts/visual-diff-pr-comment.test.js
+# Run the full test suite
+npm test
+
+# Run a single test file
+NODE_OPTIONS='--experimental-vm-modules' npx jest tests/visual-diff-smoke.test.js
 ```
+
+The six test files in `tests/` cover config validation, capture, compare, staging, PR comment generation, and action contract integrity. Tests are unit-level — they do not run Playwright or require a live app.
 
 ## Making Changes
 
@@ -62,7 +65,7 @@ The v1 contracts (config schema, artifact structure, action inputs/outputs, view
 
 - ESM modules (`.mjs`) with `type: "module"` in package.json
 - JSDoc type annotations referencing `types/visual-diff-types.d.ts`
-- No transpilation or bundling — runs directly on Node >= 20
+- No transpilation or bundling — runs directly on Node >= 22
 - Composite GitHub Actions with inline shell or `actions/github-script`
 
 ## License
