@@ -16,6 +16,8 @@ describe('buildReportCommentBody', () => {
         changedScreenshots: 0,
         missingInBaseline: 0,
         missingInCurrent: 0,
+        diffMode: 'strict',
+        threshold: 0.01,
         errors: [],
         dimensionChanges: [],
         changed: []
@@ -27,11 +29,13 @@ describe('buildReportCommentBody', () => {
         expect(LEGACY_REPORT_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
     });
 
-    it('uses tabular format for metrics', () => {
+    it('uses metadata and high-signal tables', () => {
         const body = buildReportCommentBody(cleanSummary);
+        expect(body).toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
+        expect(body).toContain('| 2 | 2 | `strict` | 0.01 |');
         expect(body).toContain('| Signal | Count |');
-        expect(body).toContain('| Stable captures | 2 |');
         expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Errors |');
     });
 
     it('shows status icon and label in heading', () => {
@@ -54,6 +58,16 @@ describe('buildReportCommentBody', () => {
         });
         expect(body).toContain('⏭️ SnapDrift Report — Skipped');
         expect(body).toContain('> **Note:** No drift-relevant changes.');
+    });
+
+    it('shows fallback metadata values when diff settings are unavailable', () => {
+        const body = buildReportCommentBody({
+            status: 'skipped',
+            selectedRoutes: [],
+            matchedScreenshots: 0,
+            errors: []
+        });
+        expect(body).toContain('| 0 | 0 | n/a | n/a |');
     });
 
     it('includes drift signals in a details section with table', () => {
@@ -103,6 +117,23 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('Next step');
     });
 
+    it('includes actionable error details near the top of the report', () => {
+        const body = buildReportCommentBody({
+            ...cleanSummary,
+            status: 'incomplete',
+            message: 'Comparison finished with partial failures.',
+            errors: [{
+                id: 'home-desktop',
+                viewport: 'desktop',
+                message: 'Current capture failed: Navigation timeout'
+            }]
+        });
+        expect(body).toContain('> **Note:** Comparison finished with partial failures.');
+        expect(body).toContain('<details><summary>Error details</summary>');
+        expect(body).toContain('| Route | Viewport | Error |');
+        expect(body).toContain('| home-desktop | desktop | Current capture failed: Navigation timeout |');
+    });
+
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
         const body = buildReportCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
@@ -132,12 +163,12 @@ describe('buildReportCommentBody', () => {
 
     it('shows selected route count from array length', () => {
         const body = buildReportCommentBody({ ...cleanSummary, selectedRoutes: ['a', 'b', 'c'] });
-        expect(body).toContain('| Selected routes | 3 |');
+        expect(body).toContain('| 3 | 2 | `strict` | 0.01 |');
     });
 
     it('shows "all" when selectedRoutes is not an array', () => {
         const { selectedRoutes: _selectedRoutes, ...noRoutes } = cleanSummary;
         const body = buildReportCommentBody({ ...noRoutes, errors: [] });
-        expect(body).toContain('| Selected routes | all |');
+        expect(body).toContain('| all | 2 | `strict` | 0.01 |');
     });
 });
