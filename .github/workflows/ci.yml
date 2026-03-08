@@ -33,5 +33,5 @@ jobs:
         run: |
           for f in actions/*/action.yml; do
             echo "Checking $f ..."
-            python3 -c "import yaml; yaml.safe_load(open('$f'))"
+            python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))" "$f"
           done

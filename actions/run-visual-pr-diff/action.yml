@@ -478,7 +478,7 @@ runs:
           cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
         fi
 
-    - if: inputs.comment-on-pr == 'true'
+    - if: always() && inputs.comment-on-pr == 'true'
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
@@ -492,20 +492,29 @@ runs:
           const path = require('path');
           const { pathToFileURL } = require('url');
 
-          const summaryPath = process.env.SUMMARY_PATH;
-          if (!summaryPath || !fs.existsSync(summaryPath)) {
-            core.warning(`Visual diff summary not found at ${summaryPath || '<missing>'}`);
-            return;
-          }
+          const PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
 
+          const summaryPath = process.env.SUMMARY_PATH;
           const issueNumber = Number(process.env.PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');
           if (!Number.isFinite(issueNumber) || issueNumber <= 0) {
             core.warning('Visual diff PR comment skipped because no pull request number was available.');
             return;
           }
 
+          if (!summaryPath || !fs.existsSync(summaryPath)) {
+            const runUrl = process.env.RUN_URL || '';
+            const body = `${PR_COMMENT_MARKER}\n### ⚠️ Visual Diff — Capture Failed\n\nThe visual diff pipeline did not produce a summary. This usually means the screenshot capture step failed before completing.\n\n[View workflow run](${runUrl}) for details.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body
+            });
+            return;
+          }
+
           const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
-          const { buildPrCommentBody, PR_COMMENT_MARKER } = await import(pathToFileURL(modulePath));
+          const { buildPrCommentBody } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const body = buildPrCommentBody(summary, {
