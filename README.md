@@ -19,7 +19,7 @@ SnapDrift captures full-page screenshots of your app on every push to `main`, th
 - **PR comments** — structured summary posted and updated automatically on the PR
 - **Enforcement** — fails the build if screenshots change, depending on your chosen mode
 
-You keep ownership of checkout, Node setup, build, and app startup. SnapDrift takes over once the app is running.
+You keep ownership of checkout, build, and app startup. SnapDrift takes over once the app is running.
 
 ## Quickstart
 
@@ -77,8 +77,7 @@ Start with `report-only` to accumulate baselines without affecting build status.
 
 ## Known limitations
 
-- **Node apps only (v1)** — the runner must have Node 22+ available and the consumer app is expected to be Node-based; non-Node consumers (Python, Go, Ruby, etc.) are not yet supported
-- **Ubuntu runners only (v1)** — Playwright's system dependency installer (`--with-deps`) requires apt; `windows-latest` and `macos-latest` runners are not supported
+- **Ubuntu runners only** — Playwright's system dependency installer (`--with-deps`) requires apt; `windows-latest` and `macos-latest` runners are not supported
 - Full-page capture only — no sub-region masking or cropping
 - Fixed viewport presets: `desktop` (1440×900) and `mobile` (390×844)
 - Single `diff.threshold` applies to all routes — no per-route overrides

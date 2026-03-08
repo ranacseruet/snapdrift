@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- (no changes yet)
+- `publish-visual-baseline` and `run-visual-pr-diff` now self-provision Node 22 via `actions/setup-node`; consumer workflows no longer need to set up Node for SnapDrift to work, enabling non-Node app stacks (Python, Go, Ruby, etc.) on Ubuntu runners
 
 ## v1.0.0
 
