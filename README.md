@@ -1,5 +1,7 @@
 # SnapDrift
 
+![SnapDrift](assets/snapdrift-logo-banner.png)
+
 ![CI](https://github.com/ranacseruet/snapdrift/actions/workflows/ci.yml/badge.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
