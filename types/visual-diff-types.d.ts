@@ -16,8 +16,6 @@ export interface VisualRegressionConfig {
   baselineArtifactName: string;
   workingDirectory: string;
   baseUrl: string;
-  readyUrl: string;
-  readyTimeoutSeconds: number;
   resultsFile: string;
   manifestFile: string;
   screenshotsRoot: string;

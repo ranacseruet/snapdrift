@@ -30,8 +30,6 @@ You keep ownership of checkout, build, and app startup. SnapDrift takes over onc
   "baselineArtifactName": "my-app-visual-baseline",
   "workingDirectory": ".",
   "baseUrl": "http://127.0.0.1:8080",
-  "readyUrl": "http://127.0.0.1:8080",
-  "readyTimeoutSeconds": 45,
   "resultsFile": "qa-artifacts/visual-baselines/current/visual-baseline-results.json",
   "manifestFile": "qa-artifacts/visual-baselines/current/visual-screenshot-manifest.json",
   "screenshotsRoot": "qa-artifacts/visual-baselines/current",
@@ -47,7 +45,7 @@ You keep ownership of checkout, build, and app startup. SnapDrift takes over onc
 
 ```yaml
 - name: Publish visual baseline
-  uses: ranacseruet/snapdrift/actions/publish-visual-baseline@v1
+  uses: ranacseruet/snapdrift/actions/baseline@v1
   with:
     repo-config-path: .github/visual-regression.json
 ```
@@ -56,7 +54,7 @@ You keep ownership of checkout, build, and app startup. SnapDrift takes over onc
 
 ```yaml
 - name: Run visual PR diff
-  uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
+  uses: ranacseruet/snapdrift/actions/pr-diff@v1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/visual-regression.json
@@ -86,7 +84,7 @@ Start with `report-only` to accumulate baselines without affecting build status.
 ## Docs
 
 - [Integration Guide](docs/integration-guide.md) — step-by-step setup, config reference, overrides, troubleshooting
-- [Contracts](docs/contracts.md) — frozen v1 schema, artifact shapes, environment variables
+- [Contracts](docs/contracts.md) — schema, artifact shapes, environment variables
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [License](LICENSE) — MIT

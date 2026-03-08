@@ -1,6 +1,4 @@
-# Contracts — v1 (frozen)
-
-> **Stability: v1 frozen.** These contracts are stable. Changes require a major version bump.
+# Contracts
 
 ## Config
 
@@ -13,8 +11,6 @@ The shared layer reads runtime visual regression behavior from `.github/visual-r
 | `baselineArtifactName` | `string` | Name for the uploaded baseline artifact |
 | `workingDirectory` | `string` | Root directory for resolving relative paths |
 | `baseUrl` | `string` | Base URL the running app is reachable at |
-| `readyUrl` | `string` | URL to poll for app readiness. Used by the reusable workflow templates; not read by the `lib/` modules themselves. |
-| `readyTimeoutSeconds` | `number` | Max seconds to wait for the app to become ready. Used by the reusable workflow templates; not read by the `lib/` modules themselves. |
 | `resultsFile` | `string` | Path (relative to `workingDirectory`) for capture results JSON |
 | `manifestFile` | `string` | Path (relative to `workingDirectory`) for screenshot manifest JSON |
 | `screenshotsRoot` | `string` | Parent directory for screenshot output (relative to `workingDirectory`); actual PNGs are written to `{screenshotsRoot}/screenshots/{id}.png` |
@@ -45,8 +41,6 @@ The shared layer reads runtime visual regression behavior from `.github/visual-r
   "baselineArtifactName": "ui-foundation-visual-baseline",
   "workingDirectory": ".",
   "baseUrl": "http://127.0.0.1:8080",
-  "readyUrl": "http://127.0.0.1:8080",
-  "readyTimeoutSeconds": 45,
   "resultsFile": "qa-artifacts/visual-baselines/current/visual-baseline-results.json",
   "manifestFile": "qa-artifacts/visual-baselines/current/visual-screenshot-manifest.json",
   "screenshotsRoot": "qa-artifacts/visual-baselines/current",
@@ -185,7 +179,7 @@ Additional fields for missing-baseline skips: `baselineAvailable`, `currentResul
 | `desktop` | 1440 | 900 | 1 | No | No |
 | `mobile` | 390 | 844 | 3 | Yes | Yes |
 
-## Readiness defaults (fixed in v1)
+## Capture defaults
 
 | Setting | Value |
 |:--------|:------|
@@ -197,14 +191,14 @@ Additional fields for missing-baseline skips: `baselineAvailable`, `currentResul
 
 Primary integration path:
 
-- `actions/publish-visual-baseline` — baseline capture, staging, and upload
-- `actions/run-visual-pr-diff` — end-to-end PR diff pipeline
+- `actions/baseline` — baseline capture, staging, and upload
+- `actions/pr-diff` — end-to-end PR diff pipeline
 
 The lower-level actions remain available for advanced consumers, but new consumers should prefer the wrapper actions.
 
 ## Environment variables (advanced / low-level usage)
 
-The `lib/` modules read the following environment variables as fallbacks when options are not passed programmatically. These are set automatically by the wrapper actions and do not need to be set manually when using `publish-visual-baseline` or `run-visual-pr-diff`. They are documented here for consumers building custom orchestration on top of the low-level actions.
+The `lib/` modules read the following environment variables as fallbacks when options are not passed programmatically. These are set automatically by the wrapper actions and do not need to be set manually when using `baseline` or `pr-diff`. They are documented here for consumers building custom orchestration on top of the low-level actions.
 
 | Variable | Module | Description |
 |:---------|:-------|:------------|

@@ -49,8 +49,6 @@ function makeConfig(routes, diff = {}) {
         baselineArtifactName: 'test-visual-baseline',
         workingDirectory: '.',
         baseUrl: 'http://localhost:3000',
-        readyUrl: 'http://localhost:3000',
-        readyTimeoutSeconds: 30,
         resultsFile: 'visual-baseline-results.json',
         manifestFile: 'visual-screenshot-manifest.json',
         screenshotsRoot: '.',
