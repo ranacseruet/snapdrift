@@ -118,8 +118,8 @@ runs:
           const { pathToFileURL } = require('url');
 
           const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
-          const { loadVisualRegressionConfig, selectConfiguredRoutes, selectRoutesForChangedFiles, splitCommaList } = await import(pathToFileURL(configModulePath));
-          const { config } = await loadVisualRegressionConfig(process.env.REPO_CONFIG_PATH || undefined);
+          const { loadSnapdriftConfig, selectConfiguredRoutes, selectRoutesForChangedFiles, splitCommaList } = await import(pathToFileURL(configModulePath));
+          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const allRouteIds = (config.routes || []).map((route) => route.id);
           const explicitRouteIds = splitCommaList(process.env.ROUTE_IDS);
 
@@ -176,7 +176,7 @@ runs:
             core.warning(`Unable to inspect PR files for SnapDrift scope; running all configured captures instead. ${error.message}`);
             setOutputs({
               shouldRun: true,
-              reason: 'visual_scope_check_failed',
+              reason: 'snapdrift_scope_check_failed',
               selectedRouteIds: allRouteIds
             });
           }
@@ -306,10 +306,10 @@ runs:
 
         const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-visual-routes.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
-        const { runVisualBaselineCapture } = await import(pathToFileURL(captureModulePath));
+        const { runBaselineCapture } = await import(pathToFileURL(captureModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
-        const result = await runVisualBaselineCapture({
+        const result = await runBaselineCapture({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           routeIds: splitCommaList(process.env.ROUTE_IDS)
         });
@@ -343,14 +343,14 @@ runs:
 
         const compareModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
-        const { runVisualDiffCli } = await import(pathToFileURL(compareModulePath));
+        const { runDriftCheckCli } = await import(pathToFileURL(compareModulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
         const resolvedOutDir = path.resolve('qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
         const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
 
-        await runVisualDiffCli({
+        await runDriftCheckCli({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
@@ -383,10 +383,10 @@ runs:
         import { pathToFileURL } from 'node:url';
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
-        const { writeVisualDiffSummary } = await import(pathToFileURL(modulePath));
+        const { writeDriftSummary } = await import(pathToFileURL(modulePath));
 
-        const result = await writeVisualDiffSummary({
-          reason: process.env.REASON || 'no_visual_relevant_changes',
+        const result = await writeDriftSummary({
+          reason: process.env.REASON || 'no_snapdrift_relevant_changes',
           selectedRouteIds: []
         });
 
@@ -413,9 +413,9 @@ runs:
         import { pathToFileURL } from 'node:url';
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-summary.mjs');
-        const { writeVisualDiffSummary } = await import(pathToFileURL(modulePath));
+        const { writeDriftSummary } = await import(pathToFileURL(modulePath));
 
-        const result = await writeVisualDiffSummary({
+        const result = await writeDriftSummary({
           reason: 'missing_main_baseline_artifact',
           message: process.env.MESSAGE || undefined,
           baselineAvailable: false,
@@ -450,9 +450,9 @@ runs:
         import { pathToFileURL } from 'node:url';
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-visual-artifacts.mjs');
-        const { stageVisualArtifacts } = await import(pathToFileURL(modulePath));
+        const { stageArtifacts } = await import(pathToFileURL(modulePath));
 
-        const result = await stageVisualArtifacts({
+        const result = await stageArtifacts({
           artifactType: 'diff',
           summaryJsonPath: process.env.SUMMARY_JSON_PATH || undefined,
           summaryMarkdownPath: process.env.SUMMARY_MARKDOWN_PATH || undefined,
@@ -498,8 +498,8 @@ runs:
           const { pathToFileURL } = require('url');
 
           const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
-          const LEGACY_PR_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
-          const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER];
+          const LEGACY_REPORT_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
+          const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER];
           const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
 
           const summaryPath = process.env.SUMMARY_PATH;
@@ -522,10 +522,10 @@ runs:
           }
 
           const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-diff-pr-comment.mjs');
-          const { buildPrCommentBody } = await import(pathToFileURL(modulePath));
+          const { buildReportCommentBody } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-          const body = buildPrCommentBody(summary, {
+          const body = buildReportCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
             runUrl: process.env.RUN_URL || ''
           });
@@ -578,12 +578,12 @@ runs:
         import { pathToFileURL } from 'node:url';
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
-        const { shouldFailVisualDiff, formatVisualDiffFailureMessage } = await import(pathToFileURL(modulePath));
+        const { shouldFailDriftCheck, formatDriftFailureMessage } = await import(pathToFileURL(modulePath));
         const summaryModulePath = path.resolve('qa-artifacts/snapdrift/drift/current/summary.json');
         const summary = JSON.parse(await fs.readFile(summaryModulePath, 'utf8'));
 
-        if (shouldFailVisualDiff(summary)) {
-          throw new Error(formatVisualDiffFailureMessage(summary.diffMode, summary));
+        if (shouldFailDriftCheck(summary)) {
+          throw new Error(formatDriftFailureMessage(summary.diffMode, summary));
         }
         EOF
 

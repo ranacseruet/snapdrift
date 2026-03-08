@@ -146,7 +146,7 @@ Legacy readers still accept the previous flat drift bundle layout.
 ```json
 {
   "status": "skipped",
-  "reason": "no_visual_relevant_changes",
+  "reason": "no_snapdrift_relevant_changes",
   "message": "No drift-relevant changes were detected in this pull request.",
   "selectedRoutes": []
 }

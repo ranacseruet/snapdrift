@@ -8,7 +8,7 @@ describe('SnapDrift skipped summary helpers', () => {
     let tempDir;
 
     beforeEach(async () => {
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-diff-summary-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-summary-'));
     });
 
     afterEach(async () => {
@@ -18,10 +18,10 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('writes the no-drift-relevant-changes skipped summary with default messaging', async () => {
-        const { writeVisualDiffSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { writeDriftSummary } = await import('../lib/visual-diff-summary.mjs');
 
-        const result = await writeVisualDiffSummary({
-            reason: 'no_visual_relevant_changes',
+        const result = await writeDriftSummary({
+            reason: 'no_snapdrift_relevant_changes',
             outDir: tempDir
         });
 
@@ -30,7 +30,7 @@ describe('SnapDrift skipped summary helpers', () => {
 
         expect(summary).toEqual({
             status: 'skipped',
-            reason: 'no_visual_relevant_changes',
+            reason: 'no_snapdrift_relevant_changes',
             message: 'No drift-relevant changes were detected in this pull request.',
             selectedRoutes: []
         });
@@ -42,9 +42,9 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('writes the missing-baseline skipped summary with current run metadata', async () => {
-        const { writeVisualDiffSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { writeDriftSummary } = await import('../lib/visual-diff-summary.mjs');
 
-        const result = await writeVisualDiffSummary({
+        const result = await writeDriftSummary({
             reason: 'missing_main_baseline_artifact',
             message: 'No non-expired SnapDrift baseline artifact named ui-foundation-snapdrift-baseline was found.',
             baselineAvailable: false,
@@ -69,20 +69,20 @@ describe('SnapDrift skipped summary helpers', () => {
     });
 
     it('falls back to an underscore-decoded reason string for unknown skip reasons', async () => {
-        const { buildVisualDiffSummary } = await import('../lib/visual-diff-summary.mjs');
+        const { buildDriftSummary } = await import('../lib/visual-diff-summary.mjs');
 
-        const { summary, markdown } = buildVisualDiffSummary({
+        const { summary, markdown } = buildDriftSummary({
             status: 'incomplete',
-            reason: 'visual_scope_check_failed'
+            reason: 'snapdrift_scope_check_failed'
         });
 
         expect(summary).toEqual({
             status: 'incomplete',
-            reason: 'visual_scope_check_failed',
-            message: 'visual scope check failed',
+            reason: 'snapdrift_scope_check_failed',
+            message: 'snapdrift scope check failed',
             selectedRoutes: []
         });
         expect(markdown).toContain('- Status: incomplete');
-        expect(markdown).toContain('- Reason: visual scope check failed');
+        expect(markdown).toContain('- Reason: snapdrift scope check failed');
     });
 });

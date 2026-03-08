@@ -1,12 +1,12 @@
 /** @jest-environment node */
 
-describe('buildPrCommentBody', () => {
-    let buildPrCommentBody;
+describe('buildReportCommentBody', () => {
+    let buildReportCommentBody;
     let PR_COMMENT_MARKER;
-    let LEGACY_PR_COMMENT_MARKER;
+    let LEGACY_REPORT_COMMENT_MARKER;
 
     beforeAll(async () => {
-        ({ buildPrCommentBody, PR_COMMENT_MARKER, LEGACY_PR_COMMENT_MARKER } = await import('../lib/visual-diff-pr-comment.mjs'));
+        ({ buildReportCommentBody, PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER } = await import('../lib/visual-diff-pr-comment.mjs'));
     });
 
     const cleanSummary = {
@@ -22,31 +22,31 @@ describe('buildPrCommentBody', () => {
     };
 
     it('starts with the SnapDrift marker and keeps the legacy marker available', () => {
-        const body = buildPrCommentBody(cleanSummary);
+        const body = buildReportCommentBody(cleanSummary);
         expect(body.startsWith(PR_COMMENT_MARKER)).toBe(true);
-        expect(LEGACY_PR_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
+        expect(LEGACY_REPORT_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
     });
 
     it('uses tabular format for metrics', () => {
-        const body = buildPrCommentBody(cleanSummary);
+        const body = buildReportCommentBody(cleanSummary);
         expect(body).toContain('| Signal | Count |');
         expect(body).toContain('| Stable captures | 2 |');
         expect(body).toContain('| Drift signals | 0 |');
     });
 
     it('shows status icon and label in heading', () => {
-        const body = buildPrCommentBody(cleanSummary);
+        const body = buildReportCommentBody(cleanSummary);
         expect(body).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="20" height="20" />');
         expect(body).toContain('## ✅ SnapDrift Report — Clean');
     });
 
     it('shows drift-detected status', () => {
-        const body = buildPrCommentBody({ ...cleanSummary, status: 'changes-detected', changedScreenshots: 1 });
+        const body = buildReportCommentBody({ ...cleanSummary, status: 'changes-detected', changedScreenshots: 1 });
         expect(body).toContain('🟡 SnapDrift Report — Drift detected');
     });
 
     it('shows skipped status', () => {
-        const body = buildPrCommentBody({
+        const body = buildReportCommentBody({
             status: 'skipped',
             selectedRoutes: [],
             message: 'No drift-relevant changes.',
@@ -57,7 +57,7 @@ describe('buildPrCommentBody', () => {
     });
 
     it('includes drift signals in a details section with table', () => {
-        const body = buildPrCommentBody({
+        const body = buildReportCommentBody({
             ...cleanSummary,
             status: 'changes-detected',
             changedScreenshots: 1,
@@ -74,7 +74,7 @@ describe('buildPrCommentBody', () => {
             viewport: 'desktop',
             mismatchRatio: 0.01
         }));
-        const body = buildPrCommentBody({
+        const body = buildReportCommentBody({
             ...cleanSummary,
             changedScreenshots: 25,
             changed
@@ -85,7 +85,7 @@ describe('buildPrCommentBody', () => {
     });
 
     it('includes dimension shifts in a details section', () => {
-        const body = buildPrCommentBody({
+        const body = buildReportCommentBody({
             ...cleanSummary,
             status: 'incomplete',
             dimensionChanges: [{
@@ -104,7 +104,7 @@ describe('buildPrCommentBody', () => {
     });
 
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
-        const body = buildPrCommentBody(
+        const body = buildReportCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
             {
                 artifactName: 'snapdrift-pr-42',
@@ -120,24 +120,24 @@ describe('buildPrCommentBody', () => {
     });
 
     it('keeps the powered-by footer when no metadata is available', () => {
-        const body = buildPrCommentBody(cleanSummary);
+        const body = buildReportCommentBody(cleanSummary);
         expect(body).not.toContain('<sub>SnapDrift ·');
         expect(body).toContain('Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a>');
     });
 
     it('omits drift details when none changed', () => {
-        const body = buildPrCommentBody(cleanSummary);
+        const body = buildReportCommentBody(cleanSummary);
         expect(body).not.toContain('<details>');
     });
 
     it('shows selected route count from array length', () => {
-        const body = buildPrCommentBody({ ...cleanSummary, selectedRoutes: ['a', 'b', 'c'] });
+        const body = buildReportCommentBody({ ...cleanSummary, selectedRoutes: ['a', 'b', 'c'] });
         expect(body).toContain('| Selected routes | 3 |');
     });
 
     it('shows "all" when selectedRoutes is not an array', () => {
         const { selectedRoutes: _selectedRoutes, ...noRoutes } = cleanSummary;
-        const body = buildPrCommentBody({ ...noRoutes, errors: [] });
+        const body = buildReportCommentBody({ ...noRoutes, errors: [] });
         expect(body).toContain('| Selected routes | all |');
     });
 });

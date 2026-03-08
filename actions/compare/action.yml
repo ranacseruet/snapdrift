@@ -118,14 +118,14 @@ runs:
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-visual-results.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/visual-regression-config.mjs');
-        const { runVisualDiffCli } = await import(pathToFileURL(modulePath));
+        const { runDriftCheckCli } = await import(pathToFileURL(modulePath));
         const { splitCommaList } = await import(pathToFileURL(configModulePath));
 
         const resolvedOutDir = path.resolve(process.env.OUT_DIR || 'qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.resolve(process.env.SUMMARY_PATH || path.join(resolvedOutDir, 'summary.json'));
         const resolvedMarkdownPath = path.resolve(process.env.MARKDOWN_PATH || path.join(resolvedOutDir, 'summary.md'));
 
-        await runVisualDiffCli({
+        await runDriftCheckCli({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
