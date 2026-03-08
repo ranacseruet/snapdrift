@@ -29,8 +29,6 @@ This file is the single source of truth for route coverage, output paths, and en
   "baselineArtifactName": "my-app-visual-baseline",
   "workingDirectory": ".",
   "baseUrl": "http://127.0.0.1:8080",
-  "readyUrl": "http://127.0.0.1:8080",
-  "readyTimeoutSeconds": 45,
   "resultsFile": "qa-artifacts/visual-baselines/current/visual-baseline-results.json",
   "manifestFile": "qa-artifacts/visual-baselines/current/visual-screenshot-manifest.json",
   "screenshotsRoot": "qa-artifacts/visual-baselines/current",
@@ -53,7 +51,7 @@ In your main CI workflow, after the app is started and reachable:
 
 ```yaml
 - name: Publish visual baseline
-  uses: ranacseruet/snapdrift/actions/publish-visual-baseline@v1
+  uses: ranacseruet/snapdrift/actions/baseline@v1
   with:
     repo-config-path: .github/visual-regression.json
     artifact-retention-days: '30'
@@ -77,7 +75,7 @@ Then add the diff step after your app is running:
 
 ```yaml
 - name: Run visual PR diff
-  uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
+  uses: ranacseruet/snapdrift/actions/pr-diff@v1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/visual-regression.json
@@ -118,7 +116,7 @@ jobs:
           done
 
       - name: Run visual PR diff
-        uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
+        uses: ranacseruet/snapdrift/actions/pr-diff@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/visual-regression.json
@@ -159,7 +157,7 @@ jobs:
           done
 
       - name: Run visual PR diff
-        uses: ranacseruet/snapdrift/actions/run-visual-pr-diff@v1
+        uses: ranacseruet/snapdrift/actions/pr-diff@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/visual-regression.json
@@ -232,6 +230,3 @@ Expected when a PR adds or removes content that changes page height. Recorded as
 
 **Route appears in `errors[]` in the diff summary**
 The Playwright capture failed (navigation timeout, app not ready, crash). Check the workflow logs. Ensure the app is fully started and `baseUrl` is reachable before the action runs. The navigation timeout is fixed at 30 seconds — if your app or a specific route consistently takes longer to load, the app must be fully warm before the action step runs.
-
-**`readyUrl` or `readyTimeoutSeconds` seem to be ignored**
-These fields drive the readiness poll in the reusable workflow templates. If you're using the composite actions directly, implement the readiness wait in your own steps.

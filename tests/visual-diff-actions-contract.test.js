@@ -48,28 +48,28 @@ describe('visual diff action contracts', () => {
     });
 
     it('defines the wrapper actions as the primary public entrypoints', async () => {
-        const publishBaseline = await readAction('actions/publish-visual-baseline/action.yml');
-        const runPrDiff = await readAction('actions/run-visual-pr-diff/action.yml');
+        const baseline = await readAction('actions/baseline/action.yml');
+        const prDiff = await readAction('actions/pr-diff/action.yml');
 
-        expect(publishBaseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
-        expect(publishBaseline.inputs['route-ids'].default).toBe('');
-        expect(publishBaseline.inputs['artifact-retention-days'].default).toBe('30');
-        expect(publishBaseline.inputs['upload-artifact'].default).toBe('true');
-        expect(publishBaseline.outputs['artifact-name']).toBeTruthy();
-        expect(publishBaseline.outputs['bundle-dir']).toBeTruthy();
+        expect(baseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+        expect(baseline.inputs['route-ids'].default).toBe('');
+        expect(baseline.inputs['artifact-retention-days'].default).toBe('30');
+        expect(baseline.inputs['upload-artifact'].default).toBe('true');
+        expect(baseline.outputs['artifact-name']).toBeTruthy();
+        expect(baseline.outputs['bundle-dir']).toBeTruthy();
 
-        expect(runPrDiff.inputs['github-token'].required).toBe(true);
-        expect(runPrDiff.inputs['comment-on-pr'].default).toBe('true');
-        expect(runPrDiff.inputs['baseline-workflow-id'].default).toBe('ci.yml');
-        expect(runPrDiff.inputs['baseline-branch'].default).toBe('main');
-        expect(runPrDiff.outputs['status']).toBeTruthy();
-        expect(runPrDiff.outputs['summary-path']).toBeTruthy();
-        expect(runPrDiff.outputs['bundle-dir']).toBeTruthy();
+        expect(prDiff.inputs['github-token'].required).toBe(true);
+        expect(prDiff.inputs['comment-on-pr'].default).toBe('true');
+        expect(prDiff.inputs['baseline-workflow-id'].default).toBe('ci.yml');
+        expect(prDiff.inputs['baseline-branch'].default).toBe('main');
+        expect(prDiff.outputs['status']).toBeTruthy();
+        expect(prDiff.outputs['summary-path']).toBeTruthy();
+        expect(prDiff.outputs['bundle-dir']).toBeTruthy();
     });
 
     it('wrapper actions self-provision Node so non-Node consumers do not need to', async () => {
-        const publishBaseline = await readAction('actions/publish-visual-baseline/action.yml');
-        const runPrDiff = await readAction('actions/run-visual-pr-diff/action.yml');
+        const baseline = await readAction('actions/baseline/action.yml');
+        const prDiff = await readAction('actions/pr-diff/action.yml');
 
         function hasSetupNodeStep(action) {
             return (action.runs?.steps || []).some(
@@ -77,7 +77,7 @@ describe('visual diff action contracts', () => {
             );
         }
 
-        expect(hasSetupNodeStep(publishBaseline)).toBe(true);
-        expect(hasSetupNodeStep(runPrDiff)).toBe(true);
+        expect(hasSetupNodeStep(baseline)).toBe(true);
+        expect(hasSetupNodeStep(prDiff)).toBe(true);
     });
 });

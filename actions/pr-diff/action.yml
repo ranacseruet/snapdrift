@@ -1,5 +1,5 @@
-name: Run Visual PR Diff
-description: Run the end-to-end PR visual diff pipeline, including scope resolution, skipped-summary handling, artifact upload, PR commenting, and enforcement.
+name: SnapDrift PR Diff
+description: Run the end-to-end PR diff pipeline, including scope resolution, skipped-summary handling, artifact upload, PR commenting, and enforcement.
 
 inputs:
   github-token:
@@ -83,7 +83,7 @@ runs:
       run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
 
     - name: Set up Node.js
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
       with:
         node-version: '22'
 

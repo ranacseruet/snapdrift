@@ -78,14 +78,14 @@ describe('action YML structural integrity', () => {
 
     it('covers the expected set of action directories', () => {
         const expected = [
+            'baseline',
             'capture-visual-routes',
             'compare-visual-results',
             'determine-visual-diff-scope',
             'evaluate-visual-diff-outcome',
-            'publish-visual-baseline',
+            'pr-diff',
             'publish-visual-pr-comment',
             'resolve-baseline-artifact',
-            'run-visual-pr-diff',
             'stage-visual-artifacts'
         ];
         expect(actionDirs.sort()).toEqual(expected.sort());
@@ -97,16 +97,16 @@ describe('action YML structural integrity', () => {
 // ---------------------------------------------------------------------------
 
 describe('wrapper action completeness', () => {
-    let publishBaseline;
-    let runPrDiff;
+    let baseline;
+    let prDiff;
 
     beforeAll(async () => {
-        publishBaseline = await readAction('publish-visual-baseline');
-        runPrDiff = await readAction('run-visual-pr-diff');
+        baseline = await readAction('baseline');
+        prDiff = await readAction('pr-diff');
     });
 
-    it('publish-visual-baseline exposes all required outputs', () => {
-        const outputNames = Object.keys(publishBaseline.outputs || {});
+    it('baseline exposes all required outputs', () => {
+        const outputNames = Object.keys(baseline.outputs || {});
         expect(outputNames).toContain('artifact-name');
         expect(outputNames).toContain('bundle-dir');
         expect(outputNames).toContain('results-file');
@@ -115,8 +115,8 @@ describe('wrapper action completeness', () => {
         expect(outputNames).toContain('selected-route-ids');
     });
 
-    it('run-visual-pr-diff exposes all required outputs', () => {
-        const outputNames = Object.keys(runPrDiff.outputs || {});
+    it('pr-diff exposes all required outputs', () => {
+        const outputNames = Object.keys(prDiff.outputs || {});
         expect(outputNames).toContain('should-run');
         expect(outputNames).toContain('scope-reason');
         expect(outputNames).toContain('selected-route-ids');
@@ -128,16 +128,16 @@ describe('wrapper action completeness', () => {
         expect(outputNames).toContain('bundle-dir');
     });
 
-    it('run-visual-pr-diff requires github-token', () => {
-        expect(runPrDiff.inputs['github-token'].required).toBe(true);
+    it('pr-diff requires github-token', () => {
+        expect(prDiff.inputs['github-token'].required).toBe(true);
     });
 
-    it('publish-visual-baseline defaults repo-config-path to .github/visual-regression.json', () => {
-        expect(publishBaseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+    it('baseline defaults repo-config-path to .github/visual-regression.json', () => {
+        expect(baseline.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
     });
 
-    it('run-visual-pr-diff defaults repo-config-path to .github/visual-regression.json', () => {
-        expect(runPrDiff.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
+    it('pr-diff defaults repo-config-path to .github/visual-regression.json', () => {
+        expect(prDiff.inputs['repo-config-path'].default).toBe('.github/visual-regression.json');
     });
 });
 
@@ -178,10 +178,10 @@ describe('viewport presets match contract', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Readiness defaults match documented contract
+// Capture defaults match documented contract
 // ---------------------------------------------------------------------------
 
-describe('readiness defaults match contract', () => {
+describe('capture defaults match contract', () => {
     let VISUAL_NAVIGATION_TIMEOUT_MS;
     let VISUAL_SETTLE_DELAY_MS;
 
@@ -222,8 +222,6 @@ describe('config schema validation', () => {
         baselineArtifactName: 'test-baseline',
         workingDirectory: '.',
         baseUrl: 'http://localhost:3000',
-        readyUrl: 'http://localhost:3000',
-        readyTimeoutSeconds: 30,
         resultsFile: 'results.json',
         manifestFile: 'manifest.json',
         screenshotsRoot: 'screenshots',
@@ -249,14 +247,6 @@ describe('config schema validation', () => {
 
     it('rejects config missing workingDirectory', async () => {
         const { workingDirectory, ...invalid } = validConfig;
-        const configPath = path.join(tempDir, 'invalid.json');
-        await fs.writeFile(configPath, JSON.stringify(invalid));
-
-        await expect(loadVisualRegressionConfig(configPath)).rejects.toThrow(/Invalid/);
-    });
-
-    it('rejects config missing readyTimeoutSeconds', async () => {
-        const { readyTimeoutSeconds, ...invalid } = validConfig;
         const configPath = path.join(tempDir, 'invalid.json');
         await fs.writeFile(configPath, JSON.stringify(invalid));
 
@@ -326,28 +316,6 @@ describe('enforcement modes cover the full contract', () => {
             expect(() => shouldFailVisualDiff({ ...clean, diffMode: mode })).not.toThrow();
         });
     }
-});
-
-// ---------------------------------------------------------------------------
-// Staged workflow templates are valid YAML
-// ---------------------------------------------------------------------------
-
-describe('staged workflow templates', () => {
-    const workflowDir = path.join(ACTION_ROOT, '.github', 'workflows');
-
-    it('visual-baseline-publish.yml is valid YAML with workflow_call trigger', async () => {
-        const raw = await fs.readFile(path.join(workflowDir, 'visual-baseline-publish.yml'), 'utf8');
-        const parsed = yaml.load(raw);
-        expect(parsed.on.workflow_call).toBeDefined();
-        expect(parsed.on.workflow_call.inputs['start-command'].required).toBe(true);
-    });
-
-    it('visual-pr-diff.yml is valid YAML with workflow_call trigger', async () => {
-        const raw = await fs.readFile(path.join(workflowDir, 'visual-pr-diff.yml'), 'utf8');
-        const parsed = yaml.load(raw);
-        expect(parsed.on.workflow_call).toBeDefined();
-        expect(parsed.on.workflow_call.inputs['start-command'].required).toBe(true);
-    });
 });
 
 // ---------------------------------------------------------------------------
