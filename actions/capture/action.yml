@@ -1,4 +1,4 @@
-name: Capture Visual Routes
+name: SnapDrift Capture
 description: Capture configured visual regression routes and emit the standard results and manifest files.
 
 inputs:

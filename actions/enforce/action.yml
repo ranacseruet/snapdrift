@@ -1,4 +1,4 @@
-name: Evaluate Visual Diff Outcome
+name: SnapDrift Enforce
 description: Evaluate the diff summary against diff.mode and fail when required.
 
 inputs:

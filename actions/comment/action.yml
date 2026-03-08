@@ -1,4 +1,4 @@
-name: Publish Visual PR Comment
+name: SnapDrift Comment
 description: Upsert a PR comment with the visual diff summary.
 
 inputs:
