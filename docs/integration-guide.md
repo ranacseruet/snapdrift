@@ -4,10 +4,16 @@ This guide walks through setting up SnapDrift in a consumer repo from scratch.
 
 ## Prerequisites
 
+> **v1 supports Node-based apps on Ubuntu runners only.**
+> - The runner must have Node 22+ available; SnapDrift uses it internally for its own scripts.
+> - The consumer app is expected to be a Node project. Non-Node consumers (Python, Go, Ruby, etc.) are not yet supported.
+> - The runner must be Ubuntu-compatible (`ubuntu-latest` or equivalent). SnapDrift installs Playwright's Chromium and system dependencies via `apt`; `windows-latest` and `macos-latest` runners are not supported in v1.
+> - Playwright Chromium is installed automatically by SnapDrift on each run (~150 MB, takes 1–2 min). No manual Playwright setup is required, but the runner must have outbound network access to reach the Playwright CDN.
+
 Your repo must handle its own:
 
 - Checkout
-- Node setup and dependency installation
+- Node setup (≥22) and dependency installation
 - App build
 - App startup and readiness wait
 - App shutdown
@@ -182,7 +188,7 @@ Add `issues: write` and `pull-requests: write` permissions to the PR workflow jo
 Expected when a PR adds or removes content that changes page height. Recorded as a "dimension change" in the diff summary; pixel comparison is skipped. Merge the PR and let the main CI re-capture the baseline with the new dimensions.
 
 **Route appears in `errors[]` in the diff summary**
-The Playwright capture failed (navigation timeout, app not ready, crash). Check the workflow logs. Ensure the app is fully started and `baseUrl` is reachable before the action runs.
+The Playwright capture failed (navigation timeout, app not ready, crash). Check the workflow logs. Ensure the app is fully started and `baseUrl` is reachable before the action runs. The navigation timeout is fixed at 30 seconds — if your app or a specific route consistently takes longer to load, the app must be fully warm before the action step runs.
 
 **`readyUrl` or `readyTimeoutSeconds` seem to be ignored**
 These fields drive the readiness poll in the reusable workflow templates. If you're using the composite actions directly, implement the readiness wait in your own steps.

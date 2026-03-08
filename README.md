@@ -1,5 +1,7 @@
 # SnapDrift
 
+![SnapDrift](assets/snapdrift-logo-banner.png)
+
 ![CI](https://github.com/ranacseruet/snapdrift/actions/workflows/ci.yml/badge.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
@@ -75,6 +77,8 @@ Start with `report-only` to accumulate baselines without affecting build status.
 
 ## Known limitations
 
+- **Node apps only (v1)** — the runner must have Node 22+ available and the consumer app is expected to be Node-based; non-Node consumers (Python, Go, Ruby, etc.) are not yet supported
+- **Ubuntu runners only (v1)** — Playwright's system dependency installer (`--with-deps`) requires apt; `windows-latest` and `macos-latest` runners are not supported
 - Full-page capture only — no sub-region masking or cropping
 - Fixed viewport presets: `desktop` (1440×900) and `mobile` (390×844)
 - Single `diff.threshold` applies to all routes — no per-route overrides

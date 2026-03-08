@@ -29,13 +29,13 @@ The shared layer reads runtime visual regression behavior from `.github/visual-r
 | `id` | `string` | Unique identifier for the route (used for matching across runs) |
 | `path` | `string` | URL path appended to `baseUrl` |
 | `viewport` | `string` | One of: `desktop`, `mobile` |
-| `changePaths` | `string[]` | Optional. File prefixes that scope this route to specific changes |
+| `changePaths` | `string[]` | Optional. File path prefixes matched with `startsWith` against PR-changed files. No glob patterns or regex. Use a trailing slash for directory scoping (e.g. `src/pages/home/`). |
 
 ### Optional fields
 
 | Field | Type | Description |
 |:------|:-----|:------------|
-| `selection.sharedPrefixes` | `string[]` | File prefixes that trigger all routes |
+| `selection.sharedPrefixes` | `string[]` | File path prefixes (matched with `startsWith`) that trigger all routes when any changed file matches |
 | `selection.sharedExact` | `string[]` | Exact filenames that trigger all routes |
 
 ### Example
