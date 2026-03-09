@@ -36,9 +36,13 @@ describe('SnapDrift skipped summary helpers', () => {
         });
         expect(path.basename(result.summaryPath)).toBe('summary.json');
         expect(path.basename(result.markdownPath)).toBe('summary.md');
-        expect(markdown).toContain('# SnapDrift Report');
-        expect(markdown).toContain('- Status: skipped');
-        expect(markdown).toContain('- Reason: no drift-relevant changes were detected in this pull request');
+        expect(markdown).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="24" height="24" />');
+        expect(markdown).toContain('# ⏭️ SnapDrift Report — Skipped');
+        expect(markdown).toContain('| Selected routes | Baseline available | Current capture |');
+        expect(markdown).toContain('| 0 | n/a | n/a |');
+        expect(markdown).toContain('> **Reason:** no drift-relevant changes were detected in this pull request');
+        expect(markdown).toContain('> **Details:** No drift-relevant changes were detected in this pull request.');
+        expect(markdown).toContain('Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a>');
     });
 
     it('writes the missing-baseline skipped summary with current run metadata', async () => {
@@ -64,7 +68,7 @@ describe('SnapDrift skipped summary helpers', () => {
             baselineAvailable: false,
             currentResultsPath: '/tmp/current-results.json'
         });
-        expect(markdown).toContain('- Current capture: `/tmp/current-results.json`');
+        expect(markdown).toContain('| 2 | false | `/tmp/current-results.json` |');
         expect(markdown).toContain('## Next action');
     });
 
@@ -82,7 +86,7 @@ describe('SnapDrift skipped summary helpers', () => {
             message: 'snapdrift scope check failed',
             selectedRoutes: []
         });
-        expect(markdown).toContain('- Status: incomplete');
-        expect(markdown).toContain('- Reason: snapdrift scope check failed');
+        expect(markdown).toContain('# ⚠️ SnapDrift Report — Incomplete');
+        expect(markdown).toContain('> **Reason:** snapdrift scope check failed');
     });
 });

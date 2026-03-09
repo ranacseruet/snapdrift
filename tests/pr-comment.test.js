@@ -27,11 +27,12 @@ describe('buildReportCommentBody', () => {
         expect(LEGACY_REPORT_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
     });
 
-    it('uses tabular format for metrics', () => {
+    it('uses a concise high-signal metrics table', () => {
         const body = buildReportCommentBody(cleanSummary);
         expect(body).toContain('| Signal | Count |');
-        expect(body).toContain('| Stable captures | 2 |');
         expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Errors |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 
     it('shows status icon and label in heading', () => {
@@ -103,6 +104,23 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('Next step');
     });
 
+    it('includes actionable error details near the top of the report', () => {
+        const body = buildReportCommentBody({
+            ...cleanSummary,
+            status: 'incomplete',
+            message: 'Comparison finished with partial failures.',
+            errors: [{
+                id: 'home-desktop',
+                viewport: 'desktop',
+                message: 'Current capture failed: Navigation timeout'
+            }]
+        });
+        expect(body).toContain('> **Note:** Comparison finished with partial failures.');
+        expect(body).toContain('<details><summary>Error details</summary>');
+        expect(body).toContain('| Route | Viewport | Error |');
+        expect(body).toContain('| home-desktop | desktop | Current capture failed: Navigation timeout |');
+    });
+
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
         const body = buildReportCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
@@ -130,14 +148,16 @@ describe('buildReportCommentBody', () => {
         expect(body).not.toContain('<details>');
     });
 
-    it('shows selected route count from array length', () => {
+    it('keeps the concise metric table when selected routes are provided', () => {
         const body = buildReportCommentBody({ ...cleanSummary, selectedRoutes: ['a', 'b', 'c'] });
-        expect(body).toContain('| Selected routes | 3 |');
+        expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 
-    it('shows "all" when selectedRoutes is not an array', () => {
+    it('keeps the concise metric table when selectedRoutes is omitted', () => {
         const { selectedRoutes: _selectedRoutes, ...noRoutes } = cleanSummary;
         const body = buildReportCommentBody({ ...noRoutes, errors: [] });
-        expect(body).toContain('| Selected routes | all |');
+        expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 });

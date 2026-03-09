@@ -737,11 +737,15 @@ describe('generateDriftReport', () => {
 
             const { markdown } = await generateDriftReport({ ...opts, routeIds: [routeId] });
 
+            expect(markdown).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="24" height="24" />');
             expect(markdown).toContain('SnapDrift Report');
             expect(markdown).toContain('Clean');
+            expect(markdown).toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
+            expect(markdown).toContain('| 1 | 1 | `report-only` | 0.01 |');
             expect(markdown).toContain('## Drift signals');
             expect(markdown).toContain('## Dimension shifts');
             expect(markdown).toContain('## Comparison errors');
+            expect(markdown).toContain('Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a>');
         });
 
         it('lists changed screenshots with mismatch details', async () => {
