@@ -80,4 +80,18 @@ describe('SnapDrift action contracts', () => {
         expect(hasSetupNodeStep(baseline)).toBe(true);
         expect(hasSetupNodeStep(prDiff)).toBe(true);
     });
+
+    it('pr-diff keeps its baseline lookup and fallback comment paths wired correctly', async () => {
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+        const steps = prDiff.runs?.steps || [];
+        const baselineStep = steps.find((step) => step.id === 'baseline');
+        const commentStep = steps.find(
+            (step) => step.with?.script && String(step.with.script).includes('SnapDrift did not produce a summary.')
+        );
+
+        expect(baselineStep.env.INPUT_ARTIFACT_NAME).toBeUndefined();
+        expect(baselineStep.with.script).toContain('const artifactName = config.baselineArtifactName;');
+        expect(commentStep.with.script).toContain("const repoUrl = 'https://github.com/ranacseruet/snapdrift';");
+        expect(commentStep.with.script).toContain('Powered by <a href="${repoUrl}">SnapDrift</a>');
+    });
 });
