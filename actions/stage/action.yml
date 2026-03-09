@@ -1,0 +1,116 @@
+name: SnapDrift Stage
+description: Stage baseline or drift artifacts into the SnapDrift bundle structure before upload.
+
+inputs:
+  artifact-type:
+    description: Either baseline or diff.
+    required: true
+  bundle-dir:
+    description: Output bundle directory.
+    required: false
+    default: ''
+  results-path:
+    description: Baseline results path for baseline artifact staging.
+    required: false
+    default: ''
+  manifest-path:
+    description: Baseline manifest path for baseline artifact staging.
+    required: false
+    default: ''
+  screenshots-dir:
+    description: Screenshots directory for baseline artifact staging.
+    required: false
+    default: ''
+  summary-json-path:
+    description: Diff summary JSON path.
+    required: false
+    default: ''
+  summary-markdown-path:
+    description: Diff summary markdown path.
+    required: false
+    default: ''
+  baseline-results-path:
+    description: Baseline results path for diff artifact staging.
+    required: false
+    default: ''
+  current-results-path:
+    description: Current results path for diff artifact staging.
+    required: false
+    default: ''
+  baseline-manifest-path:
+    description: Baseline manifest path for diff artifact staging.
+    required: false
+    default: ''
+  current-manifest-path:
+    description: Current manifest path for diff artifact staging.
+    required: false
+    default: ''
+  baseline-screenshots-dir:
+    description: Baseline screenshots dir for diff artifact staging.
+    required: false
+    default: ''
+  current-screenshots-dir:
+    description: Current screenshots dir for diff artifact staging.
+    required: false
+    default: ''
+
+outputs:
+  bundle-dir:
+    description: The staged artifact bundle directory.
+    value: ${{ steps.stage.outputs.bundle_dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set action root path
+      shell: bash
+      run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
+
+    - name: Set up Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: '22'
+
+    - id: stage
+      shell: bash
+      env:
+        ARTIFACT_TYPE: ${{ inputs.artifact-type }}
+        BUNDLE_DIR: ${{ inputs.bundle-dir }}
+        RESULTS_PATH: ${{ inputs.results-path }}
+        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        SCREENSHOTS_DIR: ${{ inputs.screenshots-dir }}
+        SUMMARY_JSON_PATH: ${{ inputs.summary-json-path }}
+        SUMMARY_MARKDOWN_PATH: ${{ inputs.summary-markdown-path }}
+        BASELINE_RESULTS_PATH: ${{ inputs.baseline-results-path }}
+        CURRENT_RESULTS_PATH: ${{ inputs.current-results-path }}
+        BASELINE_MANIFEST_PATH: ${{ inputs.baseline-manifest-path }}
+        CURRENT_MANIFEST_PATH: ${{ inputs.current-manifest-path }}
+        BASELINE_SCREENSHOTS_DIR: ${{ inputs.baseline-screenshots-dir }}
+        CURRENT_SCREENSHOTS_DIR: ${{ inputs.current-screenshots-dir }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-artifacts.mjs');
+        const { stageArtifacts } = await import(pathToFileURL(modulePath));
+
+        const result = await stageArtifacts({
+          artifactType: process.env.ARTIFACT_TYPE,
+          bundleDir: process.env.BUNDLE_DIR || undefined,
+          resultsPath: process.env.RESULTS_PATH || undefined,
+          manifestPath: process.env.MANIFEST_PATH || undefined,
+          screenshotsDir: process.env.SCREENSHOTS_DIR || undefined,
+          summaryJsonPath: process.env.SUMMARY_JSON_PATH || undefined,
+          summaryMarkdownPath: process.env.SUMMARY_MARKDOWN_PATH || undefined,
+          baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
+          currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+          baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
+          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
+          baselineScreenshotsDir: process.env.BASELINE_SCREENSHOTS_DIR || undefined,
+          currentScreenshotsDir: process.env.CURRENT_SCREENSHOTS_DIR || undefined
+        });
+
+        await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
+        EOF

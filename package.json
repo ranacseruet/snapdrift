@@ -1,0 +1,84 @@
+{
+  "name": "snapdrift",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ranacseruet/snapdrift.git"
+  },
+  "homepage": "https://github.com/ranacseruet/snapdrift#readme",
+  "bugs": {
+    "url": "https://github.com/ranacseruet/snapdrift/issues"
+  },
+  "author": "CodeSamplez",
+  "keywords": [
+    "snapdrift",
+    "github-actions",
+    "visual-testing",
+    "ui-drift",
+    "playwright",
+    "screenshot-testing"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --project tsconfig.json",
+    "validate:actions": "node scripts/validate-actions.mjs",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage --runInBand",
+    "pack:check": "npm pack --dry-run --cache .npm-cache",
+    "ci": "npm run lint && npm run typecheck && npm run validate:actions && npm run test:coverage && npm run pack:check"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.3.5",
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "jest": "^30.2.0",
+    "js-yaml": "^4.1.0",
+    "typescript": "^5.9.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "transform": {},
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 80,
+        "statements": 80
+      }
+    }
+  },
+  "exports": {
+    "./lib/snapdrift-config.mjs": "./lib/snapdrift-config.mjs",
+    "./lib/capture-routes.mjs": "./lib/capture-routes.mjs",
+    "./lib/compare-results.mjs": "./lib/compare-results.mjs",
+    "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
+    "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
+    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs"
+  },
+  "files": [
+    "actions/",
+    "lib/",
+    "types/",
+    "docs/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "pngjs": "^7.0.0"
+  }
+}
