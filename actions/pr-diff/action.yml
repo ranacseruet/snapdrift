@@ -186,7 +186,6 @@ runs:
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
-        INPUT_ARTIFACT_NAME: ''
         INPUT_REPOSITORY: ${{ inputs.baseline-repository }}
         INPUT_WORKFLOW_ID: ${{ inputs.baseline-workflow-id }}
         INPUT_BRANCH: ${{ inputs.baseline-branch }}
@@ -200,7 +199,7 @@ runs:
           const [owner, repo] = repository.split('/');
           const configPath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.REPO_CONFIG_PATH);
           const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
+          const artifactName = config.baselineArtifactName;
 
           try {
             const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
@@ -501,6 +500,7 @@ runs:
           const LEGACY_REPORT_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
           const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER];
           const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
+          const repoUrl = 'https://github.com/ranacseruet/snapdrift';
 
           const summaryPath = process.env.SUMMARY_PATH;
           const issueNumber = Number(process.env.PR_NUMBER || context.payload.pull_request?.number || context.issue?.number || '');

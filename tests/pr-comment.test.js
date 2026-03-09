@@ -121,6 +121,23 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('| home-desktop | desktop | Current capture failed: Navigation timeout |');
     });
 
+    it('truncates error details at 10 rows with an overflow note', () => {
+        const errors = Array.from({ length: 12 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            message: `Failure ${i}`
+        }));
+        const body = buildReportCommentBody({
+            ...cleanSummary,
+            status: 'incomplete',
+            errors
+        });
+
+        expect(body).toContain('| route-9 | desktop | Failure 9 |');
+        expect(body).not.toContain('| route-10 | desktop | Failure 10 |');
+        expect(body).toContain('...and 2 more');
+    });
+
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
         const body = buildReportCommentBody(
             { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },
