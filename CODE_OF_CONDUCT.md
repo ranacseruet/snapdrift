@@ -1,4 +1,4 @@
-# Contributor Covenant Code of Conduct
+# Code of Conduct
 
 ## Our Pledge
 
@@ -29,10 +29,6 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers at **conduct@codesamplez.com**. All
-complaints will be reviewed and investigated promptly and fairly.
+Project maintainers are responsible for clarifying and enforcing these standards. Instances of unacceptable behavior may be reported by opening a [GitHub Security Advisory](https://github.com/ranacseruet/snapdrift/security/advisories/new) (for privacy) or by contacting the maintainers directly via GitHub.
 
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1.
+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1.
