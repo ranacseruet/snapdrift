@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Reframed the repo as an internal-testing SnapDrift integration and removed premature release/tag language.
-- Switched public defaults to `.github/snapdrift.json`, `qa-artifacts/snapdrift/...`, `summary.json`, and `summary.md`.
-- Reworked generated PR reports, skipped summaries, action metadata, and docs around SnapDrift-first drift terminology.
-- Added transition compatibility for legacy config paths, legacy env vars, legacy PR comment markers, and legacy baseline artifact filenames.
+- Prepared SnapDrift for the first public GitHub release under version `0.1.0`.
+- Fixed capture metadata to record actual full-page PNG dimensions so dimension shifts stay classified separately from comparison errors.
+- Standardized the public contract on SnapDrift-only config paths, environment variables, report markers, and artifact filenames.
+- Added Node 22 self-provisioning to the standalone actions that shell out to `node` or `npm`.
+- Updated README, contracts, and integration docs to reference public release tags, with commit SHA pinning as an optional hardening step.

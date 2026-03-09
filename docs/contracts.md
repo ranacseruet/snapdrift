@@ -2,7 +2,7 @@
 
 ## Config
 
-SnapDrift reads runtime behavior from `.github/snapdrift.json` by default. During the transition it also accepts `.github/visual-regression.json` if the new file is absent.
+SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 
 ### Required fields
 
@@ -65,8 +65,6 @@ The published baseline bundle contains:
 | `manifest.json` | Screenshot manifest with ids, paths, and dimensions |
 | `screenshots/*.png` | Captured screenshot images |
 
-Legacy readers still accept baseline artifacts that use `visual-baseline-results.json` and `visual-screenshot-manifest.json`.
-
 ## Drift artifact
 
 The pull request drift bundle contains:
@@ -81,8 +79,6 @@ The pull request drift bundle contains:
 | `current/results.json` | Current capture results |
 | `current/manifest.json` | Current manifest |
 | `current/screenshots/*.png` | Current images |
-
-Legacy readers still accept the previous flat drift bundle layout.
 
 ## Screenshot manifest shape
 

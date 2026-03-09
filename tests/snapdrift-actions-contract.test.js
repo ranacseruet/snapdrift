@@ -67,18 +67,28 @@ describe('SnapDrift action contracts', () => {
         expect(prDiff.outputs['bundle-dir']).toBeTruthy();
     });
 
-    it('wrapper actions self-provision Node so non-Node consumers do not need to', async () => {
+    it('actions that shell out to node or npm self-provision Node 22', async () => {
         const baseline = await readAction('actions/baseline/action.yml');
+        const capture = await readAction('actions/capture/action.yml');
+        const compare = await readAction('actions/compare/action.yml');
         const prDiff = await readAction('actions/pr-diff/action.yml');
+        const stage = await readAction('actions/stage/action.yml');
+        const enforce = await readAction('actions/enforce/action.yml');
 
-        function hasSetupNodeStep(action) {
+        function hasSetupNode22Step(action) {
             return (action.runs?.steps || []).some(
-                (step) => typeof step.uses === 'string' && step.uses.startsWith('actions/setup-node@')
+                (step) => typeof step.uses === 'string'
+                    && step.uses.startsWith('actions/setup-node@')
+                    && step.with?.['node-version'] === '22'
             );
         }
 
-        expect(hasSetupNodeStep(baseline)).toBe(true);
-        expect(hasSetupNodeStep(prDiff)).toBe(true);
+        expect(hasSetupNode22Step(baseline)).toBe(true);
+        expect(hasSetupNode22Step(capture)).toBe(true);
+        expect(hasSetupNode22Step(compare)).toBe(true);
+        expect(hasSetupNode22Step(prDiff)).toBe(true);
+        expect(hasSetupNode22Step(stage)).toBe(true);
+        expect(hasSetupNode22Step(enforce)).toBe(true);
     });
 
     it('pr-diff keeps its baseline lookup and fallback comment paths wired correctly', async () => {

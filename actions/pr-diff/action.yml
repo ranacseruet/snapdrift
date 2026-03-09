@@ -192,13 +192,14 @@ runs:
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const fs = require('fs');
           const path = require('path');
+          const { pathToFileURL } = require('url');
 
           const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
           const [owner, repo] = repository.split('/');
-          const configPath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.REPO_CONFIG_PATH);
-          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+          const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
+          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const artifactName = config.baselineArtifactName;
 
           try {
@@ -266,8 +267,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        RESULTS_FILE="$(find snapdrift-baseline-download -type f \( -name 'results.json' -o -name 'visual-baseline-results.json' \) | head -n 1)"
-        MANIFEST_FILE="$(find snapdrift-baseline-download -type f \( -name 'manifest.json' -o -name 'visual-screenshot-manifest.json' \) | head -n 1)"
+        RESULTS_FILE="$(find snapdrift-baseline-download -type f -name 'results.json' | head -n 1)"
+        MANIFEST_FILE="$(find snapdrift-baseline-download -type f -name 'manifest.json' | head -n 1)"
         if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
           echo "Downloaded artifact did not contain the expected SnapDrift baseline files."
           find snapdrift-baseline-download -maxdepth 5 -type f | sort || true
@@ -497,8 +498,7 @@ runs:
           const { pathToFileURL } = require('url');
 
           const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
-          const LEGACY_REPORT_COMMENT_MARKER = '<!-- pr-visual-diff-summary -->';
-          const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER];
+          const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
           const iconUrl = 'https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png';
           const repoUrl = 'https://github.com/ranacseruet/snapdrift';
 

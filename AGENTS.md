@@ -27,7 +27,7 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
 ### Two integration layers
 
 1. **`lib/`** — Pure ESM modules consumed directly by action steps via dynamic `import()` at runtime. All modules are exported via `package.json` `exports`.
-   - `snapdrift-config.mjs` — Loads and validates `.github/visual-regression.json`; exports viewport presets, route selection logic, and `splitCommaList`
+   - `snapdrift-config.mjs` — Loads and validates `.github/snapdrift.json`; exports viewport presets, route selection logic, and `splitCommaList`
    - `capture-routes.mjs` — Launches headless Chromium via Playwright, captures full-page screenshots per route, writes results JSON + manifest JSON
    - `compare-results.mjs` — Pixel-level diff using `pngjs`; produces drift summary JSON + markdown; contains enforcement logic
    - `stage-artifacts.mjs` — Assembles baseline or diff artifact bundles into a temp directory for upload
@@ -54,7 +54,7 @@ consumer repo app (running locally)
 
 ### Config contract
 
-Consumer repos provide `.github/visual-regression.json`. The schema is frozen at v1 — see `docs/contracts.md` for the full field reference. Key fields: `routes[]` (with `id`, `path`, `viewport`), `diff.threshold`, `diff.mode`, optional `selection.sharedPrefixes/sharedExact` and per-route `changePaths` for changed-file scoping.
+Consumer repos provide `.github/snapdrift.json`. The schema is frozen at v1 — see `docs/contracts.md` for the full field reference. Key fields: `routes[]` (with `id`, `path`, `viewport`), `diff.threshold`, `diff.mode`, optional `selection.sharedPrefixes/sharedExact` and per-route `changePaths` for changed-file scoping.
 
 ### Action internals
 

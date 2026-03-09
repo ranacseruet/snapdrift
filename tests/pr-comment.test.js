@@ -3,10 +3,10 @@
 describe('buildReportCommentBody', () => {
     let buildReportCommentBody;
     let PR_COMMENT_MARKER;
-    let LEGACY_REPORT_COMMENT_MARKER;
+    let PR_COMMENT_MARKERS;
 
     beforeAll(async () => {
-        ({ buildReportCommentBody, PR_COMMENT_MARKER, LEGACY_REPORT_COMMENT_MARKER } = await import('../lib/pr-comment.mjs'));
+        ({ buildReportCommentBody, PR_COMMENT_MARKER, PR_COMMENT_MARKERS } = await import('../lib/pr-comment.mjs'));
     });
 
     const cleanSummary = {
@@ -21,10 +21,10 @@ describe('buildReportCommentBody', () => {
         changed: []
     };
 
-    it('starts with the SnapDrift marker and keeps the legacy marker available', () => {
+    it('starts with the SnapDrift marker and only matches the SnapDrift marker', () => {
         const body = buildReportCommentBody(cleanSummary);
         expect(body.startsWith(PR_COMMENT_MARKER)).toBe(true);
-        expect(LEGACY_REPORT_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
+        expect(PR_COMMENT_MARKERS).toEqual([PR_COMMENT_MARKER]);
     });
 
     it('uses a concise high-signal metrics table', () => {

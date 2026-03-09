@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.0.0-internal",
+  "version": "0.1.0",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
@@ -17,7 +17,7 @@
   "keywords": [
     "snapdrift",
     "github-actions",
-    "visual-regression",
+    "visual-testing",
     "ui-drift",
     "playwright",
     "screenshot-testing"
@@ -67,13 +67,7 @@
     "./lib/compare-results.mjs": "./lib/compare-results.mjs",
     "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
     "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
-    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
-    "./lib/visual-regression-config.mjs": "./lib/snapdrift-config.mjs",
-    "./lib/capture-visual-routes.mjs": "./lib/capture-routes.mjs",
-    "./lib/compare-visual-results.mjs": "./lib/compare-results.mjs",
-    "./lib/stage-visual-artifacts.mjs": "./lib/stage-artifacts.mjs",
-    "./lib/visual-diff-summary.mjs": "./lib/drift-summary.mjs",
-    "./lib/visual-diff-pr-comment.mjs": "./lib/pr-comment.mjs"
+    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs"
   },
   "files": [
     "actions/",

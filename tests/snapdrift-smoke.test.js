@@ -415,7 +415,6 @@ describe('lib module exports are stable', () => {
         expect(typeof mod.selectRoutesForChangedFiles).toBe('function');
         expect(typeof mod.splitCommaList).toBe('function');
         expect(typeof mod.DEFAULT_CONFIG_PATH).toBe('string');
-        expect(typeof mod.LEGACY_CONFIG_PATH).toBe('string');
         expect(Array.isArray(mod.VALID_DIFF_MODES)).toBe(true);
         expect(mod.SNAPDRIFT_VIEWPORT_PRESETS).toBeDefined();
         expect(typeof mod.SNAPDRIFT_NAVIGATION_TIMEOUT_MS).toBe('number');
@@ -452,9 +451,8 @@ describe('lib module exports are stable', () => {
         const mod = await import('../lib/pr-comment.mjs');
         expect(typeof mod.buildReportCommentBody).toBe('function');
         expect(typeof mod.PR_COMMENT_MARKER).toBe('string');
-        expect(typeof mod.LEGACY_REPORT_COMMENT_MARKER).toBe('string');
         expect(Array.isArray(mod.PR_COMMENT_MARKERS)).toBe(true);
-        expect(mod.PR_COMMENT_MARKER).toContain('snapdrift-report');
+        expect(mod.PR_COMMENT_MARKERS).toEqual([mod.PR_COMMENT_MARKER]);
     });
 });
 

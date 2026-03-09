@@ -73,13 +73,14 @@ runs:
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const fs = require('fs');
           const path = require('path');
+          const { pathToFileURL } = require('url');
 
           const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
           const [owner, repo] = repository.split('/');
-          const configPath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.REPO_CONFIG_PATH);
-          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const modulePath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.GITHUB_ACTION_PATH, '..', '..', 'lib', 'snapdrift-config.mjs');
+          const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
+          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
 
           try {
@@ -149,8 +150,8 @@ runs:
         DOWNLOAD_PATH: ${{ inputs.download-path }}
       run: |
         set -euo pipefail
-        RESULTS_FILE="$(find "$DOWNLOAD_PATH" -type f \( -name 'results.json' -o -name 'visual-baseline-results.json' \) | head -n 1)"
-        MANIFEST_FILE="$(find "$DOWNLOAD_PATH" -type f \( -name 'manifest.json' -o -name 'visual-screenshot-manifest.json' \) | head -n 1)"
+        RESULTS_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'results.json' | head -n 1)"
+        MANIFEST_FILE="$(find "$DOWNLOAD_PATH" -type f -name 'manifest.json' | head -n 1)"
         if [ -z "$RESULTS_FILE" ] || [ -z "$MANIFEST_FILE" ]; then
           echo "Downloaded artifact did not contain the expected SnapDrift baseline files."
           find "$DOWNLOAD_PATH" -maxdepth 5 -type f | sort || true

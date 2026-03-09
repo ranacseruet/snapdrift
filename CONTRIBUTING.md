@@ -14,9 +14,9 @@ Open a [bug report issue](../../issues/new?template=bug_report.md) with:
 
 Open a [feature request issue](../../issues/new?template=feature_request.md) describing the use case and proposed solution.
 
-## Internal Testing Status
+## Release Usage
 
-SnapDrift is still being exercised through internal testing. When you reference the actions from another repository, pin a tested commit SHA instead of a tag or moving branch.
+SnapDrift workflow examples reference public release tags for readability. If your organization requires immutable pins, resolve the tag to a commit SHA and pin that instead.
 
 ## Development Setup
 

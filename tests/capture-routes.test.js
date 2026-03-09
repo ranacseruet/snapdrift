@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { jest } from '@jest/globals';
+import { PNG } from 'pngjs';
 
 const launchMock = jest.fn();
 
@@ -42,13 +43,26 @@ async function writeConfig(tempDir, routes) {
     return configPath;
 }
 
-function createPage(label, behavior = {}) {
+function createPngBuffer(width, height) {
+    const png = new PNG({ width, height });
+    for (let index = 0; index < png.data.length; index += 4) {
+        png.data[index] = 255;
+        png.data[index + 1] = 255;
+        png.data[index + 2] = 255;
+        png.data[index + 3] = 255;
+    }
+    return PNG.sync.write(png);
+}
+
+function createPage(behavior = {}, imageSize = { width: 10, height: 10 }) {
     return {
         goto: behavior.goto || jest.fn().mockResolvedValue(undefined),
         waitForTimeout: behavior.waitForTimeout || jest.fn().mockResolvedValue(undefined),
         screenshot: behavior.screenshot || jest.fn(async ({ path: screenshotPath }) => {
+            const pngBuffer = createPngBuffer(imageSize.width, imageSize.height);
             await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
-            await fs.writeFile(screenshotPath, `png:${label}`);
+            await fs.writeFile(screenshotPath, pngBuffer);
+            return pngBuffer;
         }),
         close: behavior.close || jest.fn().mockResolvedValue(undefined)
     };
@@ -80,7 +94,7 @@ function createHarness({ desktopPage, mobilePage }) {
 }
 
 describe('runBaselineCapture', () => {
-    const envNames = ['SNAPDRIFT_ROUTE_IDS', 'QA_VISUAL_ROUTE_IDS'];
+    const envNames = ['SNAPDRIFT_ROUTE_IDS'];
     let tempDir;
     let originalEnv;
 
@@ -110,8 +124,8 @@ describe('runBaselineCapture', () => {
             { id: 'home-mobile', path: '/', viewport: 'mobile' }
         ];
         const configPath = await writeConfig(tempDir, routes);
-        const desktopPage = createPage('desktop');
-        const mobilePage = createPage('mobile');
+        const desktopPage = createPage({}, { width: 144, height: 126 });
+        const mobilePage = createPage({}, { width: 39, height: 132 });
         const { browser, desktopContext, mobileContext } = createHarness({ desktopPage, mobilePage });
 
         const result = await runBaselineCapture({
@@ -156,26 +170,33 @@ describe('runBaselineCapture', () => {
         expect(result.selectedRouteIds).toEqual(['home-desktop', 'home-mobile']);
         expect(results.passed).toBe(true);
         expect(results.routes).toHaveLength(2);
+        expect(results.routes).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'home-desktop', width: 144, height: 126 }),
+            expect.objectContaining({ id: 'home-mobile', width: 39, height: 132 })
+        ]));
         expect(manifest.screenshots.map((entry) => entry.id)).toEqual(['home-desktop', 'home-mobile']);
-        expect(await fs.readFile(desktopShot, 'utf8')).toBe('png:desktop');
-        expect(await fs.readFile(mobileShot, 'utf8')).toBe('png:mobile');
+        expect(manifest.screenshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'home-desktop', width: 144, height: 126 }),
+            expect.objectContaining({ id: 'home-mobile', width: 39, height: 132 })
+        ]));
+        expect((await fs.readFile(desktopShot)).length).toBeGreaterThan(0);
+        expect((await fs.readFile(mobileShot)).length).toBeGreaterThan(0);
         expect(desktopContext.close).toHaveBeenCalledTimes(1);
         expect(mobileContext.close).toHaveBeenCalledTimes(1);
         expect(browser.close).toHaveBeenCalledTimes(1);
     });
 
-    it('uses QA_VISUAL_ROUTE_IDS when explicit routeIds are omitted and SNAPDRIFT_ROUTE_IDS is empty', async () => {
+    it('uses SNAPDRIFT_ROUTE_IDS when explicit routeIds are omitted', async () => {
         const routes = [
             { id: 'home-desktop', path: '/', viewport: 'desktop' },
             { id: 'home-mobile', path: '/', viewport: 'mobile' }
         ];
         const configPath = await writeConfig(tempDir, routes);
-        const desktopPage = createPage('desktop');
-        const mobilePage = createPage('mobile');
+        const desktopPage = createPage();
+        const mobilePage = createPage();
         const { desktopContext, mobileContext } = createHarness({ desktopPage, mobilePage });
 
-        process.env.SNAPDRIFT_ROUTE_IDS = '';
-        process.env.QA_VISUAL_ROUTE_IDS = 'home-mobile';
+        process.env.SNAPDRIFT_ROUTE_IDS = 'home-mobile';
 
         const result = await runBaselineCapture({ configPath });
         const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
@@ -190,10 +211,10 @@ describe('runBaselineCapture', () => {
     it('writes results and manifest before throwing when one or more captures fail', async () => {
         const routes = [{ id: 'home-desktop', path: '/', viewport: 'desktop' }];
         const configPath = await writeConfig(tempDir, routes);
-        const desktopPage = createPage('desktop', {
+        const desktopPage = createPage({
             goto: jest.fn().mockRejectedValue(new Error('Navigation timeout'))
         });
-        const mobilePage = createPage('mobile');
+        const mobilePage = createPage();
         const { browser, desktopContext, mobileContext } = createHarness({ desktopPage, mobilePage });
         const resultsPath = path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'results.json');
         const manifestPath = path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'manifest.json');

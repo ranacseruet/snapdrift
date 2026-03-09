@@ -1,8 +1,8 @@
 # Integration Guide
 
-This guide covers integrating SnapDrift into a consumer repository during internal testing.
+This guide covers integrating SnapDrift into a consumer repository from a public GitHub release.
 
-Pin a tested commit SHA in every `uses:` reference. Do not rely on tags or moving refs while the integration is still evolving.
+Examples use the public release tag for readability. If your organization requires immutable pins, resolve the tag to a commit SHA and pin that instead.
 
 ## Prerequisites
 
@@ -42,13 +42,11 @@ SnapDrift owns route selection, capture, comparison, skipped-report generation, 
 }
 ```
 
-SnapDrift still accepts `.github/visual-regression.json` during the transition, but new integrations should standardize on `.github/snapdrift.json`.
-
 ## Step 2: Publish a baseline on `main`
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift/actions/baseline@<tested-commit-sha>
+  uses: ranacseruet/snapdrift/actions/baseline@v0.1.0
   with:
     repo-config-path: .github/snapdrift.json
     artifact-retention-days: '30'
@@ -72,7 +70,7 @@ Then add SnapDrift after the app is running:
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
+  uses: ranacseruet/snapdrift/actions/pr-diff@v0.1.0
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/snapdrift.json
@@ -113,7 +111,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
+        uses: ranacseruet/snapdrift/actions/pr-diff@v0.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/snapdrift.json
@@ -152,7 +150,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
+        uses: ranacseruet/snapdrift/actions/pr-diff@v0.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repo-config-path: .github/snapdrift.json

@@ -40,9 +40,7 @@ async function writeConfig(filePath, config = validConfig) {
 describe('snapdrift config helpers', () => {
     const envNames = [
         'SNAPDRIFT_CONFIG_PATH',
-        'QA_VISUAL_CONFIG_PATH',
-        'SNAPDRIFT_ROUTE_IDS',
-        'QA_VISUAL_ROUTE_IDS'
+        'SNAPDRIFT_ROUTE_IDS'
     ];
     let tempDir;
     let originalEnv;
@@ -71,9 +69,9 @@ describe('snapdrift config helpers', () => {
 
     it('readFirstDefinedEnv returns the first non-empty env var and ignores empty strings', () => {
         process.env.SNAPDRIFT_CONFIG_PATH = '';
-        process.env.QA_VISUAL_CONFIG_PATH = '/tmp/qa-config.json';
+        process.env.SNAPDRIFT_ROUTE_IDS = 'home-desktop';
 
-        expect(readFirstDefinedEnv(['SNAPDRIFT_CONFIG_PATH', 'QA_VISUAL_CONFIG_PATH'])).toBe('/tmp/qa-config.json');
+        expect(readFirstDefinedEnv(['SNAPDRIFT_CONFIG_PATH', 'SNAPDRIFT_ROUTE_IDS'])).toBe('home-desktop');
     });
 
     it('validateSnapdriftConfig rejects a non-object root value', () => {
@@ -137,7 +135,7 @@ describe('snapdrift config helpers', () => {
     it('loadSnapdriftConfig uses env overrides when no explicit configPath is provided', async () => {
         const envPath = path.join(tempDir, 'env.json');
         await writeConfig(envPath, { ...validConfig, baselineArtifactName: 'env' });
-        process.env.QA_VISUAL_CONFIG_PATH = envPath;
+        process.env.SNAPDRIFT_CONFIG_PATH = envPath;
 
         const { config, configPath } = await loadSnapdriftConfig();
 
@@ -145,10 +143,9 @@ describe('snapdrift config helpers', () => {
         expect(configPath).toBe(envPath);
     });
 
-    it('loadSnapdriftConfig prefers .github/snapdrift.json over the legacy config path', async () => {
+    it('loadSnapdriftConfig loads .github/snapdrift.json from the current working directory by default', async () => {
         process.chdir(tempDir);
         await writeConfig(path.join(tempDir, '.github', 'snapdrift.json'), { ...validConfig, baselineArtifactName: 'default' });
-        await writeConfig(path.join(tempDir, '.github', 'visual-regression.json'), { ...validConfig, baselineArtifactName: 'legacy' });
         jest.resetModules();
         const { loadSnapdriftConfig: loadSnapdriftConfigFromCwd } = await import('../lib/snapdrift-config.mjs');
         const expectedConfigPath = await fs.realpath(path.join(tempDir, '.github', 'snapdrift.json'));
@@ -159,17 +156,12 @@ describe('snapdrift config helpers', () => {
         expect(configPath).toBe(expectedConfigPath);
     });
 
-    it('loadSnapdriftConfig falls back to the legacy config path when the default file is absent', async () => {
+    it('loadSnapdriftConfig does not fall back to legacy config filenames', async () => {
         process.chdir(tempDir);
-        await writeConfig(path.join(tempDir, '.github', 'visual-regression.json'), { ...validConfig, baselineArtifactName: 'legacy' });
         jest.resetModules();
         const { loadSnapdriftConfig: loadSnapdriftConfigFromCwd } = await import('../lib/snapdrift-config.mjs');
-        const expectedConfigPath = await fs.realpath(path.join(tempDir, '.github', 'visual-regression.json'));
 
-        const { config, configPath } = await loadSnapdriftConfigFromCwd();
-
-        expect(config.baselineArtifactName).toBe('legacy');
-        expect(configPath).toBe(expectedConfigPath);
+        await expect(loadSnapdriftConfigFromCwd()).rejects.toThrow(/snapdrift\.json/);
     });
 
     it('resolveFromWorkingDirectory resolves relative paths from workingDirectory', () => {

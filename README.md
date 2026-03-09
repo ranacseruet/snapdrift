@@ -8,7 +8,7 @@
 
 SnapDrift captures full-page application frames, compares them against a known baseline, and reports drift directly in GitHub Actions.
 
-This repo is currently used through internal testing. Pin a tested commit SHA in consumer workflows instead of using moving refs or tags.
+SnapDrift is ready to integrate from public GitHub releases. Workflow examples below use the first public tag for readability; security-conscious consumers can pin the resolved commit SHA instead.
 
 ## What SnapDrift handles
 
@@ -44,7 +44,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift/actions/baseline@<tested-commit-sha>
+  uses: ranacseruet/snapdrift/actions/baseline@v0.1.0
   with:
     repo-config-path: .github/snapdrift.json
 ```
@@ -53,7 +53,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift/actions/pr-diff@<tested-commit-sha>
+  uses: ranacseruet/snapdrift/actions/pr-diff@v0.1.0
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/snapdrift.json
