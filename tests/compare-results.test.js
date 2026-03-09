@@ -808,6 +808,56 @@ describe('generateDriftReport', () => {
     });
 });
 
+describe('runDriftCheckCli', () => {
+    let runDriftCheckCli;
+    let tempDir;
+
+    beforeAll(async () => {
+        ({ runDriftCheckCli } = await import('../lib/compare-results.mjs'));
+    });
+
+    beforeEach(async () => {
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compare-drift-cli-'));
+    });
+
+    afterEach(async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('writes summary files before throwing when enforceOutcome is true and drift fails the diff mode', async () => {
+        const routeId = 'root-index-desktop';
+        const imagePath = 'screenshots/r.png';
+        const opts = await setupFixtures(tempDir, {
+            routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+            baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+            currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+            baselinePngs: [{ relPath: imagePath, width: 10, height: 10, r: 255, g: 255, b: 255 }],
+            currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 0, g: 0, b: 0 }],
+            diffMode: 'strict'
+        });
+        const outDir = path.join(tempDir, 'out');
+        const summaryPath = path.join(outDir, 'summary.json');
+        const markdownPath = path.join(outDir, 'summary.md');
+
+        await expect(runDriftCheckCli({
+            ...opts,
+            outDir,
+            summaryPath,
+            markdownPath,
+            routeIds: [routeId],
+            enforceOutcome: true
+        })).rejects.toThrow(/strict mode detected drift/i);
+
+        const summary = JSON.parse(await fs.readFile(summaryPath, 'utf8'));
+        const markdown = await fs.readFile(markdownPath, 'utf8');
+
+        expect(summary.status).toBe('changes-detected');
+        expect(summary.changedScreenshots).toBe(1);
+        expect(markdown).toContain('SnapDrift Report');
+        expect(markdown).toContain('Drift detected');
+    });
+});
+
 // ---------------------------------------------------------------------------
 // runDriftCheckCli integration tests
 // ---------------------------------------------------------------------------
