@@ -16,8 +16,6 @@ describe('buildReportCommentBody', () => {
         changedScreenshots: 0,
         missingInBaseline: 0,
         missingInCurrent: 0,
-        diffMode: 'strict',
-        threshold: 0.01,
         errors: [],
         dimensionChanges: [],
         changed: []
@@ -29,13 +27,12 @@ describe('buildReportCommentBody', () => {
         expect(LEGACY_REPORT_COMMENT_MARKER).toBe('<!-- pr-visual-diff-summary -->');
     });
 
-    it('uses metadata and high-signal tables', () => {
+    it('uses a concise high-signal metrics table', () => {
         const body = buildReportCommentBody(cleanSummary);
-        expect(body).toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
-        expect(body).toContain('| 2 | 2 | `strict` | 0.01 |');
         expect(body).toContain('| Signal | Count |');
         expect(body).toContain('| Drift signals | 0 |');
         expect(body).not.toContain('| Errors |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 
     it('shows status icon and label in heading', () => {
@@ -58,16 +55,6 @@ describe('buildReportCommentBody', () => {
         });
         expect(body).toContain('⏭️ SnapDrift Report — Skipped');
         expect(body).toContain('> **Note:** No drift-relevant changes.');
-    });
-
-    it('shows fallback metadata values when diff settings are unavailable', () => {
-        const body = buildReportCommentBody({
-            status: 'skipped',
-            selectedRoutes: [],
-            matchedScreenshots: 0,
-            errors: []
-        });
-        expect(body).toContain('| 0 | 0 | n/a | n/a |');
     });
 
     it('includes drift signals in a details section with table', () => {
@@ -161,14 +148,16 @@ describe('buildReportCommentBody', () => {
         expect(body).not.toContain('<details>');
     });
 
-    it('shows selected route count from array length', () => {
+    it('keeps the concise metric table when selected routes are provided', () => {
         const body = buildReportCommentBody({ ...cleanSummary, selectedRoutes: ['a', 'b', 'c'] });
-        expect(body).toContain('| 3 | 2 | `strict` | 0.01 |');
+        expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 
-    it('shows "all" when selectedRoutes is not an array', () => {
+    it('keeps the concise metric table when selectedRoutes is omitted', () => {
         const { selectedRoutes: _selectedRoutes, ...noRoutes } = cleanSummary;
         const body = buildReportCommentBody({ ...noRoutes, errors: [] });
-        expect(body).toContain('| all | 2 | `strict` | 0.01 |');
+        expect(body).toContain('| Drift signals | 0 |');
+        expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
 });
