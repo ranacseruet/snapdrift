@@ -44,7 +44,7 @@
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "js-yaml": "^4.1.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   },
   "jest": {
     "testEnvironment": "node",
