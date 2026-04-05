@@ -40,7 +40,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.5",
     "@types/pngjs": "^6.0.5",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.0",
     "globals": "^17.4.0",
     "jest": "^30.3.0",
     "js-yaml": "^4.1.0",
