@@ -186,6 +186,27 @@ describe('runBaselineCapture', () => {
         expect(browser.close).toHaveBeenCalledTimes(1);
     });
 
+    it('sanitizes route id before using it as a filename, stripping path-traversal sequences', async () => {
+        const routes = [{ id: '../../evil', path: '/', viewport: 'desktop' }];
+        const configPath = await writeConfig(tempDir, routes);
+        const desktopPage = createPage({}, { width: 10, height: 10 });
+        const mobilePage = createPage();
+        createHarness({ desktopPage, mobilePage });
+
+        const result = await runBaselineCapture({ configPath, routeIds: ['../../evil'] });
+        const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+
+        const imagePath = results.routes[0].imagePath;
+        const basename = path.basename(imagePath);
+        // Basename must not contain path-traversal sequences or path separators
+        expect(basename).not.toContain('..');
+        expect(basename).not.toContain('/');
+        expect(basename).not.toContain('\\');
+        // Resolved screenshot must stay inside screenshotsRoot
+        const screenshotPath = path.resolve(result.screenshotsRoot, imagePath);
+        expect(screenshotPath.startsWith(result.screenshotsRoot)).toBe(true);
+    });
+
     it('uses SNAPDRIFT_ROUTE_IDS when explicit routeIds are omitted', async () => {
         const routes = [
             { id: 'home-desktop', path: '/', viewport: 'desktop' },
@@ -238,7 +259,8 @@ describe('runBaselineCapture', () => {
             })
         ]);
         expect(manifest.screenshots).toEqual([]);
-        expect(desktopPage.close).toHaveBeenCalledTimes(1);
+        // Each capture attempt opens and closes a page; retry adds one extra attempt.
+        expect(desktopPage.close).toHaveBeenCalledTimes(2);
         expect(desktopContext.close).toHaveBeenCalledTimes(1);
         expect(mobileContext.close).toHaveBeenCalledTimes(1);
         expect(browser.close).toHaveBeenCalledTimes(1);
