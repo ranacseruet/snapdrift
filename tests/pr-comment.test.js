@@ -37,8 +37,8 @@ describe('buildReportCommentBody', () => {
 
     it('shows status icon and label in heading', () => {
         const body = buildReportCommentBody(cleanSummary);
-        expect(body).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="20" height="20" />');
         expect(body).toContain('## ✅ SnapDrift Report — Clean');
+        expect(body).not.toContain('<img');
     });
 
     it('shows drift-detected status', () => {
@@ -85,7 +85,7 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('...and 5 more');
     });
 
-    it('includes dimension shifts in a details section', () => {
+    it('includes dimension shifts in an auto-expanded details section showing affected routes', () => {
         const body = buildReportCommentBody({
             ...cleanSummary,
             status: 'incomplete',
@@ -98,7 +98,9 @@ describe('buildReportCommentBody', () => {
                 currentHeight: 1092
             }]
         });
+        expect(body).toContain('<details open>');
         expect(body).toContain('Dimension shifts');
+        expect(body).toContain('home-desktop');
         expect(body).toContain('1440×1266');
         expect(body).toContain('1440×1092');
         expect(body).toContain('Next step');
