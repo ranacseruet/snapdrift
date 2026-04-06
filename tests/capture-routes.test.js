@@ -229,6 +229,46 @@ describe('runBaselineCapture', () => {
         expect(mobileContext.newPage).toHaveBeenCalledTimes(1);
     });
 
+    it('captures multiple routes per viewport concurrently and preserves original ordering', async () => {
+        // Routes deliberately interleave viewports: desktop, mobile, desktop
+        // so that the parallel groups (desktop:[0,2], mobile:[1]) would produce
+        // results in a different completion order without index-based ordering.
+        const routes = [
+            { id: 'page-a', path: '/a', viewport: 'desktop' },
+            { id: 'page-b', path: '/b', viewport: 'mobile' },
+            { id: 'page-c', path: '/c', viewport: 'desktop' }
+        ];
+        const configPath = await writeConfig(tempDir, routes);
+        const desktopPage = createPage({}, { width: 20, height: 30 });
+        const mobilePage = createPage({}, { width: 10, height: 15 });
+        const { desktopContext, mobileContext } = createHarness({ desktopPage, mobilePage });
+
+        const result = await runBaselineCapture({
+            configPath,
+            routeIds: routes.map((r) => r.id)
+        });
+
+        const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+        const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
+
+        // Both desktop routes captured by desktopContext, one mobile by mobileContext
+        expect(desktopContext.newPage).toHaveBeenCalledTimes(2);
+        expect(mobileContext.newPage).toHaveBeenCalledTimes(1);
+
+        // All 3 routes captured successfully
+        expect(results.passed).toBe(true);
+        expect(results.routes).toHaveLength(3);
+
+        // Original order preserved: page-a (desktop), page-b (mobile), page-c (desktop)
+        expect(results.routes.map((r) => r.id)).toEqual(['page-a', 'page-b', 'page-c']);
+        expect(manifest.screenshots.map((s) => s.id)).toEqual(['page-a', 'page-b', 'page-c']);
+
+        // Correct viewports recorded per route
+        expect(results.routes[0]).toEqual(expect.objectContaining({ id: 'page-a', viewport: 'desktop' }));
+        expect(results.routes[1]).toEqual(expect.objectContaining({ id: 'page-b', viewport: 'mobile' }));
+        expect(results.routes[2]).toEqual(expect.objectContaining({ id: 'page-c', viewport: 'desktop' }));
+    });
+
     it('writes results and manifest before throwing when one or more captures fail', async () => {
         const routes = [{ id: 'home-desktop', path: '/', viewport: 'desktop' }];
         const configPath = await writeConfig(tempDir, routes);
