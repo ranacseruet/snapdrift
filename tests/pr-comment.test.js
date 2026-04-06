@@ -85,6 +85,19 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('...and 5 more');
     });
 
+    it('appends a "View full report" link after the overflow note when runUrl is provided', () => {
+        const changed = Array.from({ length: 25 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            mismatchRatio: 0.01
+        }));
+        const body = buildReportCommentBody(
+            { ...cleanSummary, changedScreenshots: 25, changed },
+            { runUrl: 'https://github.com/example/runs/999' }
+        );
+        expect(body).toContain('*...and 5 more* — [View full report →](https://github.com/example/runs/999)');
+    });
+
     it('includes dimension shifts in an auto-expanded details section showing affected routes', () => {
         const body = buildReportCommentBody({
             ...cleanSummary,
@@ -138,6 +151,19 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('| route-9 | desktop | Failure 9 |');
         expect(body).not.toContain('| route-10 | desktop | Failure 10 |');
         expect(body).toContain('...and 2 more');
+    });
+
+    it('appends a "View full report" link after the error overflow note when runUrl is provided', () => {
+        const errors = Array.from({ length: 12 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            message: `Failure ${i}`
+        }));
+        const body = buildReportCommentBody(
+            { ...cleanSummary, status: 'incomplete', errors },
+            { runUrl: 'https://github.com/example/runs/999' }
+        );
+        expect(body).toContain('*...and 2 more* — [View full report →](https://github.com/example/runs/999)');
     });
 
     it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
