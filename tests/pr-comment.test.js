@@ -37,8 +37,8 @@ describe('buildReportCommentBody', () => {
 
     it('shows status icon and label in heading', () => {
         const body = buildReportCommentBody(cleanSummary);
-        expect(body).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png" alt="SnapDrift" width="20" height="20" />');
         expect(body).toContain('## ✅ SnapDrift Report — Clean');
+        expect(body).not.toContain('<img');
     });
 
     it('shows drift-detected status', () => {
