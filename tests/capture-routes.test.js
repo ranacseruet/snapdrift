@@ -68,7 +68,7 @@ function createPage(behavior = {}, imageSize = { width: 10, height: 10 }) {
     };
 }
 
-function createHarness({ desktopPage, mobilePage }) {
+function createHarness({ desktopPage, mobilePage, customPage = null }) {
     const desktopContext = {
         newPage: jest.fn().mockResolvedValue(desktopPage),
         close: jest.fn().mockResolvedValue(undefined)
@@ -77,10 +77,22 @@ function createHarness({ desktopPage, mobilePage }) {
         newPage: jest.fn().mockResolvedValue(mobilePage),
         close: jest.fn().mockResolvedValue(undefined)
     };
+
+    const newContextMock = jest.fn()
+        .mockResolvedValueOnce(desktopContext)
+        .mockResolvedValueOnce(mobileContext);
+
+    let customContext = null;
+    if (customPage !== null) {
+        customContext = {
+            newPage: jest.fn().mockResolvedValue(customPage),
+            close: jest.fn().mockResolvedValue(undefined)
+        };
+        newContextMock.mockResolvedValueOnce(customContext);
+    }
+
     const browser = {
-        newContext: jest.fn()
-            .mockResolvedValueOnce(desktopContext)
-            .mockResolvedValueOnce(mobileContext),
+        newContext: newContextMock,
         close: jest.fn().mockResolvedValue(undefined)
     };
 
@@ -89,7 +101,8 @@ function createHarness({ desktopPage, mobilePage }) {
     return {
         browser,
         desktopContext,
-        mobileContext
+        mobileContext,
+        customContext
     };
 }
 
@@ -267,6 +280,49 @@ describe('runBaselineCapture', () => {
         expect(results.routes[0]).toEqual(expect.objectContaining({ id: 'page-a', viewport: 'desktop' }));
         expect(results.routes[1]).toEqual(expect.objectContaining({ id: 'page-b', viewport: 'mobile' }));
         expect(results.routes[2]).toEqual(expect.objectContaining({ id: 'page-c', viewport: 'desktop' }));
+    });
+
+    it('captures a route with a custom object viewport using the specified dimensions', async () => {
+        const routes = [{ id: 'tablet-view', path: '/tablet', viewport: { width: 800, height: 600 } }];
+        const configPath = await writeConfig(tempDir, routes);
+        const desktopPage = createPage();
+        const mobilePage = createPage();
+        const customPage = createPage({}, { width: 800, height: 600 });
+        const { browser, desktopContext, mobileContext, customContext } = createHarness({ desktopPage, mobilePage, customPage });
+
+        const result = await runBaselineCapture({ configPath, routeIds: ['tablet-view'] });
+        const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+        const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
+
+        // Preset contexts created first (calls 1 & 2), custom context created on demand (call 3)
+        expect(browser.newContext).toHaveBeenCalledTimes(3);
+        expect(browser.newContext).toHaveBeenNthCalledWith(3, {
+            viewport: { width: 800, height: 600 },
+            deviceScaleFactor: 1,
+            isMobile: false,
+            hasTouch: false
+        });
+        // Preset contexts opened but never used for this route
+        expect(desktopContext.newPage).not.toHaveBeenCalled();
+        expect(mobileContext.newPage).not.toHaveBeenCalled();
+        expect(customContext.newPage).toHaveBeenCalledTimes(1);
+        // All three contexts closed in finally
+        expect(desktopContext.close).toHaveBeenCalledTimes(1);
+        expect(mobileContext.close).toHaveBeenCalledTimes(1);
+        expect(customContext.close).toHaveBeenCalledTimes(1);
+        expect(results.passed).toBe(true);
+        expect(results.routes).toHaveLength(1);
+        expect(results.routes[0]).toEqual(expect.objectContaining({
+            id: 'tablet-view',
+            viewport: { width: 800, height: 600 },
+            width: 800,
+            height: 600
+        }));
+        expect(manifest.screenshots).toHaveLength(1);
+        expect(manifest.screenshots[0]).toEqual(expect.objectContaining({
+            id: 'tablet-view',
+            viewport: { width: 800, height: 600 }
+        }));
     });
 
     it('writes results and manifest before throwing when one or more captures fail', async () => {

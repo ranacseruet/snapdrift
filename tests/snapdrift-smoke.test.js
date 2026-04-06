@@ -308,6 +308,37 @@ describe('config schema validation', () => {
         await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/viewport/i);
     });
 
+    it('accepts a valid custom viewport object', async () => {
+        const configPath = path.join(tempDir, 'custom-viewport.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'tablet', path: '/', viewport: { width: 768, height: 1024 } }]
+        }));
+
+        const { config } = await loadSnapdriftConfig(configPath);
+        expect(config.routes[0].viewport).toEqual({ width: 768, height: 1024 });
+    });
+
+    it('rejects a custom viewport with non-integer dimensions', async () => {
+        const configPath = path.join(tempDir, 'invalid-custom-viewport.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'bad', path: '/', viewport: { width: 768.5, height: 1024 } }]
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/viewport/i);
+    });
+
+    it('rejects a custom viewport with zero or negative dimensions', async () => {
+        const configPath = path.join(tempDir, 'invalid-custom-viewport-zero.json');
+        await fs.writeFile(configPath, JSON.stringify({
+            ...validConfig,
+            routes: [{ id: 'bad', path: '/', viewport: { width: 0, height: 600 } }]
+        }));
+
+        await expect(loadSnapdriftConfig(configPath)).rejects.toThrow(/viewport/i);
+    });
+
     it('rejects config with an unsupported diff mode', async () => {
         const configPath = path.join(tempDir, 'invalid-diff-mode.json');
         await fs.writeFile(configPath, JSON.stringify({

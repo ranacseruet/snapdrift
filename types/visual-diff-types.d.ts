@@ -1,4 +1,6 @@
 export type VisualViewportPreset = 'desktop' | 'mobile';
+export interface VisualCustomViewport { width: number; height: number; }
+export type VisualViewport = VisualViewportPreset | VisualCustomViewport;
 
 export interface VisualRegressionSelectionConfig {
   sharedPrefixes?: string[];
@@ -8,7 +10,7 @@ export interface VisualRegressionSelectionConfig {
 export interface VisualRegressionRouteConfig {
   id: string;
   path: string;
-  viewport: VisualViewportPreset;
+  viewport: VisualViewport;
   changePaths?: string[];
 }
 
@@ -30,7 +32,7 @@ export interface VisualRegressionConfig {
 export interface VisualBaselineRouteResult {
   id: string;
   path: string;
-  viewport: VisualViewportPreset;
+  viewport: VisualViewport;
   status: 'passed' | 'failed' | 'skipped';
   durationMs: number;
   imagePath?: string;
@@ -42,7 +44,7 @@ export interface VisualBaselineRouteResult {
 export interface VisualScreenshotManifestEntry {
   id: string;
   path: string;
-  viewport: VisualViewportPreset;
+  viewport: VisualViewport;
   imagePath: string;
   width: number;
   height: number;
@@ -70,14 +72,14 @@ export interface VisualDiffMissingItem {
   id: string;
   reason: string;
   path?: string;
-  viewport?: VisualViewportPreset;
+  viewport?: VisualViewport;
   location: 'baseline' | 'current';
 }
 
 export interface VisualDiffErrorItem {
   id: string;
   path?: string;
-  viewport?: VisualViewportPreset;
+  viewport?: VisualViewport;
   status: 'error';
   message: string;
 }
@@ -85,7 +87,7 @@ export interface VisualDiffErrorItem {
 export interface VisualDiffDimensionItem {
   id: string;
   path?: string;
-  viewport?: VisualViewportPreset;
+  viewport?: VisualViewport;
   baselineWidth: number;
   baselineHeight: number;
   currentWidth: number;
@@ -96,7 +98,7 @@ export interface VisualDiffDimensionItem {
 export interface VisualDiffChangedItem {
   id: string;
   path: string;
-  viewport: VisualViewportPreset;
+  viewport: VisualViewport;
   baselineImagePath: string;
   currentImagePath: string;
   width: number;
