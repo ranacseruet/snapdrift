@@ -67,7 +67,8 @@
     "./lib/compare-results.mjs": "./lib/compare-results.mjs",
     "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
     "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
-    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs"
+    "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
+    "./lib/report.mjs": "./lib/report.mjs"
   },
   "files": [
     "actions/",
