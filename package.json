@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
@@ -61,6 +61,9 @@
       }
     }
   },
+  "bin": {
+    "snapdrift": "./bin/snapdrift.mjs"
+  },
   "exports": {
     "./lib/snapdrift-config.mjs": "./lib/snapdrift-config.mjs",
     "./lib/capture-routes.mjs": "./lib/capture-routes.mjs",
@@ -68,16 +71,22 @@
     "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
     "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
     "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
-    "./lib/report.mjs": "./lib/report.mjs"
+    "./lib/report.mjs": "./lib/report.mjs",
+    "./lib/cli.mjs": "./lib/cli.mjs"
   },
   "files": [
     "actions/",
+    "bin/",
     "lib/",
     "types/",
     "docs/",
     "README.md",
     "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "dependencies": {
     "playwright": "^1.59.1",
     "pngjs": "^7.0.0"

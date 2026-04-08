@@ -191,6 +191,22 @@ For custom orchestration:
 - `actions/resolve-baseline`
 - `actions/stage`
 
+## Local development
+
+The `snapdrift` CLI lets you run captures and diffs locally against a running app. Use it to validate UI changes on your machine before pushing — the same capture and comparison engine is used in both contexts.
+
+```bash
+# Establish a baseline before making UI changes
+snapdrift capture
+
+# After making changes, compare and open the HTML report
+snapdrift diff --open
+```
+
+The CLI reads the same `.github/snapdrift.json` config used by the Actions workflow. Local outputs land in `.snapdrift/` by default and can be overridden with `--baseline-dir`, `--current-dir`, and `--diff-dir`.
+
+See the [Local CLI guide](local-cli.md) for full command reference, flags, directory layout, and examples.
+
 ## Troubleshooting
 
 **"No non-expired SnapDrift baseline artifact was found"**  

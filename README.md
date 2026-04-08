@@ -61,6 +61,20 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 That is the full integration. See the [Integration Guide](docs/integration-guide.md) for workflow examples, permissions, compatibility notes, and advanced overrides.
 
+## Local CLI
+
+SnapDrift ships a `snapdrift` CLI for running captures and diffs locally against a running app — no GitHub Actions required. Use it during development to validate UI changes before pushing.
+
+```bash
+# Capture a baseline
+snapdrift capture
+
+# Compare against it after making UI changes
+snapdrift diff --open
+```
+
+See the [Local CLI guide](docs/local-cli.md) for installation, all flags, directory layout, and examples.
+
 ## Drift modes
 
 Start with `report-only` while baselines settle. Move to `fail-on-changes` or stricter modes once the signal is stable.
@@ -83,6 +97,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 ## Docs
 
 - [Integration Guide](docs/integration-guide.md)
+- [Local CLI](docs/local-cli.md)
 - [Contracts](docs/contracts.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
