@@ -14,6 +14,31 @@ Open a [bug report issue](../../issues/new?template=bug_report.md) with:
 
 Open a [feature request issue](../../issues/new?template=feature_request.md) describing the use case and proposed solution.
 
+## Releasing
+
+Releases are cut by maintainers. The publish workflow fires automatically when a GitHub release is published.
+
+**Prerequisites (one-time repo setup):**
+
+1. Create an npm access token with publish permissions at [npmjs.com](https://www.npmjs.com).
+2. Add it as a repository secret named `NPM_TOKEN` under **Settings → Secrets and variables → Actions**.
+
+**Release steps:**
+
+1. Merge all changes to `main` — CI must be green.
+2. Move items from `## Unreleased` in `CHANGELOG.md` to a new `## x.y.z - YYYY-MM-DD` entry and commit.
+3. Create a GitHub release:
+   - Tag: `vx.y.z` (e.g. `v0.2.0`), targeting `main`
+   - Title: `vx.y.z`
+   - Body: paste the changelog entry for this version
+4. Publishing the release triggers the `publish.yml` workflow, which runs the full quality gate and then publishes to npm with [provenance attestation](https://docs.npmjs.com/generating-provenance-statements).
+
+**Verify:**
+
+```bash
+npm view snapdrift@x.y.z
+```
+
 ## Release Usage
 
 SnapDrift workflow examples reference public release tags for readability. If your organization requires immutable pins, resolve the tag to a commit SHA and pin that instead.

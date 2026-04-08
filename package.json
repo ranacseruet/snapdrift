@@ -83,6 +83,10 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "dependencies": {
     "playwright": "^1.59.1",
     "pngjs": "^7.0.0"
