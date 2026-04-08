@@ -24,7 +24,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 |:------|:-----|:------------|
 | `id` | `string` | Unique route identifier across runs |
 | `path` | `string` | URL path appended to `baseUrl` |
-| `viewport` | `string` | One of `desktop`, `mobile` |
+| `viewport` | `string` or `object` | Preset name (`"desktop"`, `"mobile"`) or a custom object `{ "width": number, "height": number }` |
 | `changePaths` | `string[]` | Optional prefixes used for changed-file scoping |
 
 ### Optional fields
@@ -183,10 +183,33 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 | Navigation timeout | 30000ms |
 | Settle delay | 300ms |
 
+## Local CLI directory layout
+
+When using the `snapdrift` CLI, outputs are written to `.snapdrift/` by default:
+
+```
+.snapdrift/
+  baseline/             # written by: snapdrift capture
+    results.json
+    manifest.json
+    screenshots/*.png
+  current/              # written by: snapdrift diff
+    results.json
+    manifest.json
+    screenshots/*.png
+  diff/                 # written by: snapdrift diff
+    summary.json
+    summary.md
+    report.html
+```
+
+All three directories can be overridden with `--baseline-dir`, `--current-dir`, and `--diff-dir`. See the [Local CLI guide](local-cli.md) for details.
+
 ## Primary entrypoints
 
 - `actions/baseline`
 - `actions/pr-diff`
+- `snapdrift` CLI (local development)
 
 ## Advanced environment variables
 
