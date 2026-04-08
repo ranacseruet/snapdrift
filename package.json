@@ -61,6 +61,9 @@
       }
     }
   },
+  "bin": {
+    "snapdrift": "./bin/snapdrift.mjs"
+  },
   "exports": {
     "./lib/snapdrift-config.mjs": "./lib/snapdrift-config.mjs",
     "./lib/capture-routes.mjs": "./lib/capture-routes.mjs",
@@ -68,10 +71,12 @@
     "./lib/stage-artifacts.mjs": "./lib/stage-artifacts.mjs",
     "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
     "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
-    "./lib/report.mjs": "./lib/report.mjs"
+    "./lib/report.mjs": "./lib/report.mjs",
+    "./lib/cli.mjs": "./lib/cli.mjs"
   },
   "files": [
     "actions/",
+    "bin/",
     "lib/",
     "types/",
     "docs/",

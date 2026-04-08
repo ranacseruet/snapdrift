@@ -325,6 +325,30 @@ describe('runBaselineCapture', () => {
         }));
     });
 
+    it('writes outputs into outDir when outDir is provided', async () => {
+        const routes = [{ id: 'home-desktop', path: '/', viewport: 'desktop' }];
+        const configPath = await writeConfig(tempDir, routes);
+        const desktopPage = createPage({}, { width: 10, height: 10 });
+        const mobilePage = createPage();
+        const outDir = path.join(tempDir, 'my-local-baseline');
+        createHarness({ desktopPage, mobilePage });
+
+        const result = await runBaselineCapture({ configPath, outDir });
+
+        // All output paths must be inside outDir
+        expect(result.resultsPath.startsWith(outDir)).toBe(true);
+        expect(result.manifestPath.startsWith(outDir)).toBe(true);
+        expect(result.screenshotsRoot).toBe(outDir);
+
+        // Files must exist in outDir
+        const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+        const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
+        expect(results.routes).toHaveLength(1);
+        expect(manifest.screenshots).toHaveLength(1);
+        const shot = path.join(outDir, 'screenshots', 'home-desktop.png');
+        expect((await fs.readFile(shot)).length).toBeGreaterThan(0);
+    });
+
     it('writes results and manifest before throwing when one or more captures fail', async () => {
         const routes = [{ id: 'home-desktop', path: '/', viewport: 'desktop' }];
         const configPath = await writeConfig(tempDir, routes);
