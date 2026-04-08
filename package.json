@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",

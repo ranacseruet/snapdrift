@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-04-08
+
 - Added `snapdrift` CLI with `capture` and `diff` commands for local development use without GitHub Actions.
 - Extended `runBaselineCapture` with an `outDir` option so outputs can be written to an arbitrary local directory.
 - Updated `package.json` to publish the `snapdrift` binary and export `lib/cli.mjs`.
+- Added npm publish workflow with provenance attestation.
 - Added [Local CLI guide](docs/local-cli.md) and updated README, integration guide, and contracts docs.
 
 ## 0.1.0 - 2026-03-09
