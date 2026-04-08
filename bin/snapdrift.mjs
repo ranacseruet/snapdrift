@@ -2,7 +2,6 @@
 // @ts-check
 
 import { pathToFileURL } from 'node:url';
-import path from 'node:path';
 
 // Resolve cli.mjs relative to this file so the bin entry works regardless of
 // where the consumer installs the package.
