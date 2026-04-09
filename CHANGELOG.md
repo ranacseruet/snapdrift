@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **Configurable PR comment truncation limits** — `actions/pr-diff` and `actions/comment` now accept optional `max-changed-rows` (default: 20) and `max-error-rows` (default: 10) inputs, letting teams control how many rows appear in the drift and error tables before the overflow note.
+
 ## 0.2.0 - 2026-04-08
 
 ### Features

@@ -178,6 +178,8 @@ jobs:
 | `baseline-workflow-id` | Override the baseline workflow id |
 | `baseline-branch` | Override the baseline branch |
 | `comment-on-pr` | Set to `false` to suppress the PR report |
+| `max-changed-rows` | Max changed-route rows shown before truncation (default: `20`) |
+| `max-error-rows` | Max error rows shown before truncation (default: `10`) |
 
 ## Low-level actions
 
