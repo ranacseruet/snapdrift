@@ -349,6 +349,30 @@ describe('runBaselineCapture', () => {
         expect((await fs.readFile(shot)).length).toBeGreaterThan(0);
     });
 
+    it('forwards per-route navigationTimeout to page.goto, falling back to the global default', async () => {
+        const routes = [
+            { id: 'fast-page', path: '/fast', viewport: 'desktop', navigationTimeout: 5000 },
+            { id: 'slow-page', path: '/slow', viewport: 'mobile' }
+        ];
+        const configPath = await writeConfig(tempDir, routes);
+        const fastPage = createPage({}, { width: 10, height: 10 });
+        const slowPage = createPage({}, { width: 10, height: 10 });
+        const { desktopContext, mobileContext } = createHarness({ desktopPage: fastPage, mobilePage: slowPage });
+
+        await runBaselineCapture({ configPath, routeIds: routes.map((r) => r.id) });
+
+        expect(fastPage.goto).toHaveBeenCalledWith('http://localhost:3000/fast', {
+            waitUntil: 'networkidle',
+            timeout: 5000
+        });
+        expect(slowPage.goto).toHaveBeenCalledWith('http://localhost:3000/slow', {
+            waitUntil: 'networkidle',
+            timeout: SNAPDRIFT_NAVIGATION_TIMEOUT_MS
+        });
+        expect(desktopContext.newPage).toHaveBeenCalledTimes(1);
+        expect(mobileContext.newPage).toHaveBeenCalledTimes(1);
+    });
+
     it('writes results and manifest before throwing when one or more captures fail', async () => {
         const routes = [{ id: 'home-desktop', path: '/', viewport: 'desktop' }];
         const configPath = await writeConfig(tempDir, routes);

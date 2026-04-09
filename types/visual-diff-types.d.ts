@@ -12,6 +12,7 @@ export interface VisualRegressionRouteConfig {
   path: string;
   viewport: VisualViewport;
   changePaths?: string[];
+  navigationTimeout?: number;
 }
 
 export interface VisualRegressionConfig {
