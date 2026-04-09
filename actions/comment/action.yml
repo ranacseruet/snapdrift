@@ -20,6 +20,14 @@ inputs:
     description: Artifact label to include in the comment.
     required: false
     default: ''
+  max-changed-rows:
+    description: Maximum number of changed-route rows shown in the PR comment before truncation.
+    required: false
+    default: '20'
+  max-error-rows:
+    description: Maximum number of error rows shown in the PR comment before truncation.
+    required: false
+    default: '10'
 
 runs:
   using: composite
@@ -34,6 +42,8 @@ runs:
         VISUAL_DIFF_RUN_URL: ${{ inputs.run-url }}
         VISUAL_DIFF_ARTIFACT_NAME: ${{ inputs.artifact-name }}
         INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
+        MAX_ERROR_ROWS: ${{ inputs.max-error-rows }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -59,9 +69,13 @@ runs:
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
+          const maxChangedRows = Number(process.env.MAX_CHANGED_ROWS) || 20;
+          const maxErrorRows = Number(process.env.MAX_ERROR_ROWS) || 10;
           const body = buildReportCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
-            runUrl
+            runUrl,
+            maxChangedRows,
+            maxErrorRows
           });
 
           const comments = await github.paginate(github.rest.issues.listComments, {

@@ -45,6 +45,14 @@ inputs:
     description: Whether to publish the SnapDrift PR report.
     required: false
     default: 'true'
+  max-changed-rows:
+    description: Maximum number of changed-route rows shown in the PR comment before truncation.
+    required: false
+    default: '20'
+  max-error-rows:
+    description: Maximum number of error rows shown in the PR comment before truncation.
+    required: false
+    default: '10'
 
 outputs:
   should-run:
@@ -490,6 +498,8 @@ runs:
         SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
         ARTIFACT_NAME: ${{ steps.context.outputs.artifact_name }}
         RUN_URL: ${{ steps.context.outputs.run_url }}
+        MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
+        MAX_ERROR_ROWS: ${{ inputs.max-error-rows }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -525,9 +535,13 @@ runs:
           const { buildReportCommentBody } = await import(pathToFileURL(modulePath));
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+          const maxChangedRows = Number(process.env.MAX_CHANGED_ROWS) || 20;
+          const maxErrorRows = Number(process.env.MAX_ERROR_ROWS) || 10;
           const body = buildReportCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
-            runUrl: process.env.RUN_URL || ''
+            runUrl: process.env.RUN_URL || '',
+            maxChangedRows,
+            maxErrorRows
           });
 
           const comments = await github.paginate(github.rest.issues.listComments, {

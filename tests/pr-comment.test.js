@@ -205,4 +205,46 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('| Drift signals | 0 |');
         expect(body).not.toContain('| Selected routes | Stable captures | Diff mode | Threshold |');
     });
+
+    it('respects custom maxChangedRows limit', () => {
+        const changed = Array.from({ length: 10 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            mismatchRatio: 0.01
+        }));
+        const body = buildReportCommentBody(
+            { ...cleanSummary, changedScreenshots: 10, changed },
+            { maxChangedRows: 5 }
+        );
+        expect(body).toContain('route-4');
+        expect(body).not.toContain('route-5');
+        expect(body).toContain('...and 5 more');
+    });
+
+    it('respects custom maxErrorRows limit', () => {
+        const errors = Array.from({ length: 6 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            message: `Failure ${i}`
+        }));
+        const body = buildReportCommentBody(
+            { ...cleanSummary, status: 'incomplete', errors },
+            { maxErrorRows: 3 }
+        );
+        expect(body).toContain('| route-2 | desktop | Failure 2 |');
+        expect(body).not.toContain('| route-3 | desktop | Failure 3 |');
+        expect(body).toContain('...and 3 more');
+    });
+
+    it('uses default limits when maxChangedRows and maxErrorRows are not provided', () => {
+        const changed = Array.from({ length: 21 }, (_, i) => ({
+            id: `route-${i}`,
+            viewport: 'desktop',
+            mismatchRatio: 0.01
+        }));
+        const body = buildReportCommentBody({ ...cleanSummary, changedScreenshots: 21, changed });
+        expect(body).toContain('route-19');
+        expect(body).not.toContain('route-20');
+        expect(body).toContain('...and 1 more');
+    });
 });
