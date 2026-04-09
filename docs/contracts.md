@@ -26,6 +26,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `path` | `string` | URL path appended to `baseUrl` |
 | `viewport` | `string` or `object` | Preset name (`"desktop"`, `"mobile"`) or a custom object `{ "width": number, "height": number }` |
 | `changePaths` | `string[]` | Optional prefixes used for changed-file scoping |
+| `navigationTimeout` | `number` | Optional per-route navigation timeout in ms (overrides the 30 000 ms global default) |
 
 ### Optional fields
 
