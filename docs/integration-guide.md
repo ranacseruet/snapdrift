@@ -209,6 +209,20 @@ The CLI reads the same `.github/snapdrift.json` config used by the Actions workf
 
 See the [Local CLI guide](local-cli.md) for full command reference, flags, directory layout, and examples.
 
+## Refresh the baseline automatically
+
+After an intentional layout change or dimension shift merges, the baseline must be republished before SnapDrift can compare like-for-like frames again. Without automation, this is a manual step.
+
+Use the provided workflow template to refresh the baseline automatically on every merge (or only on merges that carry a specific label):
+
+**`docs/workflow-templates/refresh-baseline-on-merge.yml`**
+
+Drop a copy into your repo at `.github/workflows/snapdrift-refresh-baseline.yml`, then fill in the `TODO` blocks with your app's build and start steps — the same steps you use in your PR workflow.
+
+### Label-gated refreshes
+
+If you don't want to republish the baseline on every merged PR, the template includes a commented `if` condition that checks for a label (e.g. `snapdrift:refresh-baseline`). Create that label in your repo, apply it to PRs that include visual changes, and the baseline will only refresh when needed.
+
 ## Troubleshooting
 
 **"No non-expired SnapDrift baseline artifact was found"**  
