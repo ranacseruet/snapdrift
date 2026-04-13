@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Infrastructure
+
+- **Integration test for compare → stage pipeline** — `tests/integration/capture-compare-pipeline.test.js` exercises the full `generateDriftReport → stageArtifacts` data flow with synthetic PNG fixtures (no live browser needed), catching interface mismatches between modules that unit tests alone would miss.
+
 ### Features
 
 - **Configurable PR comment truncation limits** — `actions/pr-diff` and `actions/comment` now accept optional `max-changed-rows` (default: 20) and `max-error-rows` (default: 10) inputs, letting teams control how many rows appear in the drift and error tables before the overflow note.
