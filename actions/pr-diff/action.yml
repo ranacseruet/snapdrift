@@ -262,7 +262,7 @@ runs:
           }
 
     - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
       with:
         github-token: ${{ inputs.github-token }}
         repository: ${{ inputs.baseline-repository || github.repository }}
@@ -475,7 +475,7 @@ runs:
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
         EOF
 
-    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+    - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ steps.context.outputs.artifact_name }}
         retention-days: ${{ inputs.artifact-retention-days }}
