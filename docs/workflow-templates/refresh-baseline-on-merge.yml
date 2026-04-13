@@ -1,0 +1,82 @@
+# SnapDrift — Baseline Refresh on Merge
+#
+# Drop this file into your consumer repo at:
+#   .github/workflows/snapdrift-refresh-baseline.yml
+#
+# What it does:
+#   Automatically re-publishes the SnapDrift baseline on every push to your
+#   default branch. Since merging a PR produces a push event, this keeps the
+#   baseline in sync after intentional layout changes, dimension shifts, or
+#   any other UI refactor lands.
+#
+# Prerequisites:
+#   - A working `.github/snapdrift.json` in your repo
+#   - The same build + start steps used in your PR workflow
+#
+# Uses a push trigger so published artifacts are discoverable by the baseline
+# resolver in actions/pr-diff (which filters on event: 'push'). A merge into
+# the default branch produces a push event, so this fires exactly when needed.
+#
+# Optional — refresh only on a specific label:
+#   If you don't want to refresh on every push, you can gate on a label applied
+#   before merging. Use the pull_request: labeled event in a separate workflow to
+#   set an output, or simply restrict this workflow to specific paths.
+#   See the commented block below for a label-based gate using a preceding job.
+
+name: SnapDrift Refresh Baseline
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write   # required to upload the baseline artifact
+
+jobs:
+  refresh-baseline:
+    # Optional: gate on a label to avoid refreshing on every push.
+    # Requires a preceding job that checks for the label on the most recent
+    # merged PR and sets an output. Replace "snapdrift:refresh-baseline" with
+    # your label name.
+    # if: needs.check-label.outputs.refresh == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── TODO: add your app's build + dependency steps here ──────────────────
+      # Example for a Node app:
+      #
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '22'
+      #     cache: npm
+      # - run: npm ci
+      # - run: npm run build
+      # ────────────────────────────────────────────────────────────────────────
+
+      # ── TODO: start your app and wait for it to be ready ────────────────────
+      # SnapDrift needs a running server to capture screenshots.
+      # Replace the URL and port to match your app's baseUrl from snapdrift.json.
+      #
+      # - name: Start app
+      #   run: |
+      #     npm start &
+      #     for i in $(seq 1 45); do
+      #       curl -sf http://127.0.0.1:8080 && break || sleep 1
+      #     done
+      # ────────────────────────────────────────────────────────────────────────
+
+      - name: Publish SnapDrift baseline
+        uses: ranacseruet/snapdrift/actions/baseline@v0.2.0
+        with:
+          repo-config-path: .github/snapdrift.json
+          artifact-retention-days: '30'
+
+      # ── TODO: shut down your app if needed ───────────────────────────────────
+      # - name: Stop app
+      #   if: always()
+      #   run: pkill -f "npm start" || true
+      # ────────────────────────────────────────────────────────────────────────
