@@ -213,15 +213,15 @@ See the [Local CLI guide](local-cli.md) for full command reference, flags, direc
 
 After an intentional layout change or dimension shift merges, the baseline must be republished before SnapDrift can compare like-for-like frames again. Without automation, this is a manual step.
 
-Use the provided workflow template to refresh the baseline automatically on every merge (or only on merges that carry a specific label):
+Use the provided workflow template to refresh the baseline automatically on every push to your default branch (i.e. every merge):
 
 **`docs/workflow-templates/refresh-baseline-on-merge.yml`**
 
-Drop a copy into your repo at `.github/workflows/snapdrift-refresh-baseline.yml`, then fill in the `TODO` blocks with your app's build and start steps — the same steps you use in your PR workflow.
+Drop a copy into your repo at `.github/workflows/snapdrift-refresh-baseline.yml`, then fill in the `TODO` blocks with your app's build and start steps — the same steps you use in your PR workflow. The template uses a `push` trigger on the default branch so published artifacts are discoverable by the baseline resolver in `actions/pr-diff`.
 
 ### Label-gated refreshes
 
-If you don't want to republish the baseline on every merged PR, the template includes a commented `if` condition that checks for a label (e.g. `snapdrift:refresh-baseline`). Create that label in your repo, apply it to PRs that include visual changes, and the baseline will only refresh when needed.
+If you don't want to republish the baseline on every push, the template includes a commented `if` condition that gates on a label (e.g. `snapdrift:refresh-baseline`). A preceding job can check the most recent merged PR for the label and set an output to control whether the baseline refresh runs.
 
 ## Troubleshooting
 

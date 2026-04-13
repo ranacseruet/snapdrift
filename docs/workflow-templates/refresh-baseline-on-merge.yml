@@ -4,25 +4,30 @@
 #   .github/workflows/snapdrift-refresh-baseline.yml
 #
 # What it does:
-#   Automatically re-publishes the SnapDrift baseline whenever a PR is merged
-#   into your default branch. This keeps the baseline in sync after intentional
-#   layout changes, dimension shifts, or any other UI refactor lands.
+#   Automatically re-publishes the SnapDrift baseline on every push to your
+#   default branch. Since merging a PR produces a push event, this keeps the
+#   baseline in sync after intentional layout changes, dimension shifts, or
+#   any other UI refactor lands.
 #
 # Prerequisites:
 #   - A working `.github/snapdrift.json` in your repo
 #   - The same build + start steps used in your PR workflow
 #
+# Uses a push trigger so published artifacts are discoverable by the baseline
+# resolver in actions/pr-diff (which filters on event: 'push'). A merge into
+# the default branch produces a push event, so this fires exactly when needed.
+#
 # Optional — refresh only on a specific label:
-#   If you don't want to refresh on every merge, add a label condition to the
-#   job (see the commented block below). Create a label in your repo, e.g.
-#   "snapdrift:refresh-baseline", then apply it to PRs that include visual
-#   changes before merging.
+#   If you don't want to refresh on every push, you can gate on a label applied
+#   before merging. Use the pull_request: labeled event in a separate workflow to
+#   set an output, or simply restrict this workflow to specific paths.
+#   See the commented block below for a label-based gate using a preceding job.
 
 name: SnapDrift Refresh Baseline
 
 on:
-  pull_request:
-    types: [closed]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -30,14 +35,11 @@ permissions:
 
 jobs:
   refresh-baseline:
-    # Run only when a PR is actually merged (not just closed)
-    if: github.event.pull_request.merged == true
-
-    # Optional: also gate on a label so not every merge triggers a refresh.
-    # Replace "snapdrift:refresh-baseline" with whatever label name you choose.
-    # if: >-
-    #   github.event.pull_request.merged == true &&
-    #   contains(github.event.pull_request.labels.*.name, 'snapdrift:refresh-baseline')
+    # Optional: gate on a label to avoid refreshing on every push.
+    # Requires a preceding job that checks for the label on the most recent
+    # merged PR and sets an output. Replace "snapdrift:refresh-baseline" with
+    # your label name.
+    # if: needs.check-label.outputs.refresh == 'true'
 
     runs-on: ubuntu-latest
 

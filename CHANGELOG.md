@@ -6,7 +6,7 @@
 
 - **Configurable PR comment truncation limits** — `actions/pr-diff` and `actions/comment` now accept optional `max-changed-rows` (default: 20) and `max-error-rows` (default: 10) inputs, letting teams control how many rows appear in the drift and error tables before the overflow note.
 - **Per-route navigation timeout** — routes now accept an optional `navigationTimeout` (positive integer, ms) that overrides the global 30 000 ms default for that route. Useful for slow SSR pages that need more time or fast static pages that should fail fast.
-- **Baseline refresh workflow template** — `docs/workflow-templates/refresh-baseline-on-merge.yml` is a drop-in workflow template for consumer repos that automatically republishes the SnapDrift baseline when a PR is merged. Supports an optional label gate (`snapdrift:refresh-baseline`) to avoid republishing on every merge.
+- **Baseline refresh workflow template** — `docs/workflow-templates/refresh-baseline-on-merge.yml` is a drop-in workflow template for consumer repos that automatically republishes the SnapDrift baseline on every push to the default branch. Uses a `push` trigger (not `pull_request: closed`) so published artifacts are discoverable by the baseline resolver in `actions/pr-diff`. Supports an optional label gate to avoid republishing on every push.
 
 ## 0.2.0 - 2026-04-08
 
