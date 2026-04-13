@@ -70,7 +70,7 @@ jobs:
       # ────────────────────────────────────────────────────────────────────────
 
       - name: Publish SnapDrift baseline
-        uses: ranacseruet/snapdrift/actions/baseline@v0.2.0
+        uses: ranacseruet/snapdrift/actions/baseline@v0.2.1
         with:
           repo-config-path: .github/snapdrift.json
           artifact-retention-days: '30'

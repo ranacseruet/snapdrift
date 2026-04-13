@@ -44,7 +44,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift/actions/baseline@v0.1.0
+  uses: ranacseruet/snapdrift/actions/baseline@v0.2.1
   with:
     repo-config-path: .github/snapdrift.json
 ```
@@ -53,7 +53,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift/actions/pr-diff@v0.1.0
+  uses: ranacseruet/snapdrift/actions/pr-diff@v0.2.1
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/snapdrift.json
@@ -90,7 +90,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 
 - Ubuntu runners only
 - Full-page capture only
-- Fixed viewport presets: `desktop` (1440×900) and `mobile` (390×844)
+- Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - One global `diff.threshold`
 - Dimension shifts are reported separately from pixel drift
 

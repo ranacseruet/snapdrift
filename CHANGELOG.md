@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-04-13
+
 ### Infrastructure
 
 - **Integration test for compare → stage pipeline** — `tests/integration/capture-compare-pipeline.test.js` exercises the full `generateDriftReport → stageArtifacts` data flow with synthetic PNG fixtures (no live browser needed), catching interface mismatches between modules that unit tests alone would miss.
@@ -10,7 +12,13 @@
 
 - **Configurable PR comment truncation limits** — `actions/pr-diff` and `actions/comment` now accept optional `max-changed-rows` (default: 20) and `max-error-rows` (default: 10) inputs, letting teams control how many rows appear in the drift and error tables before the overflow note.
 - **Per-route navigation timeout** — routes now accept an optional `navigationTimeout` (positive integer, ms) that overrides the global 30 000 ms default for that route. Useful for slow SSR pages that need more time or fast static pages that should fail fast.
-- **Baseline refresh workflow template** — `docs/workflow-templates/refresh-baseline-on-merge.yml` is a drop-in workflow template for consumer repos that automatically republishes the SnapDrift baseline on every push to the default branch. Uses a `push` trigger (not `pull_request: closed`) so published artifacts are discoverable by the baseline resolver in `actions/pr-diff`. Supports an optional label gate to avoid republishing on every push.
+- **Baseline refresh workflow template** — `docs/workflow-templates/refresh-baseline-on-merge.yml` is a drop-in workflow template for consumer repos that automatically republishes the SnapDrift baseline on every push to the default branch. Supports an optional label gate to avoid republishing on every push.
+
+### Fixes
+
+- **Baseline refresh template trigger** — switched from `pull_request: closed` to `push` on the default branch so published artifacts are actually discoverable by the baseline resolver in `actions/pr-diff`, which hardcodes `event:'push'` when querying workflow runs.
+- **Artifact action pins** — `actions/upload-artifact` and `actions/download-artifact` in composite action YAMLs are now pinned to v7 SHAs, matching the CI workflow (the v0.2.0 changelog noted this upgrade but only the CI workflow was updated at the time).
+- **Stale version references** — README and integration guide examples now reference `@v0.2.1` instead of the outdated `@v0.1.0`. README "Current constraints" updated to reflect custom viewport support.
 
 ## 0.2.0 - 2026-04-08
 
