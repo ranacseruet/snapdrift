@@ -18,8 +18,7 @@ const { runBaselineCapture } = await import('../lib/capture-routes.mjs');
 const {
     SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
     SNAPDRIFT_SETTLE_DELAY_MS,
-    SNAPDRIFT_VIEWPORT_PRESETS,
-    SNAPDRIFT_CAPTURE_CONCURRENCY
+    SNAPDRIFT_VIEWPORT_PRESETS
 } = await import('../lib/snapdrift-config.mjs');
 
 function makeConfig(tempDir, routes) {
