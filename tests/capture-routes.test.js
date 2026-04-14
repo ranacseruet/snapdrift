@@ -151,7 +151,7 @@ describe('runBaselineCapture', () => {
         const desktopShot = path.join(result.screenshotsRoot, 'screenshots', 'home-desktop.png');
         const mobileShot = path.join(result.screenshotsRoot, 'screenshots', 'home-mobile.png');
 
-        expect(launchMock).toHaveBeenCalledWith({ headless: true });
+        expect(launchMock).toHaveBeenCalledWith({ headless: true, args: ['--disable-gpu'] });
         expect(browser.newContext).toHaveBeenNthCalledWith(1, {
             viewport: {
                 width: SNAPDRIFT_VIEWPORT_PRESETS.desktop.width,
@@ -171,11 +171,11 @@ describe('runBaselineCapture', () => {
             hasTouch: SNAPDRIFT_VIEWPORT_PRESETS.mobile.hasTouch
         });
         expect(desktopPage.goto).toHaveBeenCalledWith('http://localhost:3000/', {
-            waitUntil: 'networkidle',
+            waitUntil: 'load',
             timeout: SNAPDRIFT_NAVIGATION_TIMEOUT_MS
         });
         expect(mobilePage.goto).toHaveBeenCalledWith('http://localhost:3000/', {
-            waitUntil: 'networkidle',
+            waitUntil: 'load',
             timeout: SNAPDRIFT_NAVIGATION_TIMEOUT_MS
         });
         expect(desktopPage.waitForTimeout).toHaveBeenCalledWith(SNAPDRIFT_SETTLE_DELAY_MS);
@@ -362,11 +362,11 @@ describe('runBaselineCapture', () => {
         await runBaselineCapture({ configPath, routeIds: routes.map((r) => r.id) });
 
         expect(fastPage.goto).toHaveBeenCalledWith('http://localhost:3000/fast', {
-            waitUntil: 'networkidle',
+            waitUntil: 'load',
             timeout: 5000
         });
         expect(slowPage.goto).toHaveBeenCalledWith('http://localhost:3000/slow', {
-            waitUntil: 'networkidle',
+            waitUntil: 'load',
             timeout: SNAPDRIFT_NAVIGATION_TIMEOUT_MS
         });
         expect(desktopContext.newPage).toHaveBeenCalledTimes(1);

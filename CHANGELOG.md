@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Performance
+
+- **Faster screenshot capture** — navigation now waits for `load` instead of `networkidle`, removing a guaranteed ≥500 ms floor per route. A 20-route run saves ~10 s in navigation waits alone.
+- **Concurrent route capture** — routes within the same viewport are now captured in parallel (up to `SNAPDRIFT_CAPTURE_CONCURRENCY` at a time, default 5) rather than sequentially, giving a further 3–5× throughput improvement on multi-route suites.
+- **Deterministic animation handling** — screenshots are taken with `animations: 'disabled'` so Playwright finishes/cancels CSS animations before capture, replacing reliance on the settle delay for animation timing.
+
+### Features
+
+- **`SNAPDRIFT_CAPTURE_CONCURRENCY` env var** — controls the maximum number of routes captured concurrently within a viewport context (positive integer, default `5`). Set to `1` to restore serial-per-viewport behaviour for apps with shared session or auth state.
+
 ## 0.2.1 - 2026-04-13
 
 ### Infrastructure

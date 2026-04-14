@@ -180,9 +180,11 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 
 | Setting | Value |
 |:--------|:------|
-| Navigation wait | `networkidle` |
+| Navigation wait | `load` |
 | Navigation timeout | 30000ms |
 | Settle delay | 300ms |
+| Screenshot animations | `disabled` (Playwright finishes/cancels CSS animations before capture) |
+| Capture concurrency | 5 routes per viewport (overridable via `SNAPDRIFT_CAPTURE_CONCURRENCY`)|
 
 ## Local CLI directory layout
 
@@ -232,3 +234,4 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 | `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-results.mjs` | Baseline artifact label to embed in the report |
 | `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
 | `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
+| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures per viewport context (positive integer, default `5`). Set to `1` to restore serial behaviour for apps with shared session/auth state. |

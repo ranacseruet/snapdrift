@@ -450,6 +450,7 @@ describe('lib module exports are stable', () => {
         expect(mod.SNAPDRIFT_VIEWPORT_PRESETS).toBeDefined();
         expect(typeof mod.SNAPDRIFT_NAVIGATION_TIMEOUT_MS).toBe('number');
         expect(typeof mod.SNAPDRIFT_SETTLE_DELAY_MS).toBe('number');
+        expect(typeof mod.SNAPDRIFT_CAPTURE_CONCURRENCY).toBe('number');
     });
 
     it('drift comparison module exports all expected symbols', async () => {
