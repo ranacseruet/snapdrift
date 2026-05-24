@@ -24,7 +24,7 @@ export default [
     }
   },
   {
-    files: ['tests/**/*.js'],
+    files: ['tests/**/*.js', 'packages/*/tests/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.node,
