@@ -11,6 +11,12 @@ const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
  * Changed pixels are highlighted with the specified color;
  * unchanged pixels retain their original color.
  *
+ * Note: ignore regions are not yet supported in the diff image.
+ * Pixels inside ignore regions are still highlighted as changed,
+ * so the diff image may visually disagree with
+ * `compareWithIgnoreRegions` metrics. Adding `ignoreRegions`
+ * support (neutral mask overlay) is deferred to Phase 1b.
+ *
  * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
  * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
  * @param {import('../types/index.d.ts').DiffImageOptions} [options]

@@ -7,8 +7,8 @@
 const CURRENT_SCHEMA_VERSION = 1;
 
 /**
- * Validate a screenshot manifest object.
- * Accepts manifests without `schemaVersion` (defaults to 1).
+ * Validate and normalise a screenshot manifest object.
+ * If `schemaVersion` is absent, it is set to CURRENT_SCHEMA_VERSION (1).
  *
  * @param {unknown} value
  * @returns {ScreenshotManifest}
@@ -22,6 +22,10 @@ export function validateManifest(value) {
 
   if (candidate.schemaVersion !== undefined && typeof candidate.schemaVersion !== 'number') {
     throw new Error('manifest.schemaVersion must be a number when present.');
+  }
+
+  if (candidate.schemaVersion === undefined) {
+    candidate.schemaVersion = CURRENT_SCHEMA_VERSION;
   }
 
   if (typeof candidate.generatedAt !== 'string' || !candidate.generatedAt) {

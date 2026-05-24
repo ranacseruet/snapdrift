@@ -21,9 +21,9 @@ describe('@snapdrift/manifest — validateManifest', () => {
     expect(result.schemaVersion).toBe(1);
   });
 
-  test('accepts manifest without schemaVersion (defaults to 1)', () => {
+  test('defaults schemaVersion to 1 when absent', () => {
     const result = validateManifest(VALID_MANIFEST);
-    expect(result.schemaVersion).toBeUndefined();
+    expect(result.schemaVersion).toBe(1);
   });
 
   test('rejects non-object', () => {

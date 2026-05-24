@@ -12,6 +12,8 @@ export interface IgnoreRegion {
 export interface DiffImageOptions {
   /** RGBA color for changed pixels. Default: [255, 0, 0, 255] (red). */
   highlightColor?: [number, number, number, number];
+  /** Not yet implemented (Phase 1b). Pixels in ignore regions will be overlaid with a neutral mask. */
+  ignoreRegions?: IgnoreRegion[];
 }
 
 export interface CompareResult {
