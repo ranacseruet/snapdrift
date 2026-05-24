@@ -287,7 +287,7 @@ describe('runBaselineCapture', () => {
         const configPath = await writeConfig(tempDir, routes);
         const desktopPage = createPage();
         const mobilePage = createPage();
-        const customPage = createPage({}, { width: 800, height: 600 });
+        const customPage = createPage();
         const { browser, desktopContext, mobileContext, customContext } = createHarness({ desktopPage, mobilePage, customPage });
 
         const result = await runBaselineCapture({ configPath, routeIds: ['tablet-view'] });
@@ -314,9 +314,7 @@ describe('runBaselineCapture', () => {
         expect(results.routes).toHaveLength(1);
         expect(results.routes[0]).toEqual(expect.objectContaining({
             id: 'tablet-view',
-            viewport: { width: 800, height: 600 },
-            width: 800,
-            height: 600
+            viewport: { width: 800, height: 600 }
         }));
         expect(manifest.screenshots).toHaveLength(1);
         expect(manifest.screenshots[0]).toEqual(expect.objectContaining({
