@@ -81,6 +81,25 @@ describe('@snapdrift/compare-core — compareBuffers', () => {
     expect(result.width).toBe(20);
     expect(result.height).toBe(30);
   });
+
+  test('returns full-precision mismatchRatio (no rounding)', () => {
+    // 1 pixel different out of 7 = 1/7 = 0.142857142857...
+    const basePng = new PNG({ width: 7, height: 1 });
+    for (let i = 0; i < basePng.data.length; i += 4) {
+      basePng.data[i] = 0; basePng.data[i + 1] = 0; basePng.data[i + 2] = 0; basePng.data[i + 3] = 255;
+    }
+    const currentPng = new PNG({ width: 7, height: 1 });
+    for (let i = 0; i < currentPng.data.length; i += 4) {
+      currentPng.data[i] = 0; currentPng.data[i + 1] = 0; currentPng.data[i + 2] = 0; currentPng.data[i + 3] = 255;
+    }
+    // Change pixel at (3,0)
+    currentPng.data[12] = 255;
+    const baseBuf = PNG.sync.write(basePng);
+    const currentBuf = PNG.sync.write(currentPng);
+    const result = compareBuffers(baseBuf, currentBuf);
+    expect(result.mismatchRatio).toBeCloseTo(1 / 7, 10);
+    expect(result.pct).toBe(result.mismatchRatio);
+  });
 });
 
 describe('@snapdrift/compare-core — generateDiffImage', () => {

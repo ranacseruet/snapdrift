@@ -52,6 +52,19 @@ export function validateManifest(value) {
     if (typeof e.path !== 'string') {
       throw new Error(`manifest.screenshots[${index}].path must be a string.`);
     }
+    if (typeof e.imagePath !== 'string' || !e.imagePath) {
+      throw new Error(`manifest.screenshots[${index}].imagePath must be a non-empty string.`);
+    }
+    if (e.viewport !== undefined && e.viewport !== null) {
+      const vp = e.viewport;
+      const isPreset = typeof vp === 'string';
+      const isCustom = typeof vp === 'object' && !Array.isArray(vp) && typeof /** @type {{width: number, height: number}} */ (vp).width === 'number' && typeof /** @type {{width: number, height: number}} */ (vp).height === 'number';
+      if (!isPreset && !isCustom) {
+        throw new Error(`manifest.screenshots[${index}].viewport must be a preset string or an object with width and height.`);
+      }
+    } else {
+      throw new Error(`manifest.screenshots[${index}].viewport is required.`);
+    }
     if (typeof e.width !== 'number' || !Number.isFinite(e.width) || e.width <= 0) {
       throw new Error(`manifest.screenshots[${index}].width must be a positive number.`);
     }

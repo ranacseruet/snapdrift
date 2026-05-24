@@ -43,8 +43,8 @@ export function compareBuffers(baselineBuffer, currentBuffer) {
     height: baselinePng.height,
     differentPixels,
     totalPixels,
-    mismatchRatio: Number(mismatchRatio.toFixed(6)),
-    pct: Number(mismatchRatio.toFixed(6)),
+    mismatchRatio,
+    pct: mismatchRatio,
     pixelsChanged: differentPixels
   };
 }

@@ -70,8 +70,8 @@ export function compareWithIgnoreRegions(baselineBuffer, currentBuffer, regions)
     height,
     differentPixels,
     totalPixels,
-    mismatchRatio: Number(mismatchRatio.toFixed(6)),
-    pct: Number(mismatchRatio.toFixed(6)),
+    mismatchRatio,
+    pct: mismatchRatio,
     pixelsChanged: differentPixels
   };
 }

@@ -70,6 +70,34 @@ describe('@snapdrift/manifest — validateManifest', () => {
     const bad = { ...VALID_MANIFEST, screenshots: [{ id: 'a', path: '/', width: 0, height: 100, viewport: 'desktop', imagePath: 'a.png' }] };
     expect(() => validateManifest(bad)).toThrow('width');
   });
+
+  test('rejects screenshot with missing imagePath', () => {
+    const { imagePath, ...entryWithout } = VALID_MANIFEST.screenshots[0];
+    const bad = { ...VALID_MANIFEST, screenshots: [entryWithout] };
+    expect(() => validateManifest(bad)).toThrow('imagePath');
+  });
+
+  test('rejects screenshot with empty imagePath', () => {
+    const bad = { ...VALID_MANIFEST, screenshots: [{ ...VALID_MANIFEST.screenshots[0], imagePath: '' }] };
+    expect(() => validateManifest(bad)).toThrow('imagePath');
+  });
+
+  test('rejects screenshot with missing viewport', () => {
+    const { viewport, ...entryWithout } = VALID_MANIFEST.screenshots[0];
+    const bad = { ...VALID_MANIFEST, screenshots: [entryWithout] };
+    expect(() => validateManifest(bad)).toThrow('viewport');
+  });
+
+  test('rejects screenshot with invalid viewport type', () => {
+    const bad = { ...VALID_MANIFEST, screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport: 123 }] };
+    expect(() => validateManifest(bad)).toThrow('viewport');
+  });
+
+  test('accepts screenshot with custom viewport object', () => {
+    const custom = { ...VALID_MANIFEST, screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport: { width: 1280, height: 720 } }] };
+    const result = validateManifest(custom);
+    expect(result.screenshots[0].viewport).toEqual({ width: 1280, height: 720 });
+  });
 });
 
 describe('@snapdrift/manifest — indexManifestEntries', () => {
