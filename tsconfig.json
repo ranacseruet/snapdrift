@@ -12,6 +12,8 @@
   },
   "include": [
     "lib/**/*.mjs",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "packages/*/src/**/*.mjs",
+    "packages/*/types/*.d.ts"
   ]
 }

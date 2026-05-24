@@ -1,0 +1,27 @@
+{
+  "name": "@snapdrift/compare-core",
+  "version": "1.0.0",
+  "description": "Pure pixel-comparison engine for SnapDrift — no I/O, no filesystem, no manifest knowledge",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "types": "types/index.d.ts",
+  "files": [
+    "src/",
+    "types/"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ranacseruet/snapdrift.git",
+    "directory": "packages/compare-core"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}
