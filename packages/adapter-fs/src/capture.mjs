@@ -1,0 +1,398 @@
+// @ts-check
+
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { chromium } from 'playwright';
+import pngjs from 'pngjs';
+
+import { loadSnapdriftConfig, readFirstDefinedEnv, SNAPDRIFT_CAPTURE_CONCURRENCY } from './config.mjs';
+import {
+  selectConfiguredRoutes,
+  splitCommaList,
+  resolveFromWorkingDirectory,
+  VIEWPORT_PRESETS,
+  SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
+  SNAPDRIFT_SETTLE_DELAY_MS
+} from '@snapdrift/manifest';
+
+const { PNG } = pngjs;
+
+/** @typedef {import('../../manifest/types/index').VisualBaselineResults} BaselineResults */
+/** @typedef {import('../../manifest/types/index').VisualBaselineRouteResult} BaselineRouteResult */
+/** @typedef {import('../../manifest/types/index').VisualRegressionRouteConfig} SnapdriftRouteConfig */
+/** @typedef {import('../../manifest/types/index').VisualScreenshotManifest} ScreenshotManifest */
+
+/**
+ * @param {string} targetPath
+ * @returns {Promise<void>}
+ */
+async function ensureParentDirectory(targetPath) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+}
+
+/**
+ * @param {string} targetPath
+ * @returns {Promise<void>}
+ */
+async function ensureDirectory(targetPath) {
+  await fs.mkdir(targetPath, { recursive: true });
+}
+
+/**
+ * Strips characters that could cause path traversal or produce invalid filenames.
+ * @param {string} id
+ * @returns {string}
+ */
+function sanitizeRouteId(id) {
+  return id
+    .replace(/\.\./g, '_')
+    .replace(/[/\\]/g, '_')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '');
+}
+
+/** @typedef {import('../../manifest/types/index').VisualViewport} VisualViewport */
+
+/**
+ * Returns a stable string key for a viewport value (preset name or custom dimensions).
+ * @param {VisualViewport} viewport
+ * @returns {string}
+ */
+function viewportKey(viewport) {
+  return typeof viewport === 'string' ? viewport : `custom:${viewport.width}x${viewport.height}`;
+}
+
+/**
+ * Returns a human-readable label for a viewport.
+ * @param {VisualViewport} viewport
+ * @returns {string}
+ */
+function viewportLabel(viewport) {
+  return typeof viewport === 'string' ? viewport : `${viewport.width}x${viewport.height}`;
+}
+
+/**
+ * Returns Playwright context options for a viewport.
+ * @param {VisualViewport} viewport
+ * @returns {import('playwright').BrowserContextOptions}
+ */
+function viewportContextOptions(viewport) {
+  if (typeof viewport === 'string') {
+    const preset = VIEWPORT_PRESETS[viewport];
+    return {
+      viewport: { width: preset.width, height: preset.height },
+      deviceScaleFactor: preset.deviceScaleFactor,
+      isMobile: preset.isMobile,
+      hasTouch: preset.hasTouch
+    };
+  }
+  return {
+    viewport: { width: viewport.width, height: viewport.height },
+    deviceScaleFactor: 1,
+    isMobile: false,
+    hasTouch: false
+  };
+}
+
+/**
+ * @param {import('playwright').Browser} browser
+ * @returns {Promise<Map<'desktop' | 'mobile', import('playwright').BrowserContext>>}
+ */
+async function createViewportContexts(browser) {
+  return new Map([
+    ['desktop', await browser.newContext({
+      viewport: { width: VIEWPORT_PRESETS.desktop.width, height: VIEWPORT_PRESETS.desktop.height },
+      deviceScaleFactor: VIEWPORT_PRESETS.desktop.deviceScaleFactor,
+      isMobile: VIEWPORT_PRESETS.desktop.isMobile,
+      hasTouch: VIEWPORT_PRESETS.desktop.hasTouch
+    })],
+    ['mobile', await browser.newContext({
+      viewport: { width: VIEWPORT_PRESETS.mobile.width, height: VIEWPORT_PRESETS.mobile.height },
+      deviceScaleFactor: VIEWPORT_PRESETS.mobile.deviceScaleFactor,
+      isMobile: VIEWPORT_PRESETS.mobile.isMobile,
+      hasTouch: VIEWPORT_PRESETS.mobile.hasTouch
+    })]
+  ]);
+}
+
+/**
+ * @param {import('playwright').BrowserContext} context
+ * @param {SnapdriftRouteConfig} route
+ * @param {string} baseUrl
+ * @param {string} screenshotsRoot
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ */
+async function captureRoute(context, route, baseUrl, screenshotsRoot) {
+  const startedAt = Date.now();
+
+  const page = await context.newPage();
+  try {
+    const targetUrl = new URL(route.path, baseUrl).toString();
+    await page.goto(targetUrl, {
+      waitUntil: 'load',
+      timeout: route.navigationTimeout ?? SNAPDRIFT_NAVIGATION_TIMEOUT_MS
+    });
+    await page.waitForTimeout(SNAPDRIFT_SETTLE_DELAY_MS);
+
+    const imagePath = path.join('screenshots', `${sanitizeRouteId(route.id)}.png`);
+    const absoluteImagePath = path.join(screenshotsRoot, imagePath);
+    await ensureParentDirectory(absoluteImagePath);
+    const screenshotBuffer = await page.screenshot({
+      path: absoluteImagePath,
+      fullPage: true,
+      animations: 'disabled'
+    });
+    const screenshot = PNG.sync.read(screenshotBuffer);
+
+    return {
+      id: route.id,
+      path: route.path,
+      viewport: route.viewport,
+      status: 'passed',
+      durationMs: Date.now() - startedAt,
+      imagePath,
+      width: screenshot.width,
+      height: screenshot.height,
+      manifestEntry: {
+        id: route.id,
+        path: route.path,
+        viewport: route.viewport,
+        imagePath,
+        width: screenshot.width,
+        height: screenshot.height
+      }
+    };
+  } catch (error) {
+    return {
+      id: route.id,
+      path: route.path,
+      viewport: route.viewport,
+      status: 'failed',
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    await page.close();
+  }
+}
+
+const CAPTURE_MAX_RETRIES = 1;
+
+/**
+ * Returns a function that schedules async tasks with at most `limit` running concurrently.
+ * @param {number} limit
+ * @returns {<T>(fn: () => Promise<T>) => Promise<T>}
+ */
+function createConcurrencyLimiter(limit) {
+  let active = 0;
+  /** @type {Array<() => void>} */
+  const queue = [];
+  return function run(fn) {
+    return new Promise((resolve, reject) => {
+      const execute = () => {
+        active++;
+        fn().then(resolve, reject).finally(() => {
+          active--;
+          if (queue.length > 0) queue.shift()();
+        });
+      };
+      if (active < limit) execute();
+      else queue.push(execute);
+    });
+  };
+}
+
+/**
+ * @param {import('playwright').BrowserContext} context
+ * @param {SnapdriftRouteConfig} route
+ * @param {string} baseUrl
+ * @param {string} screenshotsRoot
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ */
+async function captureRouteWithRetry(context, route, baseUrl, screenshotsRoot) {
+  let result = await captureRoute(context, route, baseUrl, screenshotsRoot);
+  for (let attempt = 1; attempt <= CAPTURE_MAX_RETRIES && result.status !== 'passed'; attempt++) {
+    console.log(`[SnapDrift] Retrying route ${route.id} (attempt ${attempt + 1}/${CAPTURE_MAX_RETRIES + 1})...`);
+    result = await captureRoute(context, route, baseUrl, screenshotsRoot);
+  }
+  return result;
+}
+
+/**
+ * Captures all routes for a single viewport context concurrently (up to SNAPDRIFT_CAPTURE_CONCURRENCY
+ * at a time), logging progress. Results are written to `out` by original route index to preserve order.
+ *
+ * @param {import('playwright').BrowserContext} context
+ * @param {Array<{ route: SnapdriftRouteConfig, originalIndex: number }>} entries
+ * @param {string} baseUrl
+ * @param {string} screenshotsRoot
+ * @param {number} totalRoutes
+ * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
+ * @returns {Promise<void>}
+ */
+async function captureViewportRoutes(context, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
+  const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
+  await Promise.all(entries.map(({ route, originalIndex }) =>
+    limit(async () => {
+      console.log(`[SnapDrift] Capturing route ${originalIndex + 1}/${totalRoutes}: ${route.id} (${viewportLabel(route.viewport)})`);
+      out[originalIndex] = await captureRouteWithRetry(context, route, baseUrl, screenshotsRoot);
+    })
+  ));
+}
+
+/**
+ * @param {{
+ *   configPath?: string,
+ *   routeIds?: Iterable<string>,
+ *   outDir?: string
+ * }} [options]
+ * @returns {Promise<{ resultsPath: string, manifestPath: string, screenshotsRoot: string, selectedRouteIds: string[] }>}
+ */
+export async function runBaselineCapture(options = {}) {
+  const requestedRouteIds = [...(
+    options.routeIds || splitCommaList(readFirstDefinedEnv(['SNAPDRIFT_ROUTE_IDS']))
+  )];
+  const { config, configPath } = await loadSnapdriftConfig(options.configPath);
+  const { routes, selectedRouteIds } = selectConfiguredRoutes(config, requestedRouteIds);
+
+  // When outDir is provided (e.g. by the local CLI), store all outputs flat inside that directory
+  // using just the basename of each configured path.  Otherwise, use the config-resolved paths.
+  const localOutDir = options.outDir ? path.resolve(options.outDir) : null;
+  const resultsPath = localOutDir
+    ? path.join(localOutDir, path.basename(config.resultsFile))
+    : resolveFromWorkingDirectory(config, config.resultsFile);
+  const manifestPath = localOutDir
+    ? path.join(localOutDir, path.basename(config.manifestFile))
+    : resolveFromWorkingDirectory(config, config.manifestFile);
+  const screenshotsRoot = localOutDir || resolveFromWorkingDirectory(config, config.screenshotsRoot);
+
+  // Screenshots are written to a `screenshots/` subdirectory inside screenshotsRoot,
+  // i.e. the actual PNG files land at `{screenshotsRoot}/screenshots/{id}.png`.
+  await Promise.all([
+    ensureParentDirectory(resultsPath),
+    ensureParentDirectory(manifestPath),
+    ensureDirectory(path.join(screenshotsRoot, 'screenshots'))
+  ]);
+
+  /** @type {BaselineResults} */
+  const results = {
+    startedAt: new Date().toISOString(),
+    baseUrl: config.baseUrl,
+    suite: 'snapdrift-capture',
+    configPath: path.relative(path.resolve('.'), configPath),
+    manifestPath: path.relative(path.resolve('.'), manifestPath),
+    screenshotsRoot: path.relative(path.resolve('.'), screenshotsRoot),
+    routes: []
+  };
+
+  /** @type {ScreenshotManifest} */
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    baseUrl: config.baseUrl,
+    screenshots: []
+  };
+
+  const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'] });
+  // Pre-create contexts for the two standard presets; custom viewports are created on demand below.
+  const presetContexts = await createViewportContexts(browser);
+  /** @type {Map<string, import('playwright').BrowserContext>} */
+  const allContexts = new Map(presetContexts);
+  let failures = 0;
+
+  try {
+    // Group routes by viewport key, preserving each route's original index for result ordering.
+    /** @type {Map<string, Array<{ route: SnapdriftRouteConfig, originalIndex: number }>>} */
+    const byViewport = new Map();
+    for (const [i, route] of routes.entries()) {
+      const key = viewportKey(route.viewport);
+      const existing = byViewport.get(key);
+      if (existing) {
+        existing.push({ route, originalIndex: i });
+      } else {
+        byViewport.set(key, [{ route, originalIndex: i }]);
+      }
+    }
+
+    // Create browser contexts for any custom viewports not covered by presets.
+    for (const [key, entries] of byViewport) {
+      if (!allContexts.has(key)) {
+        try {
+          allContexts.set(key, await browser.newContext(viewportContextOptions(entries[0].route.viewport)));
+        } catch (err) {
+          const message = `Failed to create browser context: ${err instanceof Error ? err.message : String(err)}`;
+          for (const { route } of entries) {
+            results.routes.push({ id: route.id, path: route.path, viewport: route.viewport, status: 'failed', durationMs: 0, error: message });
+            failures += 1;
+          }
+          throw err;
+        }
+      }
+    }
+
+    // Pre-allocate results array; captureViewportRoutes fills slots by originalIndex.
+    /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} */
+    const captureResults = new Array(routes.length);
+
+    // Run each viewport group concurrently; routes within a group stay sequential.
+    await Promise.all([...byViewport.entries()].map(([key, entries]) => {
+      const context = allContexts.get(key);
+      if (!context) {
+        throw new Error(`No browser context for viewport: ${key}`);
+      }
+      return captureViewportRoutes(context, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults);
+    }));
+
+    // Merge results in original route order.
+    for (const capture of captureResults) {
+      results.routes.push({
+        id: capture.id,
+        path: capture.path,
+        viewport: capture.viewport,
+        status: capture.status,
+        durationMs: capture.durationMs,
+        imagePath: capture.imagePath,
+        width: capture.width,
+        height: capture.height,
+        error: capture.error
+      });
+      if (capture.manifestEntry) {
+        manifest.screenshots.push(capture.manifestEntry);
+      }
+      if (capture.status !== 'passed') {
+        failures += 1;
+      }
+    }
+  } finally {
+    await Promise.all([...allContexts.values()].map((context) => context.close()));
+    await browser.close();
+    results.finishedAt = new Date().toISOString();
+    results.passed = failures === 0;
+    manifest.generatedAt = new Date().toISOString();
+
+    await Promise.all([
+      fs.writeFile(resultsPath, JSON.stringify(results, null, 2)),
+      fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+    ]);
+  }
+
+  if (failures > 0) {
+    throw new Error(`SnapDrift capture failed for ${failures} route(s).`);
+  }
+
+  return {
+    resultsPath,
+    manifestPath,
+    screenshotsRoot,
+    selectedRouteIds
+  };
+}
+
+const isDirectRun = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isDirectRun) {
+  runBaselineCapture().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@snapdrift/adapter-fs",
+  "version": "1.0.0",
+  "description": "Filesystem I/O adapter for SnapDrift — reads baselines from disk, writes reports to disk",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": { ".": "./src/index.mjs" },
+  "types": "types/index.d.ts",
+  "files": ["src/", "types/"],
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/ranacseruet/snapdrift.git", "directory": "packages/adapter-fs" },
+  "dependencies": {
+    "@snapdrift/compare-core": "*",
+    "@snapdrift/manifest": "*",
+    "pngjs": "^7.0.0",
+    "playwright": "^1.59.1"
+  }
+}
