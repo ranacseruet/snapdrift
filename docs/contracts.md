@@ -135,6 +135,12 @@ The pull request drift bundle contains:
 }
 ```
 
+### Optional summary fields
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
+
 ### Status values
 
 | Status | Meaning |

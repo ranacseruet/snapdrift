@@ -189,6 +189,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
+  dashboardUrl?: string;
 }
 
 // --- Drift status classification ---

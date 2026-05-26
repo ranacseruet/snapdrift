@@ -91,6 +91,7 @@ runs:
           const body = provider.buildCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
             runUrl,
+            dashboardUrl: summary.dashboardUrl || undefined,
             maxChangedRows,
             maxErrorRows
           });

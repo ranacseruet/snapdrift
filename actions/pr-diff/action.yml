@@ -551,6 +551,7 @@ runs:
           const body = provider.buildCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
             runUrl: process.env.RUN_URL || '',
+            dashboardUrl: summary.dashboardUrl || undefined,
             maxChangedRows,
             maxErrorRows
           });

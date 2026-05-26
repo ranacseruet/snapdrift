@@ -137,6 +137,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
+  dashboardUrl?: string;
 }
 
 // --- Provider abstraction (canonical definitions in @snapdrift/manifest) ---

@@ -157,16 +157,13 @@ describe('buildCommentBody — provider unification', () => {
     expect(body).not.toContain('View in dashboard');
   });
 
-  it('SnapProvider.buildCommentBody appends dashboard link when run ID is available', () => {
-    const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY', projectId: 'test-proj', apiUrl: 'https://snap.test.com' };
+  it('SnapProvider.buildCommentBody includes dashboard link from summary.dashboardUrl', () => {
+    const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY', projectId: 'test-proj' };
     process.env.SNAPDRIFT_TEST_KEY = 'test-key';
     try {
       const provider = new SnapProvider(snapConfig);
-      // Simulate capture having set the run ID
-      provider._testSetLastRunId('run-abc');
-
       const body = provider.buildCommentBody(
-        { ...cleanSummary, baselineArtifactName: 'baseline' },
+        { ...cleanSummary, baselineArtifactName: 'baseline', dashboardUrl: 'https://snap.test.com/projects/test-proj/runs/run-abc' },
         { runUrl: 'https://example.com/run/1' }
       );
       expect(body).toContain('[View in dashboard →](https://snap.test.com/projects/test-proj/runs/run-abc)');
@@ -175,7 +172,7 @@ describe('buildCommentBody — provider unification', () => {
     }
   });
 
-  it('SnapProvider.buildCommentBody omits dashboard link when no run ID is available', () => {
+  it('SnapProvider.buildCommentBody omits dashboard link when summary has no dashboardUrl', () => {
     const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY2', projectId: 'test-proj' };
     process.env.SNAPDRIFT_TEST_KEY2 = 'test-key';
     try {
@@ -196,7 +193,6 @@ describe('buildCommentBody — provider unification', () => {
     process.env.SNAPDRIFT_TEST_KEY3 = 'test-key';
     try {
       const snapProvider = new SnapProvider(snapConfig);
-      // No run ID set on snap provider — both should produce identical output
       const meta = { artifactName: 'same-artifact', runUrl: 'https://example.com/run/1' };
       const localBody = localProvider.buildCommentBody(cleanSummary, meta);
       const snapBody = snapProvider.buildCommentBody(cleanSummary, meta);
