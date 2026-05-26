@@ -214,6 +214,47 @@ When using the `snapdrift` CLI, outputs are written to `.snapdrift/` by default:
 
 All three directories can be overridden with `--baseline-dir`, `--current-dir`, and `--diff-dir`. See the [Local CLI guide](local-cli.md) for details.
 
+## Migration commands
+
+### migrate-baselines
+
+Migrate baselines between local storage and Snap.
+
+**Upload local baselines to Snap:**
+
+```
+snapdrift migrate-baselines --to snap [--config <path>] [--baseline-dir <dir>]
+```
+
+- Reads local manifest + baseline images from the baseline directory.
+- Uploads as the initial accepted baseline on Snap via `POST /v1/visual/projects/:id/baselines`.
+- Idempotent: skips upload if a baseline already exists with the matching commit SHA.
+- Requires snapdrift.json with `provider: "snap"` (or snap config).
+
+**Download Snap baselines to local:**
+
+```
+snapdrift migrate-baselines --to local --from snap [--accept-cross-engine] [--config <path>] [--baseline-dir <dir>]
+```
+
+- Downloads baselines from Snap's export endpoint.
+- Writes to the local baseline directory.
+- Without `--accept-cross-engine`: hard-errors if the exported baselines were captured by a different engine.
+- With `--accept-cross-engine`: overrides the engine name to `snapdrift-local` in the imported manifest (visual differences may occur).
+
+### init
+
+**Translate a Snap action workflow to snapdrift.json:**
+
+```
+snapdrift init --from-snap-action <workflow-yaml-path>
+```
+
+- Reads an existing Snap `github-action/` workflow YAML.
+- Translates Snap action inputs into `.github/snapdrift.json`.
+- Emits `.github/MIGRATION_NOTES.md` listing warnings and deferred decisions.
+- Idempotent: refuses to overwrite an existing `snapdrift.json`.
+
 ## Primary entrypoints
 
 - `actions/baseline`

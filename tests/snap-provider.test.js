@@ -278,3 +278,99 @@ describe('project ID resolution', () => {
     delete process.env.GITHUB_REPOSITORY;
   });
 });
+
+// ---------------------------------------------------------------------------
+// SnapProvider — migration methods
+// ---------------------------------------------------------------------------
+
+describe('SnapProvider.checkBaselineExists()', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+  });
+  afterEach(() => {
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('returns baseline data when found', async () => {
+    const mockFetch = async () => okResponse({ id: 'baseline-1', headSha: 'abc123' });
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const result = await provider.checkBaselineExists('abc123');
+    expect(result).toEqual({ id: 'baseline-1', headSha: 'abc123' });
+  });
+
+  it('returns null on 404', async () => {
+    const mockFetch = async () => errorResponse(404, { error: 'not found' });
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const result = await provider.checkBaselineExists('nonexistent');
+    expect(result).toBeNull();
+  });
+});
+
+describe('SnapProvider.migrateBaselineFromLocal()', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+  });
+  afterEach(() => {
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('POSTs baseline data with screenshots and returns result', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      return okResponse({ id: 'baseline-new-1' });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const result = await provider.migrateBaselineFromLocal({
+      results: { routes: [], startedAt: new Date().toISOString() },
+      manifest: { screenshots: [], generatedAt: new Date().toISOString() },
+      screenshots: [{ filename: 'home.png', data: 'base64data' }],
+      headSha: 'abc123def456'
+    });
+
+    expect(result.uploaded).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(result.baselineId).toBe('baseline-new-1');
+
+    // Verify the POST request
+    const post = requests[0];
+    expect(post.method).toBe('POST');
+    expect(post.body.idempotencyKey).toBe('baseline-migrate-abc123def456');
+    expect(post.body.screenshots).toHaveLength(1);
+    expect(post.body.headSha).toBe('abc123def456');
+  });
+
+  it('uses SHA-derived idempotency key', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+      return okResponse({ id: 'b1' });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    await provider.migrateBaselineFromLocal({
+      results: {},
+      manifest: {},
+      screenshots: [],
+      headSha: 'deadbeef'
+    });
+
+    expect(requests[0].body.idempotencyKey).toBe('baseline-migrate-deadbeef');
+  });
+});
+
+describe('SnapProvider.exportBaselines()', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+  });
+  afterEach(() => {
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('throws clear error (endpoint not yet available)', async () => {
+    const provider = new SnapProvider(validSnapConfig);
+    await expect(provider.exportBaselines())
+      .rejects.toThrow(/not yet available/);
+  });
+});
