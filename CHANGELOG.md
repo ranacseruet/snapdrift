@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-05-26
+
+### Infrastructure
+
+- **Package extraction (Phase 1a)** — extracted `@snapdrift/manifest` (schema, validation, indexing, viewport presets) and `@snapdrift/compare-core` (pure pixel comparison, ignore-region masking) as standalone npm packages with zero runtime deps beyond `pngjs`.
+- **Package extraction (Phase 1b)** — extracted `@snapdrift/adapter-fs` (all filesystem I/O: capture, compare, config, staging, drift report generation) and `@snapdrift/adapter-report-md` (pure markdown/HTML report generators, zero runtime deps) as standalone npm packages.
+- **Lib/ shim refactor** — all `lib/*.mjs` modules are now thin re-export shims that delegate to packages. `lib/report.mjs` wires the default filesystem `imageReader` for HTML reports. Backward-compatible — all export surfaces preserved.
+- **`generateDiffImage` ignore regions** — `@snapdrift/compare-core` now overlays ignored pixel regions with semi-transparent gray instead of skipping them.
+- **Publish workflow** — `.github/workflows/publish.yml` now publishes all four `@snapdrift/*` workspace packages in dependency order before the root `snapdrift` package.
 
 ### Performance
 

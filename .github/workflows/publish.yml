@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish snapdrift to npm
+    name: Publish packages to npm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -39,7 +39,33 @@ jobs:
       - name: Validate package shape
         run: npm run pack:check
 
-      - name: Publish
+      # Publish workspace packages in dependency order before the root package.
+      # This ensures npm can resolve workspace deps when publishing snapdrift.
+      - name: Publish @snapdrift/manifest
+        run: npm publish --provenance --access public
+        working-directory: packages/manifest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @snapdrift/compare-core
+        run: npm publish --provenance --access public
+        working-directory: packages/compare-core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @snapdrift/adapter-report-md
+        run: npm publish --provenance --access public
+        working-directory: packages/adapter-report-md
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @snapdrift/adapter-fs
+        run: npm publish --provenance --access public
+        working-directory: packages/adapter-fs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish snapdrift
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
