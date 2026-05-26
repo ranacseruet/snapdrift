@@ -5,7 +5,19 @@ import os from 'node:os';
 import path from 'node:path';
 
 const { createProvider, LocalProvider } = await import('../lib/provider.mjs');
-const { validateSnapdriftConfig, VALID_PROVIDER_VALUES } = await import('@snapdrift/manifest');
+const { SnapProvider } = await import('../lib/snap-provider.mjs');
+const { validateSnapdriftConfig, VALID_PROVIDER_VALUES, VALID_ON_UNAVAILABLE_MODES } = await import('@snapdrift/manifest');
+
+const validBase = {
+  baselineArtifactName: 'test-baseline',
+  workingDirectory: '.',
+  baseUrl: 'http://localhost:3000',
+  resultsFile: 'results.json',
+  manifestFile: 'manifest.json',
+  screenshotsRoot: 'screenshots',
+  routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+  diff: { threshold: 0.01, mode: 'report-only' }
+};
 
 // ---------------------------------------------------------------------------
 // createProvider
@@ -18,7 +30,7 @@ describe('createProvider', () => {
   });
 
   it('throws for unknown provider name', () => {
-    expect(() => createProvider('snap')).toThrow(/Unknown SnapDrift provider.*"snap"/);
+    expect(() => createProvider('nonexistent')).toThrow(/Unknown SnapDrift provider.*"nonexistent"/);
   });
 
   it('throws for arbitrary string', () => {
@@ -27,6 +39,21 @@ describe('createProvider', () => {
 
   it('lists available providers in error message', () => {
     expect(() => createProvider('invalid')).toThrow(/local/);
+  });
+
+  it('returns a SnapProvider for "snap" with valid config', () => {
+    const config = { ...validBase, provider: 'snap', snap: { apiKeyEnv: 'SNAP_API_KEY', projectId: 'explicit-123' } };
+    process.env.SNAP_API_KEY = 'test-key';
+    try {
+      const provider = createProvider('snap', config);
+      expect(provider).toBeInstanceOf(SnapProvider);
+    } finally {
+      delete process.env.SNAP_API_KEY;
+    }
+  });
+
+  it('throws for "snap" without config', () => {
+    expect(() => createProvider('snap')).toThrow(/snap configuration/i);
   });
 });
 
@@ -93,17 +120,6 @@ describe('LocalProvider', () => {
 // ---------------------------------------------------------------------------
 
 describe('config validation — provider field', () => {
-  const validBase = {
-    baselineArtifactName: 'test-baseline',
-    workingDirectory: '.',
-    baseUrl: 'http://localhost:3000',
-    resultsFile: 'results.json',
-    manifestFile: 'manifest.json',
-    screenshotsRoot: 'screenshots',
-    routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-    diff: { threshold: 0.01, mode: 'report-only' }
-  };
-
   it('accepts provider: "local"', () => {
     const config = validateSnapdriftConfig({ ...validBase, provider: 'local' });
     expect(config.provider).toBe('local');
@@ -114,22 +130,93 @@ describe('config validation — provider field', () => {
     expect(config.provider).toBeUndefined();
   });
 
-  it('rejects provider: "snap"', () => {
+  it('accepts provider: "snap" with valid snap config', () => {
+    const config = validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY' }
+    });
+    expect(config.provider).toBe('snap');
+  });
+
+  it('rejects provider: "snap" without snap config', () => {
     expect(() => validateSnapdriftConfig({ ...validBase, provider: 'snap' }))
-      .toThrow(/provider must be one of: local/);
+      .toThrow(/snap config is required/i);
+  });
+
+  it('rejects provider: "snap" with both apiKeyEnv and apiKey', () => {
+    expect(() => validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY', apiKey: '${SNAP_API_KEY}' }
+    })).toThrow(/mutually exclusive/i);
+  });
+
+  it('rejects snap.apiUrl that is non-string truthy value', () => {
+    expect(() => validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY', apiUrl: 123 }
+    })).toThrow(/snap\.apiUrl must be a valid URL/i);
+  });
+
+  it('accepts snap.apiUrl undefined (uses default)', () => {
+    const config = validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY' }
+    });
+    expect(config.snap.apiUrl).toBeUndefined();
+  });
+
+  it('rejects provider: "snap" with neither apiKeyEnv nor apiKey', () => {
+    expect(() => validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { projectId: 'auto' }
+    })).toThrow(/exactly one of snap.apiKeyEnv or snap.apiKey/i);
+  });
+
+  it('rejects invalid onUnavailable mode', () => {
+    expect(() => validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY', onUnavailable: 'skip' }
+    })).toThrow(/snap.onUnavailable must be one of/i);
+  });
+
+  it('accepts valid onUnavailable modes', () => {
+    for (const mode of ['fail', 'warn-and-skip', 'fallback-local']) {
+      const config = validateSnapdriftConfig({
+        ...validBase,
+        provider: 'snap',
+        snap: { apiKeyEnv: 'SNAP_API_KEY', onUnavailable: mode }
+      });
+      expect(config.snap.onUnavailable).toBe(mode);
+    }
   });
 
   it('rejects provider: empty string', () => {
     expect(() => validateSnapdriftConfig({ ...validBase, provider: '' }))
-      .toThrow(/provider must be one of: local/);
+      .toThrow(/provider must be one of/);
   });
 
   it('rejects provider: number', () => {
     expect(() => validateSnapdriftConfig({ ...validBase, provider: 42 }))
-      .toThrow(/provider must be one of: local/);
+      .toThrow(/provider must be one of/);
   });
 
   it('VALID_PROVIDER_VALUES contains "local"', () => {
     expect(VALID_PROVIDER_VALUES).toContain('local');
+  });
+
+  it('VALID_PROVIDER_VALUES contains "snap"', () => {
+    expect(VALID_PROVIDER_VALUES).toContain('snap');
+  });
+
+  it('VALID_ON_UNAVAILABLE_MODES contains expected modes', () => {
+    expect(VALID_ON_UNAVAILABLE_MODES).toContain('fail');
+    expect(VALID_ON_UNAVAILABLE_MODES).toContain('warn-and-skip');
+    expect(VALID_ON_UNAVAILABLE_MODES).toContain('fallback-local');
   });
 });

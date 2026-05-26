@@ -5,7 +5,8 @@ import path from 'node:path';
 import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
-export const VALID_PROVIDER_VALUES = ['local'];
+export const VALID_PROVIDER_VALUES = ['local', 'snap'];
+export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];
 
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS = 30000;
 export const SNAPDRIFT_SETTLE_DELAY_MS = 300;
@@ -16,6 +17,7 @@ export const SNAPDRIFT_SETTLE_DELAY_MS = 300;
 const VALID_VIEWPORT_PRESETS = new Set(Object.keys(VIEWPORT_PRESETS));
 const VALID_DIFF_MODE_SET = new Set(VALID_DIFF_MODES);
 const VALID_PROVIDER_SET = new Set(VALID_PROVIDER_VALUES);
+const VALID_ON_UNAVAILABLE_SET = new Set(VALID_ON_UNAVAILABLE_MODES);
 
 /**
  * @param {unknown} value
@@ -50,6 +52,19 @@ function isNonEmptyString(value) {
  */
 function isNonEmptyStringArray(value) {
   return Array.isArray(value) && value.every((item) => isNonEmptyString(item));
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isValidUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -163,6 +178,38 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
   if (candidate.provider !== undefined) {
     if (!isNonEmptyString(candidate.provider) || !VALID_PROVIDER_SET.has(candidate.provider)) {
       errors.push(`provider must be one of: ${VALID_PROVIDER_VALUES.join(', ')}.`);
+    }
+  }
+
+  if (candidate.provider === 'snap') {
+    if (!isRecord(candidate.snap)) {
+      errors.push('snap config is required when provider is "snap".');
+    } else {
+      const snap = candidate.snap;
+
+      if (snap.apiUrl !== undefined) {
+        if (typeof snap.apiUrl !== 'string' || !isValidUrl(snap.apiUrl)) {
+          errors.push('snap.apiUrl must be a valid URL when provided.');
+        }
+      }
+
+      const hasApiKeyEnv = isNonEmptyString(snap.apiKeyEnv);
+      const hasApiKey = isNonEmptyString(snap.apiKey);
+      if (hasApiKeyEnv && hasApiKey) {
+        errors.push('snap.apiKeyEnv and snap.apiKey are mutually exclusive — provide exactly one.');
+      } else if (!hasApiKeyEnv && !hasApiKey) {
+        errors.push('snap requires exactly one of snap.apiKeyEnv or snap.apiKey.');
+      }
+
+      if (snap.projectId !== undefined && !isNonEmptyString(snap.projectId)) {
+        errors.push('snap.projectId must be a non-empty string when provided.');
+      }
+
+      if (snap.onUnavailable !== undefined) {
+        if (!isNonEmptyString(snap.onUnavailable) || !VALID_ON_UNAVAILABLE_SET.has(snap.onUnavailable)) {
+          errors.push(`snap.onUnavailable must be one of: ${VALID_ON_UNAVAILABLE_MODES.join(', ')}.`);
+        }
+      }
     }
   }
 

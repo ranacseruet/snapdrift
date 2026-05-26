@@ -77,7 +77,8 @@
     "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
     "./lib/report.mjs": "./lib/report.mjs",
     "./lib/cli.mjs": "./lib/cli.mjs",
-    "./lib/provider.mjs": "./lib/provider.mjs"
+    "./lib/provider.mjs": "./lib/provider.mjs",
+    "./lib/snap-provider.mjs": "./lib/snap-provider.mjs"
   },
   "files": [
     "actions/",

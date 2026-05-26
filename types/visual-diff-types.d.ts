@@ -28,7 +28,8 @@ export interface VisualRegressionConfig {
     mode: 'report-only' | 'fail-on-changes' | 'fail-on-incomplete' | 'strict';
   };
   selection?: VisualRegressionSelectionConfig;
-  provider?: 'local';
+  provider?: 'local' | 'snap';
+  snap?: SnapConfig;
 }
 
 export interface VisualBaselineRouteResult {
@@ -149,5 +150,6 @@ export type {
   ProviderPublishBaselineResult,
   ProviderFetchBaselineOptions,
   ProviderBaselineData,
-  VisualProvider
+  VisualProvider,
+  SnapConfig
 } from '@snapdrift/manifest';
