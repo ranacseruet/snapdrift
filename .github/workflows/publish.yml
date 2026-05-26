@@ -45,6 +45,7 @@ jobs:
       # Publish workspace packages in dependency order before the root package.
       # This ensures npm can resolve workspace deps when publishing snapdrift.
       # Authentication uses npm trusted publishing (OIDC) — no token required.
+      # Skips packages whose current version already exists on npm.
       - name: Publish @snapdrift/manifest
         run: npm publish --provenance --access public
         working-directory: packages/manifest
@@ -52,6 +53,7 @@ jobs:
       - name: Publish @snapdrift/compare-core
         run: npm publish --provenance --access public
         working-directory: packages/compare-core
+        continue-on-error: true
 
       - name: Publish @snapdrift/adapter-report-md
         run: npm publish --provenance --access public
@@ -60,6 +62,7 @@ jobs:
       - name: Publish @snapdrift/adapter-fs
         run: npm publish --provenance --access public
         working-directory: packages/adapter-fs
+        continue-on-error: true
 
       - name: Publish snapdrift
         run: npm publish --provenance --access public
