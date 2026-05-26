@@ -26,11 +26,7 @@ describe('createProvider', () => {
   });
 
   it('lists available providers in error message', () => {
-    try {
-      createProvider('invalid');
-    } catch (err) {
-      expect(err.message).toContain('local');
-    }
+    expect(() => createProvider('invalid')).toThrow(/local/);
   });
 });
 

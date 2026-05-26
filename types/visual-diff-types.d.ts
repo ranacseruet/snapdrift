@@ -138,70 +138,16 @@ export interface VisualDiffSummary {
   message?: string;
 }
 
-// --- Provider abstraction ---
+// --- Provider abstraction (canonical definitions in @snapdrift/manifest) ---
 
-export interface ProviderCaptureOptions {
-  configPath?: string;
-  routeIds?: string[];
-  outDir?: string;
-}
-
-export interface ProviderCaptureResult {
-  resultsPath: string;
-  manifestPath: string;
-  screenshotsRoot: string;
-  selectedRouteIds: string[];
-}
-
-export interface ProviderDiffOptions {
-  configPath?: string;
-  routeIds?: string[];
-  baselineResultsPath?: string;
-  baselineManifestPath?: string;
-  currentResultsPath?: string;
-  currentManifestPath?: string;
-  baselineRunDir?: string;
-  currentRunDir?: string;
-  baselineArtifactName?: string;
-  baselineSourceSha?: string;
-}
-
-export interface ProviderDiffResult {
-  summary: VisualDiffSummary;
-  markdown: string;
-}
-
-export interface ProviderPublishBaselineOptions {
-  configPath?: string;
-  resultsPath?: string;
-  manifestPath?: string;
-  screenshotsDir?: string;
-  bundleDir?: string;
-}
-
-export interface ProviderPublishBaselineResult {
-  bundleDir: string;
-}
-
-export interface ProviderFetchBaselineOptions {
-  githubToken: string;
-  repository?: string;
-  workflowId?: string;
-  branch?: string;
-}
-
-export interface ProviderBaselineData {
-  resultsPath: string;
-  manifestPath: string;
-  runDir: string;
-  screenshotsDir: string;
-  artifactName: string;
-  headSha: string;
-}
-
-export interface VisualProvider {
-  capture(options: ProviderCaptureOptions): Promise<ProviderCaptureResult>;
-  diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
-  publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
-  fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
-}
+export type {
+  ProviderCaptureOptions,
+  ProviderCaptureResult,
+  ProviderDiffOptions,
+  ProviderDiffResult,
+  ProviderPublishBaselineOptions,
+  ProviderPublishBaselineResult,
+  ProviderFetchBaselineOptions,
+  ProviderBaselineData,
+  VisualProvider
+} from '@snapdrift/manifest';

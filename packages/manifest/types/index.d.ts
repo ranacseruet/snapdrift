@@ -253,7 +253,7 @@ export interface VisualProvider {
 // --- Config validation and route selection ---
 
 export const VALID_DIFF_MODES: string[];
-export const VALID_PROVIDER_VALUES: string[];
+export const VALID_PROVIDER_VALUES: readonly ['local'];
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS: number;
 export const SNAPDRIFT_SETTLE_DELAY_MS: number;
 
