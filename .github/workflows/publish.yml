@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # for npm provenance attestation
+  id-token: write # for npm trusted publishing (OIDC)
 
 jobs:
   publish:
@@ -41,31 +41,22 @@ jobs:
 
       # Publish workspace packages in dependency order before the root package.
       # This ensures npm can resolve workspace deps when publishing snapdrift.
+      # Authentication uses npm trusted publishing (OIDC) — no token required.
       - name: Publish @snapdrift/manifest
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         working-directory: packages/manifest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @snapdrift/compare-core
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         working-directory: packages/compare-core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @snapdrift/adapter-report-md
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         working-directory: packages/adapter-report-md
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @snapdrift/adapter-fs
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         working-directory: packages/adapter-fs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish snapdrift
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
