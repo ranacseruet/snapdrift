@@ -187,10 +187,10 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
     } else {
       const snap = candidate.snap;
 
-      if (!isNonEmptyString(snap.apiUrl)) {
-        // default is fine, no error
-      } else if (typeof snap.apiUrl !== 'string' || !isValidUrl(snap.apiUrl)) {
-        errors.push('snap.apiUrl must be a valid URL when provided.');
+      if (snap.apiUrl !== undefined) {
+        if (typeof snap.apiUrl !== 'string' || !isValidUrl(snap.apiUrl)) {
+          errors.push('snap.apiUrl must be a valid URL when provided.');
+        }
       }
 
       const hasApiKeyEnv = isNonEmptyString(snap.apiKeyEnv);

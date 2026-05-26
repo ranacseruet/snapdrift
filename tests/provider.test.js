@@ -152,6 +152,23 @@ describe('config validation — provider field', () => {
     })).toThrow(/mutually exclusive/i);
   });
 
+  it('rejects snap.apiUrl that is non-string truthy value', () => {
+    expect(() => validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY', apiUrl: 123 }
+    })).toThrow(/snap\.apiUrl must be a valid URL/i);
+  });
+
+  it('accepts snap.apiUrl undefined (uses default)', () => {
+    const config = validateSnapdriftConfig({
+      ...validBase,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_API_KEY' }
+    });
+    expect(config.snap.apiUrl).toBeUndefined();
+  });
+
   it('rejects provider: "snap" with neither apiKeyEnv nor apiKey', () => {
     expect(() => validateSnapdriftConfig({
       ...validBase,
