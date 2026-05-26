@@ -3,7 +3,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { jest } from '@jest/globals';
 
 const { createProvider, LocalProvider } = await import('../lib/provider.mjs');
 const { validateSnapdriftConfig, VALID_PROVIDER_VALUES } = await import('@snapdrift/manifest');
