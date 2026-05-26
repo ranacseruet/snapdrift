@@ -33,6 +33,11 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `stage-artifacts.mjs` — Assembles baseline or diff artifact bundles into a temp directory for upload
    - `drift-summary.mjs` — Writes skipped-summary JSON/markdown when diff is intentionally skipped
    - `pr-comment.mjs` — Builds and upserts the PR comment body from a diff summary
+   - `cli.mjs` — CLI entry point: parseArgs + command dispatch for capture, diff, migrate-baselines, init
+   - `provider.mjs` — Provider factory + LocalProvider implementation
+   - `snap-provider.mjs` — SnapProvider: hosted VisualProvider with capture/diff/publishBaseline/fetchLatestBaseline + migration methods (migrateBaselineFromLocal, exportBaselines, checkBaselineExists)
+   - `migrate-baselines.mjs` — `migrate-baselines` command handler: runMigrateToSnap + runMigrateToLocal
+   - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to snapdrift.json
 
 2. **`actions/`** — GitHub composite actions. Two primary wrapper actions orchestrate the full pipeline:
    - `publish-visual-baseline` — Reads config → installs deps → captures routes → stages bundle → uploads artifact
@@ -83,3 +88,5 @@ Tests in `tests/` use Jest with `"transform": {}` (no transpilation). Tests are 
 | `drift-summary.test.js` | Skipped-summary generation for scope and missing-baseline cases |
 | `pr-comment.test.js` | PR comment body construction |
 | `snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract |
+| `migrate-baselines.test.js` | Migration command parsing, runMigrateToSnap, runMigrateToLocal engine validation |
+| `init-from-action.test.js` | Snap action YAML parsing, field translation, warning generation, idempotency |

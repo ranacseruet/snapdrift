@@ -153,3 +153,48 @@ export type {
   VisualProvider,
   SnapConfig
 } from '@snapdrift/manifest';
+
+// --- Migration types ---
+
+export interface MigrateToSnapResult {
+  uploaded: number;
+  skipped: number;
+  baselineId: string;
+}
+
+export interface ExportedBaseline {
+  results: object;
+  manifest: object;
+  screenshots: Array<{ filename: string; data: Buffer }>;
+  engine: { name: string; version: string };
+}
+
+// --- Init codemod types ---
+
+export interface InitWarning {
+  field: string;
+  originalValue: string;
+  message: string;
+  severity: 'warning' | 'note';
+}
+
+export interface InitFromActionResult {
+  configPath: string;
+  warningsCount: number;
+}
+
+// --- CLI options (extended) ---
+
+export interface CliOptions {
+  command: string;
+  open: boolean;
+  configPath?: string;
+  routes: string[];
+  baselineDir: string;
+  currentDir: string;
+  diffDir: string;
+  to?: 'snap' | 'local';
+  from?: 'snap';
+  acceptCrossEngine?: boolean;
+  fromSnapAction?: string;
+}

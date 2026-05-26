@@ -87,6 +87,25 @@ describe('parseArgs', () => {
         const opts = parseArgs(['node', 'snapdrift', 'unknown-cmd']);
         expect(opts.command).toBe('unknown-cmd');
     });
+
+    it('parses migrate-baselines command', () => {
+        const opts = parseArgs(['node', 'snapdrift', 'migrate-baselines', '--to', 'snap']);
+        expect(opts.command).toBe('migrate-baselines');
+        expect(opts.to).toBe('snap');
+    });
+
+    it('parses migrate-baselines --to local --from snap --accept-cross-engine', () => {
+        const opts = parseArgs(['node', 'snapdrift', 'migrate-baselines', '--to', 'local', '--from', 'snap', '--accept-cross-engine']);
+        expect(opts.to).toBe('local');
+        expect(opts.from).toBe('snap');
+        expect(opts.acceptCrossEngine).toBe(true);
+    });
+
+    it('parses init --from-snap-action', () => {
+        const opts = parseArgs(['node', 'snapdrift', 'init', '--from-snap-action', '.github/workflows/screenshots.yml']);
+        expect(opts.command).toBe('init');
+        expect(opts.fromSnapAction).toBe('.github/workflows/screenshots.yml');
+    });
 });
 
 // ---------------------------------------------------------------------------
