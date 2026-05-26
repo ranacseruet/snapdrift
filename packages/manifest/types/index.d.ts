@@ -189,6 +189,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
+  /** Link to the provider's run detail page. Set by SnapProvider during diff(); undefined for LocalProvider. Serialized into summary.json so the comment step can include it without re-creating the provider. */
   dashboardUrl?: string;
 }
 
@@ -271,7 +272,7 @@ export interface VisualProvider {
   diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
   publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
   fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
-  buildCommentBody(summary: Record<string, unknown>, meta?: ProviderCommentMeta): string;
+  buildCommentBody(summary: VisualDiffSummary, meta?: ProviderCommentMeta): string;
 }
 
 // --- Config validation and route selection ---

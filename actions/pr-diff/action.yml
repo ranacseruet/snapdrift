@@ -537,11 +537,13 @@ runs:
           const { createProvider } = await import(pathToFileURL(providerModulePath));
           const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
 
+          // Provider-loading block duplicated in actions/comment/action.yml — keep in sync.
           let provider;
           try {
             const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
             provider = createProvider(config.provider || 'local', config);
-          } catch {
+          } catch (err) {
+            core.warning(`Could not load SnapDrift config; falling back to LocalProvider. ${err.message}`);
             provider = createProvider('local');
           }
 
@@ -551,7 +553,6 @@ runs:
           const body = provider.buildCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
             runUrl: process.env.RUN_URL || '',
-            dashboardUrl: summary.dashboardUrl || undefined,
             maxChangedRows,
             maxErrorRows
           });

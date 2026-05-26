@@ -137,6 +137,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
+  /** Link to the provider's run detail page. Set by SnapProvider during diff(); undefined for LocalProvider. */
   dashboardUrl?: string;
 }
 
