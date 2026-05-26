@@ -43,20 +43,20 @@ jobs:
       # This ensures npm can resolve workspace deps when publishing snapdrift.
       # Authentication uses npm trusted publishing (OIDC) — no token required.
       - name: Publish @snapdrift/manifest
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         working-directory: packages/manifest
 
       - name: Publish @snapdrift/compare-core
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         working-directory: packages/compare-core
 
       - name: Publish @snapdrift/adapter-report-md
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         working-directory: packages/adapter-report-md
 
       - name: Publish @snapdrift/adapter-fs
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         working-directory: packages/adapter-fs
 
       - name: Publish snapdrift
-        run: npm publish --access public
+        run: npm publish --provenance --access public
