@@ -537,8 +537,13 @@ runs:
           const { createProvider } = await import(pathToFileURL(providerModulePath));
           const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
 
-          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-          const provider = createProvider(config.provider || 'local', config);
+          let provider;
+          try {
+            const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+            provider = createProvider(config.provider || 'local', config);
+          } catch {
+            provider = createProvider('local');
+          }
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const maxChangedRows = Number(process.env.MAX_CHANGED_ROWS) || 20;

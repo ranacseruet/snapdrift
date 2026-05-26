@@ -75,8 +75,13 @@ runs:
           const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
           const { PR_COMMENT_MARKERS } = await import(pathToFileURL(prCommentModulePath));
 
-          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-          const provider = createProvider(config.provider || 'local', config);
+          let provider;
+          try {
+            const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+            provider = createProvider(config.provider || 'local', config);
+          } catch {
+            provider = createProvider('local');
+          }
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
