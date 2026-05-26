@@ -20,6 +20,10 @@ inputs:
     description: Artifact label to include in the comment.
     required: false
     default: ''
+  repo-config-path:
+    description: Path to the SnapDrift config file (needed for provider-aware comment rendering).
+    required: false
+    default: .github/snapdrift.json
   max-changed-rows:
     description: Maximum number of changed-route rows shown in the PR comment before truncation.
     required: false
@@ -42,6 +46,7 @@ runs:
         VISUAL_DIFF_RUN_URL: ${{ inputs.run-url }}
         VISUAL_DIFF_ARTIFACT_NAME: ${{ inputs.artifact-name }}
         INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
         MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
         MAX_ERROR_ROWS: ${{ inputs.max-error-rows }}
       with:
@@ -63,15 +68,29 @@ runs:
             return;
           }
 
-          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
-          const { buildReportCommentBody, PR_COMMENT_MARKERS } = await import(pathToFileURL(modulePath));
+          const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+          const prCommentModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
+          const { createProvider } = await import(pathToFileURL(providerModulePath));
+          const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+          const { PR_COMMENT_MARKERS } = await import(pathToFileURL(prCommentModulePath));
+
+          // Provider-loading block duplicated in actions/pr-diff/action.yml — keep in sync.
+          let provider;
+          try {
+            const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+            provider = createProvider(config.provider || 'local', config);
+          } catch (err) {
+            core.warning(`Could not load SnapDrift config; falling back to LocalProvider. ${err.message}`);
+            provider = createProvider('local');
+          }
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const runUrl = process.env.VISUAL_DIFF_RUN_URL || `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
           const maxChangedRows = Number(process.env.MAX_CHANGED_ROWS) || 20;
           const maxErrorRows = Number(process.env.MAX_ERROR_ROWS) || 10;
-          const body = buildReportCommentBody(summary, {
+          const body = provider.buildCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
             runUrl,
             maxChangedRows,

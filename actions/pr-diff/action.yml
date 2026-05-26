@@ -498,6 +498,7 @@ runs:
         SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
         ARTIFACT_NAME: ${{ steps.context.outputs.artifact_name }}
         RUN_URL: ${{ steps.context.outputs.run_url }}
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
         MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
         MAX_ERROR_ROWS: ${{ inputs.max-error-rows }}
       with:
@@ -531,13 +532,25 @@ runs:
             return;
           }
 
-          const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/pr-comment.mjs');
-          const { buildReportCommentBody } = await import(pathToFileURL(modulePath));
+          const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
+          const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+          const { createProvider } = await import(pathToFileURL(providerModulePath));
+          const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+
+          // Provider-loading block duplicated in actions/comment/action.yml — keep in sync.
+          let provider;
+          try {
+            const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+            provider = createProvider(config.provider || 'local', config);
+          } catch (err) {
+            core.warning(`Could not load SnapDrift config; falling back to LocalProvider. ${err.message}`);
+            provider = createProvider('local');
+          }
 
           const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
           const maxChangedRows = Number(process.env.MAX_CHANGED_ROWS) || 20;
           const maxErrorRows = Number(process.env.MAX_ERROR_ROWS) || 10;
-          const body = buildReportCommentBody(summary, {
+          const body = provider.buildCommentBody(summary, {
             artifactName: process.env.ARTIFACT_NAME || '',
             runUrl: process.env.RUN_URL || '',
             maxChangedRows,

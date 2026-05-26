@@ -49,6 +49,7 @@ export function buildReportCommentBody(
   meta?: {
     artifactName?: string;
     runUrl?: string;
+    dashboardUrl?: string;
     maxChangedRows?: number;
     maxErrorRows?: number;
   }

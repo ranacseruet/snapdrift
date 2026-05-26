@@ -6,6 +6,7 @@ import path from 'node:path';
 
 const { createProvider, LocalProvider } = await import('../lib/provider.mjs');
 const { SnapProvider } = await import('../lib/snap-provider.mjs');
+const { buildReportCommentBody } = await import('@snapdrift/adapter-report-md');
 const { validateSnapdriftConfig, VALID_PROVIDER_VALUES, VALID_ON_UNAVAILABLE_MODES } = await import('@snapdrift/manifest');
 
 const validBase = {
@@ -62,12 +63,13 @@ describe('createProvider', () => {
 // ---------------------------------------------------------------------------
 
 describe('LocalProvider', () => {
-  it('exposes capture, diff, publishBaseline, fetchLatestBaseline methods', () => {
+  it('exposes capture, diff, publishBaseline, fetchLatestBaseline, buildCommentBody methods', () => {
     const provider = new LocalProvider();
     expect(typeof provider.capture).toBe('function');
     expect(typeof provider.diff).toBe('function');
     expect(typeof provider.publishBaseline).toBe('function');
     expect(typeof provider.fetchLatestBaseline).toBe('function');
+    expect(typeof provider.buildCommentBody).toBe('function');
   });
 
   it('fetchLatestBaseline throws not-implemented error', async () => {
@@ -111,6 +113,92 @@ describe('LocalProvider', () => {
       expect(manifestExists).toBe(true);
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCommentBody — provider-level PR comment rendering
+// ---------------------------------------------------------------------------
+
+describe('buildCommentBody — provider unification', () => {
+  const cleanSummary = {
+    status: 'clean',
+    matchedScreenshots: 2,
+    changedScreenshots: 0,
+    missingInBaseline: 0,
+    missingInCurrent: 0,
+    errors: [],
+    dimensionChanges: [],
+    changed: []
+  };
+
+  it('LocalProvider.buildCommentBody delegates to buildReportCommentBody', () => {
+    const provider = new LocalProvider();
+    const body = provider.buildCommentBody(cleanSummary);
+    const expected = buildReportCommentBody(cleanSummary);
+    expect(body).toBe(expected);
+  });
+
+  it('LocalProvider.buildCommentBody passes meta through', () => {
+    const provider = new LocalProvider();
+    const meta = { artifactName: 'test-artifact', runUrl: 'https://example.com/run/1' };
+    const body = provider.buildCommentBody(cleanSummary, meta);
+    const expected = buildReportCommentBody(cleanSummary, meta);
+    expect(body).toBe(expected);
+  });
+
+  it('LocalProvider.buildCommentBody omits dashboard link', () => {
+    const provider = new LocalProvider();
+    const body = provider.buildCommentBody(
+      { ...cleanSummary, baselineArtifactName: 'baseline' },
+      { runUrl: 'https://example.com/run/1' }
+    );
+    expect(body).not.toContain('View in dashboard');
+  });
+
+  it('SnapProvider.buildCommentBody includes dashboard link from summary.dashboardUrl', () => {
+    const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY', projectId: 'test-proj' };
+    process.env.SNAPDRIFT_TEST_KEY = 'test-key';
+    try {
+      const provider = new SnapProvider(snapConfig);
+      const body = provider.buildCommentBody(
+        { ...cleanSummary, baselineArtifactName: 'baseline', dashboardUrl: 'https://snap.test.com/projects/test-proj/runs/run-abc' },
+        { runUrl: 'https://example.com/run/1' }
+      );
+      expect(body).toContain('[View in dashboard →](https://snap.test.com/projects/test-proj/runs/run-abc)');
+    } finally {
+      delete process.env.SNAPDRIFT_TEST_KEY;
+    }
+  });
+
+  it('SnapProvider.buildCommentBody omits dashboard link when summary has no dashboardUrl', () => {
+    const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY2', projectId: 'test-proj' };
+    process.env.SNAPDRIFT_TEST_KEY2 = 'test-key';
+    try {
+      const provider = new SnapProvider(snapConfig);
+      const body = provider.buildCommentBody(
+        { ...cleanSummary, baselineArtifactName: 'baseline' },
+        { runUrl: 'https://example.com/run/1' }
+      );
+      expect(body).not.toContain('View in dashboard');
+    } finally {
+      delete process.env.SNAPDRIFT_TEST_KEY2;
+    }
+  });
+
+  it('both providers produce identical markdown for identical results (without dashboard link)', () => {
+    const localProvider = new LocalProvider();
+    const snapConfig = { apiKeyEnv: 'SNAPDRIFT_TEST_KEY3', projectId: 'test-proj' };
+    process.env.SNAPDRIFT_TEST_KEY3 = 'test-key';
+    try {
+      const snapProvider = new SnapProvider(snapConfig);
+      const meta = { artifactName: 'same-artifact', runUrl: 'https://example.com/run/1' };
+      const localBody = localProvider.buildCommentBody(cleanSummary, meta);
+      const snapBody = snapProvider.buildCommentBody(cleanSummary, meta);
+      expect(snapBody).toBe(localBody);
+    } finally {
+      delete process.env.SNAPDRIFT_TEST_KEY3;
     }
   });
 });
