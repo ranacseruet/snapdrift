@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 - 2026-05-26
+
+### Features
+
+- **VisualProvider interface** — new `VisualProvider` interface (`capture`, `diff`, `publishBaseline`, `fetchLatestBaseline`, `buildCommentBody`) with `LocalProvider` and `SnapProvider` implementations. Config `provider` field (`"local"` | `"snap"`) selects the backend; defaults to `"local"` for zero-config backward compatibility.
+- **SnapProvider** — calls Snap's `/v1/visual/*` API for capture, diff, and baseline management. Retries on 5xx with exponential backoff (3 attempts, 30 s cap). Honors `snap.onUnavailable` (`"fail"` | `"warn-and-skip"` | `"fallback-local"`). 4xx errors never retry or fall back.
+- **Snap config** — new `snap` config block (`apiUrl`, `apiKeyEnv`/`apiKey`, `projectId`, `onUnavailable`) in `snapdrift.json`. Exactly one of `apiKeyEnv` or `apiKey` is required when `provider: "snap"`.
+- **PR comment unification** — both providers now produce identical PR comment markdown via a shared `buildCommentBody(summary, meta?)` method. `SnapProvider` appends a "View in dashboard →" link when `dashboardUrl` is present; `LocalProvider` omits it. Comment steps route through the provider instead of calling `buildReportCommentBody` directly, with a defensive fallback to `LocalProvider` if config loading fails.
+- **`migrate-baselines` command** — one-shot CLI command (`snapdrift migrate-baselines --to snap` / `--to local`) to upload local baselines to Snap or export Snap baselines back to a local directory. Supports `--accept-cross-engine` for engine-mismatch scenarios.
+- **`init --from-snap-action` codemod** — translates a Snap `github-action` workflow YAML into `snapdrift.json` with `provider: "snap"`. Emits structured warnings for features with no direct equivalent (jpeg format, baseline tags, single-shot artifact upload).
+
+### Infrastructure
+
+- **`@snapdrift/manifest` v1.1.0** — added `ProviderCommentMeta`, `dashboardUrl` on `VisualDiffSummary`, `buildCommentBody` on `VisualProvider`, `SnapConfig` re-export.
+- **`@snapdrift/adapter-report-md` v1.1.0** — `buildReportCommentBody` now accepts `dashboardUrl` in meta; renders "View in dashboard →" link when present and valid.
+- **Action contract tests** — `snapdrift-actions-contract` test suite now asserts that comment and pr-diff steps include `createProvider` and `buildCommentBody` calls.
+- **Provider unification tests** — new `buildCommentBody — provider unification` test block verifying identical markdown output across providers, dashboard link inclusion/exclusion, and URL validation.
+
 ## 0.3.0 - 2026-05-26
 
 ### Infrastructure
