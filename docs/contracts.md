@@ -34,7 +34,12 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 |:------|:-----|:------------|
 | `selection.sharedPrefixes` | `string[]` | Prefixes that force the full route set |
 | `selection.sharedExact` | `string[]` | Exact files that force the full route set |
-| `provider` | `string` | `"local"` (default) — future: `"snap"` for hosted backend |
+| `provider` | `string` | `"local"` (default) or `"snap"` for hosted backend |
+| `snap.apiUrl` | `string` | Snap API base URL (default: `https://snap.i2dev.com`) |
+| `snap.apiKeyEnv` | `string` | Env var name for API key (mutually exclusive with `snap.apiKey`) |
+| `snap.apiKey` | `string` | Inline API key with `${VAR}` interpolation (mutually exclusive with `snap.apiKeyEnv`) |
+| `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
+| `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
 
 ### Example
 

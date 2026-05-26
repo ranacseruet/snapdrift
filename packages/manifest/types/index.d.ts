@@ -31,6 +31,19 @@ export interface VisualRegressionSelectionConfig {
   sharedExact?: string[];
 }
 
+export interface SnapConfig {
+  /** Snap API base URL. Defaults to "https://snap.i2dev.com". */
+  apiUrl?: string;
+  /** Environment variable name holding the API key. Mutually exclusive with apiKey. */
+  apiKeyEnv?: string;
+  /** Inline API key with ${VAR} interpolation. Mutually exclusive with apiKeyEnv. */
+  apiKey?: string;
+  /** Snap project ID or "auto" to derive from GITHUB_REPOSITORY. Defaults to "auto". */
+  projectId?: string;
+  /** Behavior when Snap is unreachable: "fail" | "warn-and-skip" | "fallback-local". Defaults to "fail". */
+  onUnavailable?: 'fail' | 'warn-and-skip' | 'fallback-local';
+}
+
 export interface VisualRegressionRouteConfig {
   id: string;
   path: string;
@@ -52,7 +65,8 @@ export interface VisualRegressionConfig {
     mode: 'report-only' | 'fail-on-changes' | 'fail-on-incomplete' | 'strict';
   };
   selection?: VisualRegressionSelectionConfig;
-  provider?: 'local';
+  provider?: 'local' | 'snap';
+  snap?: SnapConfig;
 }
 
 export interface VisualBaselineRouteResult {
@@ -253,7 +267,8 @@ export interface VisualProvider {
 // --- Config validation and route selection ---
 
 export const VALID_DIFF_MODES: string[];
-export const VALID_PROVIDER_VALUES: readonly ['local'];
+export const VALID_PROVIDER_VALUES: readonly ['local', 'snap'];
+export const VALID_ON_UNAVAILABLE_MODES: readonly ['fail', 'warn-and-skip', 'fallback-local'];
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS: number;
 export const SNAPDRIFT_SETTLE_DELAY_MS: number;
 
