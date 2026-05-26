@@ -1,0 +1,13 @@
+{
+  "name": "@snapdrift/adapter-report-md",
+  "version": "1.0.0",
+  "description": "Pure markdown and HTML report generators for SnapDrift — zero runtime dependencies",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": { ".": "./src/index.mjs" },
+  "types": "types/index.d.ts",
+  "files": ["src/", "types/"],
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/ranacseruet/snapdrift.git", "directory": "packages/adapter-report-md" }
+}

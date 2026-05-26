@@ -175,3 +175,20 @@ export interface VisualDiffSummary {
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
 }
+
+// --- Drift status classification ---
+
+export function determineDriftStatus(summaryData: VisualDiffSummary): 'clean' | 'changes-detected' | 'incomplete';
+export function shouldFailDriftCheck(summaryData: VisualDiffSummary): boolean;
+
+// --- Config validation and route selection ---
+
+export const VALID_DIFF_MODES: string[];
+export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS: number;
+export const SNAPDRIFT_SETTLE_DELAY_MS: number;
+
+export function splitCommaList(value: string | undefined): string[];
+export function validateSnapdriftConfig(value: unknown, sourceLabel?: string): VisualRegressionConfig;
+export function resolveFromWorkingDirectory(config: VisualRegressionConfig, relativePath: string): string;
+export function selectConfiguredRoutes(config: VisualRegressionConfig, requestedRouteIds: Iterable<string>): { routes: VisualRegressionRouteConfig[]; selectedRouteIds: string[] };
+export function selectRoutesForChangedFiles(config: VisualRegressionConfig, changedFiles: string[]): { shouldRun: boolean; reason: string; selectedRouteIds: string[] };

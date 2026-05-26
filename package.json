@@ -39,8 +39,6 @@
   ],
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@snapdrift/compare-core": "workspace:*",
-    "@snapdrift/manifest": "workspace:*",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.5",
@@ -94,6 +92,10 @@
     "registry": "https://registry.npmjs.org"
   },
   "dependencies": {
+    "@snapdrift/adapter-fs": "^1.0.0",
+    "@snapdrift/adapter-report-md": "^1.0.0",
+    "@snapdrift/compare-core": "^1.0.0",
+    "@snapdrift/manifest": "^1.0.0",
     "playwright": "^1.59.1",
     "pngjs": "^7.0.0"
   }

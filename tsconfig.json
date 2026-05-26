@@ -14,6 +14,10 @@
     "lib/**/*.mjs",
     "scripts/**/*.mjs",
     "packages/*/src/**/*.mjs",
-    "packages/*/types/*.d.ts"
+    "packages/*/types/*.d.ts",
+    "packages/adapter-fs/src/**/*.mjs",
+    "packages/adapter-fs/types/*.d.ts",
+    "packages/adapter-report-md/src/**/*.mjs",
+    "packages/adapter-report-md/types/*.d.ts"
   ]
 }

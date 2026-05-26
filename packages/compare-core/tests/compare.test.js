@@ -174,6 +174,57 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     const large = solidPng(20, 20, [0, 0, 0, 255]);
     expect(() => generateDiffImage(small, large)).toThrow('Dimension mismatch');
   });
+
+  test('overlays ignore regions with neutral gray', () => {
+    const baseline = solidPng(4, 4, [0, 0, 0, 255]);
+    const current = solidPng(4, 4, [255, 255, 255, 255]);
+
+    const diffBuf = generateDiffImage(baseline, current, {
+      ignoreRegions: [{ x: 0, y: 0, width: 2, height: 2 }]
+    });
+    const diffPng = PNG.sync.read(diffBuf);
+
+    // Pixel (0,0) in ignore region → gray overlay
+    expect(diffPng.data[0]).toBe(128);
+    expect(diffPng.data[1]).toBe(128);
+    expect(diffPng.data[2]).toBe(128);
+    expect(diffPng.data[3]).toBe(128);
+
+    // Pixel (2,0) outside ignore region → red highlight (changed)
+    expect(diffPng.data[32]).toBe(255);
+    expect(diffPng.data[33]).toBe(0);
+    expect(diffPng.data[34]).toBe(0);
+    expect(diffPng.data[35]).toBe(255);
+  });
+
+  test('no ignore regions produces same output as before', () => {
+    const baseline = solidPng(4, 4, [0, 0, 0, 255]);
+    const current = solidPng(4, 4, [255, 255, 255, 255]);
+
+    const withIgnore = generateDiffImage(baseline, current, { ignoreRegions: [] });
+    const withoutIgnore = generateDiffImage(baseline, current);
+
+    expect(withIgnore).toEqual(withoutIgnore);
+  });
+
+  test('clamps ignore region to image bounds', () => {
+    const baseline = solidPng(4, 4, [0, 0, 0, 255]);
+    const current = solidPng(4, 4, [255, 255, 255, 255]);
+
+    const diffBuf = generateDiffImage(baseline, current, {
+      ignoreRegions: [{ x: 2, y: 2, width: 10, height: 10 }]
+    });
+    const diffPng = PNG.sync.read(diffBuf);
+
+    // Pixel (3,3) in clamped region → gray
+    const offset = (3 * 4 + 3) * 4;
+    expect(diffPng.data[offset]).toBe(128);
+    expect(diffPng.data[offset + 3]).toBe(128);
+
+    // Pixel (0,0) outside region → red
+    expect(diffPng.data[0]).toBe(255);
+    expect(diffPng.data[3]).toBe(255);
+  });
 });
 
 describe('@snapdrift/compare-core — compareWithIgnoreRegions', () => {
