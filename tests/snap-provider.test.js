@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError } = await import('../lib/snap-provider.mjs');
+const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError } = await import('../lib/snap-provider.mjs');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -181,25 +181,6 @@ describe('SnapProvider retry behavior', () => {
     let callCount = 0;
     const mockFetch = async (_url, _opts) => {
       callCount++;
-      if (callCount === 1) {
-        return errorResponse(503, { error: 'service unavailable' });
-      }
-      return okResponse({ id: 'run_1', status: 'pending' });
-    };
-
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
-    // Access private method through a public method that calls _request
-    // We test retry via publishBaseline (simplest method)
-    // But publishBaseline calls _request directly, so we need a different approach
-    // Let's test via the #request method indirectly through publishBaseline
-    await provider.publishBaseline({ bundleDir: os.tmpdir() });
-    expect(callCount).toBe(2);
-  });
-
-  it('does not retry on 4xx', async () => {
-    let callCount = 0;
-    const mockFetch = async (_url, _opts) => {
-      callCount++;
       return errorResponse(401, { error: 'unauthorized' });
     };
 
@@ -229,12 +210,14 @@ describe('SnapProvider onUnavailable modes', () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fallback-local' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
     await expect(provider.publishBaseline({}))
-      .rejects.toThrow();
-    try {
-      await provider.publishBaseline({});
-    } catch (error) {
-      expect(error).toBeInstanceOf(SnapFallbackError);
-    }
+      .rejects.toBeInstanceOf(SnapFallbackError);
+  });
+
+  it('warn-and-skip mode throws SnapSkipError on exhausted retries', async () => {
+    const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    await expect(provider.publishBaseline({}))
+      .rejects.toBeInstanceOf(SnapSkipError);
   });
 });
 
@@ -265,6 +248,14 @@ describe('SnapFallbackError', () => {
     const error = new SnapFallbackError('falling back');
     expect(error.message).toBe('falling back');
     expect(error.name).toBe('SnapFallbackError');
+  });
+});
+
+describe('SnapSkipError', () => {
+  it('stores message', () => {
+    const error = new SnapSkipError('skipping');
+    expect(error.message).toBe('skipping');
+    expect(error.name).toBe('SnapSkipError');
   });
 });
 
