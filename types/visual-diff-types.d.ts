@@ -150,6 +150,7 @@ export type {
   ProviderPublishBaselineResult,
   ProviderFetchBaselineOptions,
   ProviderBaselineData,
+  ProviderCommentMeta,
   VisualProvider,
   SnapConfig
 } from '@snapdrift/manifest';

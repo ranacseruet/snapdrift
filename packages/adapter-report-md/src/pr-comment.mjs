@@ -19,7 +19,7 @@ export function escapeMarkdown(value) {
 
 /**
  * @param {Record<string, unknown>} summary
- * @param {{ artifactName?: string, runUrl?: string, maxChangedRows?: number, maxErrorRows?: number }} [meta]
+ * @param {{ artifactName?: string, runUrl?: string, dashboardUrl?: string, maxChangedRows?: number, maxErrorRows?: number }} [meta]
  * @returns {string}
  */
 export function buildReportCommentBody(summary, meta = {}) {
@@ -123,6 +123,9 @@ export function buildReportCommentBody(summary, meta = {}) {
   }
   if (meta.runUrl && /^https?:\/\//.test(meta.runUrl)) {
     metaItems.push(`[View run](${meta.runUrl})`);
+  }
+  if (meta.dashboardUrl && /^https?:\/\//.test(meta.dashboardUrl)) {
+    metaItems.push(`[View in dashboard →](${meta.dashboardUrl})`);
   }
   if (metaItems.length > 0) {
     lines.push('');

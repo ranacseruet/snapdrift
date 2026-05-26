@@ -247,4 +247,29 @@ describe('buildReportCommentBody', () => {
         expect(body).not.toContain('route-20');
         expect(body).toContain('...and 1 more');
     });
+
+    it('includes a "View in dashboard" link when dashboardUrl is provided', () => {
+        const body = buildReportCommentBody(
+            { ...cleanSummary, baselineArtifactName: 'my-baseline' },
+            { dashboardUrl: 'https://snap.i2dev.com/projects/my-proj/runs/run-123' }
+        );
+        expect(body).toContain('[View in dashboard →](https://snap.i2dev.com/projects/my-proj/runs/run-123)');
+    });
+
+    it('omits dashboard link when dashboardUrl is not provided', () => {
+        const body = buildReportCommentBody(
+            { ...cleanSummary, baselineArtifactName: 'my-baseline' },
+            { runUrl: 'https://github.com/example/runs/123' }
+        );
+        expect(body).toContain('[View run]');
+        expect(body).not.toContain('View in dashboard');
+    });
+
+    it('omits dashboard link when dashboardUrl is not a valid URL', () => {
+        const body = buildReportCommentBody(
+            { ...cleanSummary, baselineArtifactName: 'my-baseline' },
+            { dashboardUrl: 'not-a-url' }
+        );
+        expect(body).not.toContain('View in dashboard');
+    });
 });

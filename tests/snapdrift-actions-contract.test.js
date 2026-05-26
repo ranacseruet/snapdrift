@@ -103,5 +103,7 @@ describe('SnapDrift action contracts', () => {
         expect(baselineStep.with.script).toContain('const artifactName = config.baselineArtifactName;');
         expect(commentStep.with.script).toContain("const repoUrl = 'https://github.com/ranacseruet/snapdrift';");
         expect(commentStep.with.script).toContain('Powered by <a href="${repoUrl}">SnapDrift</a>');
+        expect(commentStep.with.script).toContain('createProvider');
+        expect(commentStep.with.script).toContain('buildCommentBody');
     });
 });

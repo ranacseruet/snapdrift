@@ -282,3 +282,72 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 | `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
 | `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
 | `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures per viewport context (positive integer, default `5`). Set to `1` to restore serial behaviour for apps with shared session/auth state. |
+
+## PR comment markdown shape
+
+The canonical PR comment is produced by `provider.buildCommentBody(summary, meta)` in `@snapdrift/adapter-report-md`. Both `LocalProvider` and `SnapProvider` emit byte-identical markdown for the same summary — the only provider-specific difference is the optional **"View in dashboard →"** link appended by `SnapProvider`.
+
+Snap's server-side notification posting should render the same template from the run summary JSON so that reviewers see a consistent format regardless of which provider produced the run.
+
+### Structure
+
+```
+<!-- snapdrift-report -->
+## {status-icon} SnapDrift Report — {status-label}
+
+| Signal | Count |
+|:-------|------:|
+| Drift signals | N |
+| Missing in baseline | N |
+| Missing in current capture | N |
+| Dimension shifts | N |
+
+> **Note:** {message}                           ← optional, when summary.message is set
+
+<details><summary>Error details</summary>       ← collapsible, only when errors exist
+| Route | Viewport | Error |
+|:------|:---------|:------|
+| route-id | viewport | error message |
+*...and N more* — [View full report →]({runUrl})  ← when errors exceed maxErrorRows
+</details>
+
+<details><summary>Drift signals</summary>       ← collapsible, only when changed routes exist
+| Route | Viewport | Mismatch |
+|:------|:---------|:---------|
+| route-id | viewport | X.XX% |
+*...and N more* — [View full report →]({runUrl})  ← when routes exceed maxChangedRows
+</details>
+
+<details open><summary>Dimension shifts — comparison skipped</summary>  ← auto-expanded, only when dimension shifts exist
+> SnapDrift detected a dimension shift …
+| Route | Viewport | Baseline | Current |
+|:------|:---------|:---------|:--------|
+| route-id | viewport | WxH | WxH |
+</details>
+
+<sub>SnapDrift · artifact `name` · baseline `name` · sha `abc1234` · [View run](url) · [View in dashboard →](url)</sub>
+                                                  ↑ LocalProvider omits "View in dashboard"
+
+<div align="right"><sub>Powered by <a href="…">SnapDrift</a></sub></div>
+```
+
+### Meta parameters
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `artifactName` | `string?` | PR diff artifact label |
+| `runUrl` | `string?` | GitHub Actions run URL (adds `[View run]` link) |
+| `dashboardUrl` | `string?` | Snap dashboard URL (adds `[View in dashboard →]` link; SnapProvider only) |
+| `maxChangedRows` | `number` | Max drift-signal rows before truncation (default 20) |
+| `maxErrorRows` | `number` | Max error rows before truncation (default 10) |
+
+### Update-in-place semantics
+
+Comments are identified by the `<!-- snapdrift-report -->` HTML marker. On re-run, the action finds the most recent matching comment and updates it in place. Duplicate markers from earlier runs are deleted.
+
+### Provider contract
+
+The `VisualProvider` interface requires `buildCommentBody(summary, meta?)`:
+
+- **`LocalProvider`** — delegates to `buildReportCommentBody` without a `dashboardUrl`.
+- **`SnapProvider`** — constructs `dashboardUrl` from `{apiUrl}/projects/{projectId}/runs/{lastRunId}` and passes it through.

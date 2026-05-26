@@ -257,11 +257,20 @@ export interface ProviderBaselineData {
   headSha: string;
 }
 
+export interface ProviderCommentMeta {
+  artifactName?: string;
+  runUrl?: string;
+  dashboardUrl?: string;
+  maxChangedRows?: number;
+  maxErrorRows?: number;
+}
+
 export interface VisualProvider {
   capture(options: ProviderCaptureOptions): Promise<ProviderCaptureResult>;
   diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
   publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
   fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
+  buildCommentBody(summary: Record<string, unknown>, meta?: ProviderCommentMeta): string;
 }
 
 // --- Config validation and route selection ---
