@@ -10,6 +10,7 @@ export {
   resolveFromWorkingDirectory,
   splitCommaList,
   VALID_DIFF_MODES,
+  VALID_PROVIDER_VALUES,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS
 } from './config.mjs';

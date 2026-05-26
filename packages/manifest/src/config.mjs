@@ -5,6 +5,7 @@ import path from 'node:path';
 import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
+export const VALID_PROVIDER_VALUES = ['local'];
 
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS = 30000;
 export const SNAPDRIFT_SETTLE_DELAY_MS = 300;
@@ -14,6 +15,7 @@ export const SNAPDRIFT_SETTLE_DELAY_MS = 300;
 
 const VALID_VIEWPORT_PRESETS = new Set(Object.keys(VIEWPORT_PRESETS));
 const VALID_DIFF_MODE_SET = new Set(VALID_DIFF_MODES);
+const VALID_PROVIDER_SET = new Set(VALID_PROVIDER_VALUES);
 
 /**
  * @param {unknown} value
@@ -155,6 +157,12 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
       if (candidate.selection.sharedExact !== undefined && !isNonEmptyStringArray(candidate.selection.sharedExact)) {
         errors.push('selection.sharedExact must be an array of non-empty strings when provided.');
       }
+    }
+  }
+
+  if (candidate.provider !== undefined) {
+    if (!isNonEmptyString(candidate.provider) || !VALID_PROVIDER_SET.has(candidate.provider)) {
+      errors.push(`provider must be one of: ${VALID_PROVIDER_VALUES.join(', ')}.`);
     }
   }
 
