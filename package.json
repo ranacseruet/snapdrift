@@ -76,7 +76,8 @@
     "./lib/drift-summary.mjs": "./lib/drift-summary.mjs",
     "./lib/pr-comment.mjs": "./lib/pr-comment.mjs",
     "./lib/report.mjs": "./lib/report.mjs",
-    "./lib/cli.mjs": "./lib/cli.mjs"
+    "./lib/cli.mjs": "./lib/cli.mjs",
+    "./lib/provider.mjs": "./lib/provider.mjs"
   },
   "files": [
     "actions/",

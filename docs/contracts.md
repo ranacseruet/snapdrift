@@ -34,6 +34,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 |:------|:-----|:------------|
 | `selection.sharedPrefixes` | `string[]` | Prefixes that force the full route set |
 | `selection.sharedExact` | `string[]` | Exact files that force the full route set |
+| `provider` | `string` | `"local"` (default) — future: `"snap"` for hosted backend |
 
 ### Example
 

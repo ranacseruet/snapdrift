@@ -28,6 +28,7 @@ export interface VisualRegressionConfig {
     mode: 'report-only' | 'fail-on-changes' | 'fail-on-incomplete' | 'strict';
   };
   selection?: VisualRegressionSelectionConfig;
+  provider?: 'local';
 }
 
 export interface VisualBaselineRouteResult {
@@ -136,3 +137,17 @@ export interface VisualDiffSummary {
   dimensionChanges: VisualDiffDimensionItem[];
   message?: string;
 }
+
+// --- Provider abstraction (canonical definitions in @snapdrift/manifest) ---
+
+export type {
+  ProviderCaptureOptions,
+  ProviderCaptureResult,
+  ProviderDiffOptions,
+  ProviderDiffResult,
+  ProviderPublishBaselineOptions,
+  ProviderPublishBaselineResult,
+  ProviderFetchBaselineOptions,
+  ProviderBaselineData,
+  VisualProvider
+} from '@snapdrift/manifest';
