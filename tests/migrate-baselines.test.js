@@ -183,6 +183,23 @@ describe('readLocalBaselines', () => {
     }
   });
 
+  it('throws on non-ENOENT errors when reading screenshots', async () => {
+    const baselineDir = path.join(tempDir, 'permfail');
+    await setupBaselineDir(baselineDir);
+
+    // Make screenshots directory unreadable (EACCES) by removing read permission
+    const screenshotsDir = path.join(baselineDir, 'screenshots');
+    await fs.chmod(screenshotsDir, 0o000);
+
+    try {
+      await expect(readLocalBaselines(baselineDir))
+        .rejects.toThrow();
+    } finally {
+      // Restore permissions so cleanup can succeed
+      await fs.chmod(screenshotsDir, 0o755).catch(() => {});
+    }
+  });
+
   it('resolves SHA from GITHUB_SHA when results lacks headSha', async () => {
     const baselineDir = path.join(tempDir, 'nosha');
     await fs.mkdir(baselineDir, { recursive: true });

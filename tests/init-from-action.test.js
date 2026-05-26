@@ -142,6 +142,25 @@ describe('runInitFromAction', () => {
     }
   });
 
+  it('preserves threshold of zero instead of defaulting to 0.01', async () => {
+    const workflowPath = path.join(tempDir, 'workflow.yml');
+    const workflow = makeSnapWorkflow({ threshold: '0', 'fail-on-changes': undefined, format: undefined, baseline_tag: undefined, 'snap-api-key-env': undefined, 'snap-project-id': undefined });
+    const yaml = (await import('js-yaml')).default;
+    await fs.writeFile(workflowPath, yaml.dump(workflow));
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      await runInitFromAction(workflowPath);
+      const configContent = await fs.readFile('.github/snapdrift.json', 'utf-8');
+      const config = JSON.parse(configContent);
+      expect(config.diff.threshold).toBe(0);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it('handles workflow without snap-specific inputs', async () => {
     const workflowPath = path.join(tempDir, 'workflow.yml');
     const workflow = makeSnapWorkflow({ threshold: undefined, 'fail-on-changes': undefined, format: undefined, baseline_tag: undefined, 'snap-api-key-env': undefined, 'snap-project-id': undefined });
