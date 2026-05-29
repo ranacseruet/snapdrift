@@ -139,11 +139,28 @@ describe('SnapProvider.capture()', () => {
       expect(runPost).toBeDefined();
       expect(runPost.headers['Authorization']).toBe('Bearer test-api-key-1234');
       expect(runPost.headers['Idempotency-Key']).toBeDefined();
+      // id and captureProfileJson are required by the Snap API
+      expect(typeof runPost.body.id).toBe('string');
+      expect(runPost.body.id).toMatch(/^run_/);
+      expect(typeof runPost.body.captureProfileJson).toBe('string');
+      expect(() => JSON.parse(runPost.body.captureProfileJson)).not.toThrow();
+      // baseUrl must be forwarded so the render worker knows what to render
+      expect(runPost.body.baseUrl).toBe('http://localhost:3000');
 
       // Verify capture POST
       const capturePost = requests.find((r) => r.url.includes('/captures'));
       expect(capturePost).toBeDefined();
       expect(capturePost.headers['Authorization']).toBe('Bearer test-api-key-1234');
+      // id and viewportDescriptorJson are required by the Snap API
+      expect(typeof capturePost.body.id).toBe('string');
+      expect(capturePost.body.id).toMatch(/^cap_/);
+      expect(typeof capturePost.body.viewportDescriptorJson).toBe('string');
+      const parsedViewport = JSON.parse(capturePost.body.viewportDescriptorJson);
+      expect(typeof parsedViewport.width).toBe('number');
+      expect(typeof parsedViewport.height).toBe('number');
+      // "desktop" preset should expand to 1440×900
+      expect(parsedViewport.width).toBe(1440);
+      expect(parsedViewport.height).toBe(900);
     } finally {
       await fs.rm(configPath, { force: true });
     }
