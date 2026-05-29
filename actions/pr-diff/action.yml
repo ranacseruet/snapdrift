@@ -317,12 +317,32 @@ runs:
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
         const provider = createProvider(config.provider || 'local', config);
 
-        const result = await provider.capture({
-          configPath: process.env.REPO_CONFIG_PATH || undefined,
-          routeIds: splitCommaList(process.env.ROUTE_IDS)
-        });
+        let result;
+        try {
+          result = await provider.capture({
+            configPath: process.env.REPO_CONFIG_PATH || undefined,
+            routeIds: splitCommaList(process.env.ROUTE_IDS)
+          });
+        } catch (err) {
+          if (err instanceof SnapSkipError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable — skipping visual regression (warn-and-skip).\n`);
+            await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
+            process.exit(0);
+          }
+          if (err instanceof SnapFallbackError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable — falling back to local provider.\n`);
+            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
+            result = await cp2('local', config).capture({
+              configPath: process.env.REPO_CONFIG_PATH || undefined,
+              routeIds: splitCommaList(process.env.ROUTE_IDS)
+            });
+          } else {
+            throw err;
+          }
+        }
 
         const outputs = [
           `provider=${config.provider || 'local'}`,
@@ -336,7 +356,7 @@ runs:
         EOF
 
     - id: compare
-      if: steps.scope.outputs.should_run == 'true' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
+      if: steps.scope.outputs.should_run == 'true' && steps.capture.outputs.provider != 'skipped' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
       shell: bash
       env:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
@@ -356,7 +376,7 @@ runs:
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { createProvider } = await import(pathToFileURL(providerModulePath));
+        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
@@ -366,7 +386,7 @@ runs:
         const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
         const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
 
-        const { summary, markdown } = await provider.diff({
+        const diffOptions = {
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
@@ -376,7 +396,25 @@ runs:
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
           currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined
-        });
+        };
+
+        let diffResult;
+        try {
+          diffResult = await provider.diff(diffOptions);
+        } catch (err) {
+          if (err instanceof SnapSkipError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable during diff — skipping (warn-and-skip).\n`);
+            process.exit(0);
+          }
+          if (err instanceof SnapFallbackError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable during diff — falling back to local provider.\n`);
+            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
+            diffResult = await cp2('local', config).diff(diffOptions);
+          } else {
+            throw err;
+          }
+        }
+        const { summary, markdown } = diffResult;
 
         await fs.mkdir(resolvedOutDir, { recursive: true });
         await Promise.all([
@@ -610,7 +648,7 @@ runs:
             });
           }
 
-    - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+    - if: steps.scope.outputs.should_run == 'true' && steps.capture.outputs.provider != 'skipped' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
       shell: bash
       run: |
         node --input-type=module <<'EOF'
