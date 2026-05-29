@@ -40,6 +40,15 @@ runs:
       shell: bash
       run: echo "ACTION_ROOT=$(cd "$GITHUB_ACTION_PATH/../.." && pwd)" >> "$GITHUB_ENV"
 
+    - name: Set up Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: '22'
+
+    - name: Install action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
     - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
         VISUAL_DIFF_SUMMARY_PATH: ${{ inputs.summary-path }}
