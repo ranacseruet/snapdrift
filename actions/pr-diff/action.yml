@@ -311,17 +311,21 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-routes.mjs');
+        const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { runBaselineCapture } = await import(pathToFileURL(captureModulePath));
-        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
+        const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
 
-        const result = await runBaselineCapture({
+        const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const provider = createProvider(config.provider || 'local', config);
+
+        const result = await provider.capture({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           routeIds: splitCommaList(process.env.ROUTE_IDS)
         });
 
         const outputs = [
+          `provider=${config.provider || 'local'}`,
           `results_file=${result.resultsPath}`,
           `manifest_file=${result.manifestPath}`,
           `screenshots_root=${result.screenshotsRoot}`,
@@ -332,7 +336,7 @@ runs:
         EOF
 
     - id: compare
-      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
+      if: steps.scope.outputs.should_run == 'true' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
       shell: bash
       env:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
@@ -342,22 +346,27 @@ runs:
         BASELINE_RUN_DIR: ${{ steps.baseline_paths.outputs.run_dir }}
         BASELINE_ARTIFACT_NAME: ${{ steps.baseline.outputs.artifact_name }}
         BASELINE_SOURCE_SHA: ${{ steps.baseline.outputs.head_sha }}
+        CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+        CURRENT_MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const compareModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
+        const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { runDriftCheckCli } = await import(pathToFileURL(compareModulePath));
-        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
+        const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
+
+        const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const provider = createProvider(config.provider || 'local', config);
 
         const resolvedOutDir = path.resolve('qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
         const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
 
-        await runDriftCheckCli({
+        const { summary, markdown } = await provider.diff({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
@@ -365,10 +374,16 @@ runs:
           routeIds: splitCommaList(process.env.ROUTE_IDS),
           baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
-          enforceOutcome: false
+          currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined
         });
 
-        const summary = JSON.parse(await fs.readFile(resolvedSummaryPath, 'utf8'));
+        await fs.mkdir(resolvedOutDir, { recursive: true });
+        await Promise.all([
+          fs.writeFile(resolvedSummaryPath, JSON.stringify(summary, null, 2)),
+          fs.writeFile(resolvedMarkdownPath, markdown)
+        ]);
+
         const outputs = [
           `summary_path=${resolvedSummaryPath}`,
           `markdown_path=${resolvedMarkdownPath}`,
@@ -407,7 +422,7 @@ runs:
         EOF
 
     - id: skipped_baseline
-      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true'
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true' && steps.capture.outputs.provider != 'snap'
       shell: bash
       env:
         MESSAGE: ${{ steps.baseline.outputs.message }}
