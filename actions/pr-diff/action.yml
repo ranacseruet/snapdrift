@@ -95,6 +95,10 @@ runs:
       with:
         node-version: '22'
 
+    - name: Install action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
     - id: context
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
@@ -288,11 +292,6 @@ runs:
           echo "run_dir=${GITHUB_WORKSPACE}/snapdrift-baseline-download"
           echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
         } >> "$GITHUB_OUTPUT"
-
-    - name: Install shared action dependencies
-      if: steps.scope.outputs.should_run == 'true'
-      shell: bash
-      run: npm ci --prefix "$ACTION_ROOT"
 
     - name: Install Playwright Chromium
       if: steps.scope.outputs.should_run == 'true'

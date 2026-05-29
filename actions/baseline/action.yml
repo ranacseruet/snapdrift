@@ -51,6 +51,10 @@ runs:
       with:
         node-version: '22'
 
+    - name: Install action dependencies
+      shell: bash
+      run: npm ci --prefix "$ACTION_ROOT"
+
     - id: config
       shell: bash
       env:
@@ -67,10 +71,6 @@ runs:
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, `artifact_name=${config.baselineArtifactName}\n`);
         EOF
-
-    - name: Install shared action dependencies
-      shell: bash
-      run: npm ci --prefix "$ACTION_ROOT"
 
     - name: Install Playwright Chromium
       shell: bash
