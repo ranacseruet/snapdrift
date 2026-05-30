@@ -293,8 +293,28 @@ runs:
           echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Install Playwright Chromium
+    - id: config
       if: steps.scope.outputs.should_run == 'true'
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+      run: |
+        node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+        const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+        const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const outputs = [
+          `provider=${config.provider || 'local'}`,
+          `on_unavailable=${config.snap?.onUnavailable || 'fail'}`
+        ].join('\n') + '\n';
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+        EOF
+
+    - name: Install Playwright Chromium
+      if: steps.scope.outputs.should_run == 'true' && (steps.config.outputs.provider != 'snap' || steps.config.outputs.on_unavailable == 'fallback-local')
       shell: bash
       run: |
         "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
