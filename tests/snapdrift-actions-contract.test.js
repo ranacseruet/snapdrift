@@ -106,4 +106,22 @@ describe('SnapDrift action contracts', () => {
         expect(commentStep.with.script).toContain('createProvider');
         expect(commentStep.with.script).toContain('buildCommentBody');
     });
+
+    it('installs Playwright for Snap local-capture hybrid runs', async () => {
+        const baseline = await readAction('actions/baseline/action.yml');
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+
+        const baselineConfig = baseline.runs.steps.find((step) => step.id === 'config');
+        const baselineInstall = baseline.runs.steps.find((step) => step.name === 'Install Playwright Chromium');
+        const prDiffConfig = prDiff.runs.steps.find((step) => step.id === 'config');
+        const prDiffInstall = prDiff.runs.steps.find((step) => step.name === 'Install Playwright Chromium');
+
+        expect(baselineConfig.run).toContain('isLocalBaseUrl(config.baseUrl)');
+        expect(baselineConfig.run).toContain('snap_local_capture=');
+        expect(baselineInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
+
+        expect(prDiffConfig.run).toContain('isLocalBaseUrl(config.baseUrl)');
+        expect(prDiffConfig.run).toContain('snap_local_capture=');
+        expect(prDiffInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
+    });
 });

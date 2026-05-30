@@ -66,19 +66,22 @@ runs:
         import { pathToFileURL } from 'node:url';
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+        const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
+        const { isLocalBaseUrl } = await import(pathToFileURL(providerModulePath));
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
 
         const outputs = [
           `artifact_name=${config.baselineArtifactName}`,
           `provider=${config.provider || 'local'}`,
-          `on_unavailable=${config.snap?.onUnavailable || 'fail'}`
+          `on_unavailable=${config.snap?.onUnavailable || 'fail'}`,
+          `snap_local_capture=${(config.provider || 'local') === 'snap' && isLocalBaseUrl(config.baseUrl) ? 'true' : 'false'}`
         ].join('\n') + '\n';
         await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
         EOF
 
     - name: Install Playwright Chromium
-      if: steps.config.outputs.provider != 'snap' || steps.config.outputs.on_unavailable == 'fallback-local'
+      if: steps.config.outputs.provider != 'snap' || steps.config.outputs.on_unavailable == 'fallback-local' || steps.config.outputs.snap_local_capture == 'true'
       shell: bash
       run: |
         "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
