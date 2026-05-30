@@ -139,11 +139,13 @@ describe('SnapProvider.capture()', () => {
       expect(runPost).toBeDefined();
       expect(runPost.headers['Authorization']).toBe('Bearer test-api-key-1234');
       expect(runPost.headers['Idempotency-Key']).toBeDefined();
-      // id and captureProfileJson are required by the Snap API
+      // id is required by the Snap API
       expect(typeof runPost.body.id).toBe('string');
       expect(runPost.body.id).toMatch(/^run_/);
-      expect(typeof runPost.body.captureProfileJson).toBe('string');
-      expect(() => JSON.parse(runPost.body.captureProfileJson)).not.toThrow();
+      // captureProfileJson is intentionally NOT sent: the render environment is
+      // owned by Snap's render worker, and a partial profile makes the server's
+      // capture-profile comparison crash with a 500 when a baseline is attached.
+      expect('captureProfileJson' in runPost.body).toBe(false);
       // baseUrl must be forwarded so the render worker knows what to render
       expect(runPost.body.baseUrl).toBe('http://localhost:3000');
 
@@ -204,6 +206,9 @@ describe('SnapProvider.capture()', () => {
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
       expect(runPost.body.baselineId).toBe('bsl_latest_123');
       expect(runPost.body.branch).toBe('feature/login');
+      // Regression guard: with a baseline attached the server runs a
+      // capture-profile comparison; sending a partial profile 500s it.
+      expect('captureProfileJson' in runPost.body).toBe(false);
     } finally {
       delete process.env.GITHUB_HEAD_REF;
       await fs.rm(configPath, { force: true });
