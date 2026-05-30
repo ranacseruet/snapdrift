@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError } = await import('../lib/snap-provider.mjs');
+const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError, isLocalBaseUrl } = await import('../lib/snap-provider.mjs');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,6 +37,21 @@ function errorResponse(status, errorBody) {
 // ---------------------------------------------------------------------------
 // SnapProvider construction
 // ---------------------------------------------------------------------------
+
+describe('isLocalBaseUrl()', () => {
+  it('detects loopback and localhost URLs only', () => {
+    expect(isLocalBaseUrl('http://localhost:3000')).toBe(true);
+    expect(isLocalBaseUrl('http://app.localhost:3000')).toBe(true);
+    expect(isLocalBaseUrl('http://127.0.0.1:3000')).toBe(true);
+    expect(isLocalBaseUrl('http://127.42.0.9:3000')).toBe(true);
+    expect(isLocalBaseUrl('http://[::1]:3000')).toBe(true);
+    expect(isLocalBaseUrl('http://0.0.0.0:3000')).toBe(true);
+
+    expect(isLocalBaseUrl('https://example.com')).toBe(false);
+    expect(isLocalBaseUrl('http://10.0.0.5:3000')).toBe(false);
+    expect(isLocalBaseUrl('not a url')).toBe(false);
+  });
+});
 
 describe('SnapProvider construction', () => {
   beforeEach(() => {
@@ -117,7 +132,7 @@ describe('SnapProvider.capture()', () => {
     const config = {
       baselineArtifactName: 'test',
       workingDirectory: '.',
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'https://example.com',
       resultsFile: 'results.json',
       manifestFile: 'manifest.json',
       screenshotsRoot: 'screenshots',
@@ -147,7 +162,7 @@ describe('SnapProvider.capture()', () => {
       // capture-profile comparison crash with a 500 when a baseline is attached.
       expect('captureProfileJson' in runPost.body).toBe(false);
       // baseUrl must be forwarded so the render worker knows what to render
-      expect(runPost.body.baseUrl).toBe('http://localhost:3000');
+      expect(runPost.body.baseUrl).toBe('https://example.com');
 
       // Verify capture POST
       const capturePost = requests.find((r) => r.url.includes('/captures'));
@@ -187,7 +202,7 @@ describe('SnapProvider.capture()', () => {
     const config = {
       baselineArtifactName: 'test',
       workingDirectory: '.',
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'https://example.com',
       resultsFile: 'results.json',
       manifestFile: 'manifest.json',
       screenshotsRoot: 'screenshots',
@@ -233,7 +248,7 @@ describe('SnapProvider.capture()', () => {
     const config = {
       baselineArtifactName: 'test',
       workingDirectory: '.',
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'https://example.com',
       resultsFile: 'results.json',
       manifestFile: 'manifest.json',
       screenshotsRoot: 'screenshots',
@@ -247,6 +262,146 @@ describe('SnapProvider.capture()', () => {
       expect('baselineId' in runPost.body).toBe(false);
     } finally {
       await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('captures loopback baseUrl locally and uploads current PNGs to Snap', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-'));
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, headers: opts?.headers, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/baselines/latest')) {
+        return errorResponse(404, { error: 'no baseline' });
+      }
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      if (url.includes('/local-result')) {
+        return okResponse({ id: 'cap_1', status: 'rendered' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const localCaptureFn = async () => {
+      const screenshotsRoot = path.join(tempDir, 'capture');
+      const screenshotsDir = path.join(screenshotsRoot, 'screenshots');
+      await fs.mkdir(screenshotsDir, { recursive: true });
+      await fs.writeFile(path.join(screenshotsDir, 'home.png'), 'png-bytes');
+      const resultsPath = path.join(screenshotsRoot, 'results.json');
+      const manifestPath = path.join(screenshotsRoot, 'manifest.json');
+      await fs.writeFile(resultsPath, JSON.stringify({
+        baseUrl: 'http://127.0.0.1:3000',
+        routes: [{ id: 'home', status: 'passed', imagePath: 'screenshots/home.png' }]
+      }));
+      await fs.writeFile(manifestPath, JSON.stringify({
+        baseUrl: 'http://127.0.0.1:3000',
+        screenshots: [{
+          id: 'home',
+          path: '/',
+          viewport: 'desktop',
+          imagePath: 'screenshots/home.png',
+          width: 1440,
+          height: 900
+        }]
+      }));
+      return {
+        resultsPath,
+        manifestPath,
+        screenshotsRoot,
+        selectedRouteIds: ['home']
+      };
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const configPath = path.join(tempDir, 'snapdrift.json');
+    const config = {
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://127.0.0.1:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    try {
+      const result = await provider.capture({ configPath, routeIds: ['home'] });
+      expect(result.selectedRouteIds).toEqual(['home']);
+
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect(runPost.body.baseUrl).toBe('http://127.0.0.1:3000');
+      expect('captureProfileJson' in runPost.body).toBe(false);
+
+      const capturePost = requests.find((r) => r.url.includes('/runs/') && r.url.includes('/captures'));
+      expect(capturePost.body.routeId).toBe('home');
+
+      const uploadPost = requests.find((r) => r.url.includes('/local-result'));
+      expect(uploadPost).toBeDefined();
+      expect(uploadPost.body.imageBase64).toBe(Buffer.from('png-bytes').toString('base64'));
+      expect(uploadPost.body.width).toBe(1440);
+      expect(uploadPost.body.height).toBe(900);
+
+      const rewrittenResults = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
+      expect(rewrittenResults.provider).toBe('snap');
+      expect(rewrittenResults.captureMode).toBe('local-upload');
+      expect(rewrittenResults.runId).toMatch(/^run_/);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when local capture does not produce a selected route screenshot', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-missing-'));
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      if (url.includes('/baselines/latest')) {
+        return errorResponse(404, { error: 'no baseline' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const localCaptureFn = async () => {
+      const screenshotsRoot = path.join(tempDir, 'capture');
+      await fs.mkdir(screenshotsRoot, { recursive: true });
+      const resultsPath = path.join(screenshotsRoot, 'results.json');
+      const manifestPath = path.join(screenshotsRoot, 'manifest.json');
+      await fs.writeFile(resultsPath, JSON.stringify({ routes: [] }));
+      await fs.writeFile(manifestPath, JSON.stringify({ screenshots: [] }));
+      return {
+        resultsPath,
+        manifestPath,
+        screenshotsRoot,
+        selectedRouteIds: ['home']
+      };
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const configPath = path.join(tempDir, 'snapdrift.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://127.0.0.1:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, routeIds: ['home'] }))
+        .rejects.toThrow(/did not produce a screenshot for route "home"/);
+
+      // Fail-fast guard: the missing screenshot must be detected before any run
+      // is created, so Snap is never left with an orphaned run.
+      const runCreatePost = requests.find((r) =>
+        r.method === 'POST' && /\/projects\/.+\/runs$/.test(r.url));
+      expect(runCreatePost).toBeUndefined();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
 });
@@ -286,7 +441,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
     await fs.writeFile(configPath, JSON.stringify({
       baselineArtifactName: 'test',
       workingDirectory: '.',
-      baseUrl: 'http://localhost:3000',
+      baseUrl: 'https://example.com',
       resultsFile: 'results.json',
       manifestFile: 'manifest.json',
       screenshotsRoot: 'screenshots',
