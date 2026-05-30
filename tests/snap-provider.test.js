@@ -165,6 +165,139 @@ describe('SnapProvider.capture()', () => {
       await fs.rm(configPath, { force: true });
     }
   });
+
+  it('attaches the latest accepted baseline id and branch to the run', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/baselines/latest')) {
+        return okResponse({ id: 'bsl_latest_123', refBranch: 'main' });
+      }
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    process.env.GITHUB_HEAD_REF = 'feature/login';
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-baseline-config.json');
+    const config = {
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://localhost:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    try {
+      await provider.capture({ configPath, routeIds: ['home'] });
+
+      // Latest baseline is resolved before the run is created.
+      const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
+      expect(latestGet).toBeDefined();
+      expect(latestGet.method).toBe('GET');
+
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect(runPost.body.baselineId).toBe('bsl_latest_123');
+      expect(runPost.body.branch).toBe('feature/login');
+    } finally {
+      delete process.env.GITHUB_HEAD_REF;
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('omits baselineId when no baseline exists yet (first run)', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/baselines/latest')) {
+        return errorResponse(404, { error: 'no baseline' });
+      }
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-firstrun-config.json');
+    const config = {
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://localhost:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    try {
+      await provider.capture({ configPath, routeIds: ['home'] });
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect('baselineId' in runPost.body).toBe(false);
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SnapProvider.diff() — run → summary mapping
+// ---------------------------------------------------------------------------
+
+describe('SnapProvider.diff() baseline mapping', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+  });
+  afterEach(() => {
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('reports a capture with no baseline as missing (status incomplete), not matched', async () => {
+    const mockFetch = async (url) => {
+      if (url.includes('/visual/runs/')) {
+        return okResponse({
+          id: 'run_x',
+          status: 'pass',
+          captures: [
+            // Rendered current but no baseline attached → server short-circuits to "diffed".
+            { routeId: 'home', routePath: '/', status: 'diffed', currentObjectKey: 'k/current.png' }
+          ]
+        });
+      }
+      return okResponse({});
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_x', projectId: 'test-project-42' }));
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://localhost:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+    try {
+      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      expect(summary.missingInBaseline).toBe(1);
+      expect(summary.matchedScreenshots).toBe(0);
+      expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.status).toBe('incomplete');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
