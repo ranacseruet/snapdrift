@@ -313,11 +313,10 @@ runs:
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { createProvider } = await import(pathToFileURL(providerModulePath));
+        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
         const provider = createProvider(config.provider || 'local', config);
 
         let result;
