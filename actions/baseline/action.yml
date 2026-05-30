@@ -69,10 +69,15 @@ runs:
         const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
 
-        await fs.appendFile(process.env.GITHUB_OUTPUT, `artifact_name=${config.baselineArtifactName}\n`);
+        const outputs = [
+          `artifact_name=${config.baselineArtifactName}`,
+          `provider=${config.provider || 'local'}`
+        ].join('\n') + '\n';
+        await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
         EOF
 
     - name: Install Playwright Chromium
+      if: steps.config.outputs.provider != 'snap'
       shell: bash
       run: |
         "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
@@ -88,17 +93,40 @@ runs:
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const captureModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/capture-routes.mjs');
+        const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { runBaselineCapture } = await import(pathToFileURL(captureModulePath));
-        const { splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
+        const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
 
-        const result = await runBaselineCapture({
-          configPath: process.env.REPO_CONFIG_PATH || undefined,
-          routeIds: splitCommaList(process.env.ROUTE_IDS)
-        });
+        const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const provider = createProvider(config.provider || 'local', config);
+
+        let result;
+        try {
+          result = await provider.capture({
+            configPath: process.env.REPO_CONFIG_PATH || undefined,
+            routeIds: splitCommaList(process.env.ROUTE_IDS)
+          });
+        } catch (err) {
+          if (err instanceof SnapSkipError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable — skipping baseline capture (warn-and-skip).\n`);
+            await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
+            process.exit(0);
+          }
+          if (err instanceof SnapFallbackError) {
+            process.stderr.write(`[SnapDrift] Snap unavailable — falling back to local provider.\n`);
+            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
+            result = await cp2('local', config).capture({
+              configPath: process.env.REPO_CONFIG_PATH || undefined,
+              routeIds: splitCommaList(process.env.ROUTE_IDS)
+            });
+          } else {
+            throw err;
+          }
+        }
 
         const outputs = [
+          `provider=${config.provider || 'local'}`,
           `results_file=${result.resultsPath}`,
           `manifest_file=${result.manifestPath}`,
           `screenshots_root=${result.screenshotsRoot}`,
@@ -108,7 +136,34 @@ runs:
         await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
         EOF
 
+    - id: publish
+      if: steps.capture.outputs.provider == 'snap'
+      shell: bash
+      env:
+        REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+      run: |
+        node --input-type=module <<'EOF'
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+
+        const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
+        const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
+        const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+
+        const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+        const provider = createProvider('snap', config);
+
+        await provider.publishBaseline({
+          resultsPath: process.env.RESULTS_PATH || undefined
+        });
+
+        process.stdout.write('[SnapDrift] Snap baseline published successfully.\n');
+        EOF
+
     - id: stage
+      if: steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
       shell: bash
       env:
         RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
@@ -133,7 +188,7 @@ runs:
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
         EOF
 
-    - if: inputs.upload-artifact == 'true'
+    - if: inputs.upload-artifact == 'true' && steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ steps.config.outputs.artifact_name }}
