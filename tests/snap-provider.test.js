@@ -354,7 +354,9 @@ describe('SnapProvider.capture()', () => {
 
   it('throws when local capture does not produce a selected route screenshot', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-missing-'));
-    const mockFetch = async (url) => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
       if (url.includes('/baselines/latest')) {
         return errorResponse(404, { error: 'no baseline' });
       }
@@ -392,6 +394,12 @@ describe('SnapProvider.capture()', () => {
     try {
       await expect(provider.capture({ configPath, routeIds: ['home'] }))
         .rejects.toThrow(/did not produce a screenshot for route "home"/);
+
+      // Fail-fast guard: the missing screenshot must be detected before any run
+      // is created, so Snap is never left with an orphaned run.
+      const runCreatePost = requests.find((r) =>
+        r.method === 'POST' && /\/projects\/.+\/runs$/.test(r.url));
+      expect(runCreatePost).toBeUndefined();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
