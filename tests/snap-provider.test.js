@@ -351,6 +351,51 @@ describe('SnapProvider.capture()', () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('throws when local capture does not produce a selected route screenshot', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-missing-'));
+    const mockFetch = async (url) => {
+      if (url.includes('/baselines/latest')) {
+        return errorResponse(404, { error: 'no baseline' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const localCaptureFn = async () => {
+      const screenshotsRoot = path.join(tempDir, 'capture');
+      await fs.mkdir(screenshotsRoot, { recursive: true });
+      const resultsPath = path.join(screenshotsRoot, 'results.json');
+      const manifestPath = path.join(screenshotsRoot, 'manifest.json');
+      await fs.writeFile(resultsPath, JSON.stringify({ routes: [] }));
+      await fs.writeFile(manifestPath, JSON.stringify({ screenshots: [] }));
+      return {
+        resultsPath,
+        manifestPath,
+        screenshotsRoot,
+        selectedRouteIds: ['home']
+      };
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const configPath = path.join(tempDir, 'snapdrift.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://127.0.0.1:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, routeIds: ['home'] }))
+        .rejects.toThrow(/did not produce a screenshot for route "home"/);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
