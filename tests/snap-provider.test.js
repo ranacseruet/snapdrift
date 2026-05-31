@@ -171,6 +171,8 @@ describe('SnapProvider.capture()', () => {
       // id and viewportDescriptorJson are required by the Snap API
       expect(typeof capturePost.body.id).toBe('string');
       expect(capturePost.body.id).toMatch(/^cap_/);
+      // Server-rendered captures must NOT be flagged local — Snap renders them.
+      expect(capturePost.body.localCapture).toBeUndefined();
       expect(typeof capturePost.body.viewportDescriptorJson).toBe('string');
       const parsedViewport = JSON.parse(capturePost.body.viewportDescriptorJson);
       expect(typeof parsedViewport.width).toBe('number');
@@ -377,6 +379,9 @@ describe('SnapProvider.capture()', () => {
 
       const capturePost = requests.find((r) => r.url.includes('/runs/') && r.url.includes('/captures'));
       expect(capturePost.body.routeId).toBe('home');
+      // Locally-captured screenshots are uploaded, not rendered by Snap — the
+      // capture must be flagged so the backend keeps it out of the render queue.
+      expect(capturePost.body.localCapture).toBe(true);
 
       const uploadPost = requests.find((r) => r.url.includes('/local-result'));
       expect(uploadPost).toBeDefined();
