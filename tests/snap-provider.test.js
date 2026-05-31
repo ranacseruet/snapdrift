@@ -223,6 +223,9 @@ describe('SnapProvider.capture()', () => {
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
       expect(runPost.body.baselineId).toBe('bsl_latest_123');
       expect(runPost.body.branch).toBe('feature/login');
+      // Diff runs must keep the server's baseline auto-resolution — only baseline
+      // publishes opt out.
+      expect('skipBaselineResolution' in runPost.body).toBe(false);
       // Regression guard: with a baseline attached the server runs a
       // capture-profile comparison; sending a partial profile 500s it.
       expect('captureProfileJson' in runPost.body).toBe(false);
@@ -303,6 +306,8 @@ describe('SnapProvider.capture()', () => {
 
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
       expect('baselineId' in runPost.body).toBe(false);
+      // Suppress the server's auto-resolve-by-branch so a baseline run is never diffed.
+      expect(runPost.body.skipBaselineResolution).toBe(true);
     } finally {
       await fs.rm(configPath, { force: true });
     }
@@ -402,7 +407,7 @@ describe('SnapProvider.capture()', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-baseline-'));
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method });
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
       // A baseline exists, but a baseline-publish run must not diff against it.
       if (url.includes('/baselines/latest')) {
         return okResponse({ id: 'bsl_existing_999', refBranch: 'main' });
@@ -449,6 +454,11 @@ describe('SnapProvider.capture()', () => {
 
       const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
       expect(latestGet).toBeUndefined();
+
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect('baselineId' in runPost.body).toBe(false);
+      // Suppress the server's auto-resolve-by-branch so a baseline run is never diffed.
+      expect(runPost.body.skipBaselineResolution).toBe(true);
 
       const uploadPost = requests.find((r) => r.url.includes('/local-result'));
       expect(uploadPost).toBeDefined();
