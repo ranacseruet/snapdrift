@@ -109,7 +109,8 @@ runs:
         try {
           result = await provider.capture({
             configPath: process.env.REPO_CONFIG_PATH || undefined,
-            routeIds: splitCommaList(process.env.ROUTE_IDS)
+            routeIds: splitCommaList(process.env.ROUTE_IDS),
+            purpose: 'baseline'
           });
         } catch (err) {
           if (err instanceof SnapSkipError) {

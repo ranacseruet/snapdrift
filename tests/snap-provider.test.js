@@ -265,6 +265,47 @@ describe('SnapProvider.capture()', () => {
     }
   });
 
+  it('omits the baseline (and skips the latest-baseline lookup) for a baseline-purpose run', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      // A baseline DOES exist — but a baseline-publish run must not diff against
+      // it, so the provider should never even ask for it.
+      if (url.includes('/baselines/latest')) {
+        return okResponse({ id: 'bsl_existing_999', refBranch: 'main' });
+      }
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-baselinepurpose-config.json');
+    const config = {
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+    try {
+      await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
+
+      const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
+      expect(latestGet).toBeUndefined();
+
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect('baselineId' in runPost.body).toBe(false);
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
   it('captures loopback baseUrl locally and uploads current PNGs to Snap', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-'));
     const requests = [];
@@ -347,6 +388,65 @@ describe('SnapProvider.capture()', () => {
       expect(rewrittenResults.provider).toBe('snap');
       expect(rewrittenResults.captureMode).toBe('local-upload');
       expect(rewrittenResults.runId).toMatch(/^run_/);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('local-upload baseline run omits the baseline so captures are never diffed', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-baseline-'));
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      // A baseline exists, but a baseline-publish run must not diff against it.
+      if (url.includes('/baselines/latest')) {
+        return okResponse({ id: 'bsl_existing_999', refBranch: 'main' });
+      }
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      if (url.includes('/local-result')) {
+        return okResponse({ id: 'cap_1', status: 'new' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+
+    const localCaptureFn = async () => {
+      const screenshotsRoot = path.join(tempDir, 'capture');
+      const screenshotsDir = path.join(screenshotsRoot, 'screenshots');
+      await fs.mkdir(screenshotsDir, { recursive: true });
+      await fs.writeFile(path.join(screenshotsDir, 'home.png'), 'png-bytes');
+      const resultsPath = path.join(screenshotsRoot, 'results.json');
+      const manifestPath = path.join(screenshotsRoot, 'manifest.json');
+      await fs.writeFile(resultsPath, JSON.stringify({ baseUrl: 'http://127.0.0.1:3000', routes: [] }));
+      await fs.writeFile(manifestPath, JSON.stringify({
+        baseUrl: 'http://127.0.0.1:3000',
+        screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'screenshots/home.png', width: 1440, height: 900 }]
+      }));
+      return { resultsPath, manifestPath, screenshotsRoot, selectedRouteIds: ['home'] };
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const configPath = path.join(tempDir, 'snapdrift.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'http://127.0.0.1:3000',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
+
+      const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
+      expect(latestGet).toBeUndefined();
+
+      const uploadPost = requests.find((r) => r.url.includes('/local-result'));
+      expect(uploadPost).toBeDefined();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -454,6 +554,95 @@ describe('SnapProvider.diff() baseline mapping', () => {
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
       expect(summary.status).toBe('incomplete');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('treats a terminal "new" run/capture as a missing baseline rather than polling forever', async () => {
+    const mockFetch = async (url) => {
+      if (url.includes('/visual/runs/')) {
+        // No baseline existed, so the backend rendered the capture and settled
+        // the run to the terminal "new" state. The client must stop polling.
+        return okResponse({
+          id: 'run_new',
+          status: 'new',
+          captures: [
+            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/current.png' }
+          ]
+        });
+      }
+      return okResponse({});
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-new-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_new', projectId: 'test-project-42' }));
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+    try {
+      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      expect(summary.missingInBaseline).toBe(1);
+      expect(summary.matchedScreenshots).toBe(0);
+      expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.status).toBe('incomplete');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SnapProvider.publishBaseline() — run-poll path
+// ---------------------------------------------------------------------------
+
+describe('SnapProvider.publishBaseline() run-poll path', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+  });
+  afterEach(() => {
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('publishes a baseline from a run that settles to terminal "new" (no prior baseline diffed)', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/visual/runs/')) {
+        return okResponse({
+          id: 'run_pub',
+          status: 'new',
+          captures: [
+            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home/current.png', viewportDescriptorJson: '{"width":1440,"height":900}' }
+          ]
+        });
+      }
+      return okResponse({ id: 'bsl_new_1' });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-new-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_pub', projectId: 'test-project-42' }));
+    try {
+      const result = await provider.publishBaseline({ resultsPath });
+      expect(result.bundleDir).toBeTruthy();
+
+      // A baseline create POST is issued from the rendered capture's object key.
+      const baselinePost = requests.find((r) => r.method === 'POST' && /\/baselines$/.test(r.url));
+      expect(baselinePost).toBeDefined();
+      const manifest = JSON.parse(baselinePost.body.manifestJson);
+      expect(manifest.routes[0].objectKey).toBe('k/home/current.png');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
