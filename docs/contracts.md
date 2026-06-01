@@ -289,7 +289,7 @@ snapdrift init --from-snap-action <workflow-yaml-path>
 
 - Reads an existing `snap/github-action` workflow YAML.
 - Locates the step that uses `snap/github-action` (or any action whose `uses:` matches `snap/.../action`).
-- Translates known inputs into `.github/snapdrift.json` and sets `provider: "snap"`.
+- Translates known inputs into `.github/snapdrift.json`. Sets `provider: "snap"` (and the `snap` block) only when the source workflow declared `snap-api-key-env` or `snap-project-id`; workflows without Snap-specific inputs produce a local-provider config.
 - Emits `.github/MIGRATION_NOTES.md` grouped by severity (warnings first, then notes).
 - Idempotent against `snapdrift.json`: refuses to overwrite an existing file.
 
@@ -364,7 +364,7 @@ The function is intentionally permissive about bracketed IPv6 (`[::1]`) and case
 
 ### Error classes
 
-All four error classes are exported from `lib/provider.mjs` (and re-exported by the underlying `@snapdrift/manifest` package). They are the contract for "Snap cannot proceed" — wrapper actions and CLI commands handle them as a group.
+All four error classes are exported from `lib/provider.mjs` and `lib/snap-provider.mjs`. They are the contract for "Snap cannot proceed" — wrapper actions and CLI commands handle them as a group.
 
 | Class | Thrown when | Typical handler |
 |:------|:------------|:----------------|

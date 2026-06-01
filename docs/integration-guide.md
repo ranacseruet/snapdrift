@@ -288,7 +288,7 @@ If you don't want to republish the baseline on every push, the template includes
 ## Troubleshooting
 
 **"No non-expired SnapDrift baseline artifact was found"**  
-The baseline workflow has not completed successfully on `main`, or the artifact expired. With the Snap provider, the equivalent message is a 404 from `/v1/visual/projects/:id/baselines/latest` — set `onUnavailable: "warn-and-skip"` to make the PR pipeline tolerate it.
+The baseline workflow has not completed successfully on `main`, or the artifact expired. With the Snap provider, the equivalent situation is a 404 from `/v1/visual/projects/:id/baselines/latest`; `SnapProvider` swallows that 404 and proceeds without a baseline — `onUnavailable` is **not** consulted for this case (a 404 is the legitimate "no baseline yet" signal, not a Snap outage). If you want the PR pipeline to tolerate the first-run case, set `diff.mode: "report-only"`; `onUnavailable: "warn-and-skip"` will not help here.
 
 **403 when posting the PR report**  
 Grant `issues: write` and `pull-requests: write` to the job.
