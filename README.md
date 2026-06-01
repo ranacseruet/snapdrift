@@ -8,15 +8,18 @@
 
 SnapDrift captures full-page application frames, compares them against a known baseline, and reports drift directly in GitHub Actions.
 
-SnapDrift is ready to integrate from public GitHub releases. Workflow examples below use the first public tag for readability; security-conscious consumers can pin the resolved commit SHA instead.
+SnapDrift is ready to integrate from public GitHub releases. Workflow examples below use the latest public tag for readability; security-conscious consumers can pin the resolved commit SHA instead.
 
 ## What SnapDrift handles
 
 - Baseline capture on `main`
 - Pull request drift detection against the latest successful baseline
 - Route scoping from changed files
-- PR report upserts
+- PR report upserts (with optional Snap dashboard link)
 - Drift enforcement through `diff.mode`
+- Pluggable backends: local filesystem (default) or hosted Snap (`provider: "snap"`)
+- One-shot baseline migration between backends
+- Codemod that translates an existing Snap `github-action` workflow to `snapdrift.json`
 
 You keep ownership of checkout, build, startup, readiness, and teardown. SnapDrift takes over once the app is reachable.
 
@@ -44,7 +47,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift/actions/baseline@v0.2.1
+  uses: ranacseruet/snapdrift/actions/baseline@v0.4.0
   with:
     repo-config-path: .github/snapdrift.json
 ```
@@ -53,17 +56,17 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift/actions/pr-diff@v0.2.1
+  uses: ranacseruet/snapdrift/actions/pr-diff@v0.4.0
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/snapdrift.json
 ```
 
-That is the full integration. See the [Integration Guide](docs/integration-guide.md) for workflow examples, permissions, compatibility notes, and advanced overrides.
+That is the full integration. See the [Integration Guide](docs/integration-guide.md) for workflow examples, permissions, compatibility notes, advanced overrides, and the hosted Snap backend (`provider: "snap"`).
 
 ## Local CLI
 
-SnapDrift ships a `snapdrift` CLI for running captures and diffs locally against a running app — no GitHub Actions required. Use it during development to validate UI changes before pushing.
+SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app — no GitHub Actions required. Use it during development to validate UI changes before pushing.
 
 ```bash
 # Capture a baseline
@@ -71,6 +74,12 @@ snapdrift capture
 
 # Compare against it after making UI changes
 snapdrift diff --open
+
+# Migrate local baselines to the hosted Snap backend
+snapdrift migrate-baselines --to snap
+
+# Translate an existing Snap github-action workflow into snapdrift.json
+snapdrift init --from-snap-action .github/workflows/snap.yml
 ```
 
 See the [Local CLI guide](docs/local-cli.md) for installation, all flags, directory layout, and examples.
@@ -88,11 +97,12 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 
 ## Current constraints
 
-- Ubuntu runners only
+- Ubuntu runners only (local CLI works on any OS Node 22+ supports)
 - Full-page capture only
 - Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - One global `diff.threshold`
 - Dimension shifts are reported separately from pixel drift
+- Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
 
 ## Docs
 
