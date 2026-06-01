@@ -41,7 +41,9 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
 
-### Example
+When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
+
+### Example (local provider)
 
 ```json
 {
@@ -58,6 +60,33 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
   "diff": {
     "threshold": 0.01,
     "mode": "report-only"
+  }
+}
+```
+
+### Example (Snap provider)
+
+```json
+{
+  "baselineArtifactName": "ui-foundation-snapdrift-baseline",
+  "workingDirectory": ".",
+  "baseUrl": "http://127.0.0.1:8080",
+  "resultsFile": "qa-artifacts/snapdrift/baseline/current/results.json",
+  "manifestFile": "qa-artifacts/snapdrift/baseline/current/manifest.json",
+  "screenshotsRoot": "qa-artifacts/snapdrift/baseline/current",
+  "routes": [
+    { "id": "root-index-desktop", "path": "/", "viewport": "desktop" },
+    { "id": "root-index-mobile", "path": "/", "viewport": "mobile" }
+  ],
+  "diff": {
+    "threshold": 0.01,
+    "mode": "report-only"
+  },
+  "provider": "snap",
+  "snap": {
+    "apiKeyEnv": "SNAP_API_KEY",
+    "projectId": "auto",
+    "onUnavailable": "fail"
   }
 }
 ```
@@ -224,7 +253,7 @@ All three directories can be overridden with `--baseline-dir`, `--current-dir`, 
 
 ### migrate-baselines
 
-Migrate baselines between local storage and Snap.
+Migrate baselines between local storage and Snap. Both directions require a `snap` block in `snapdrift.json` (or `--to local` for the `snap → local` direction, since the export call still talks to Snap first).
 
 **Upload local baselines to Snap:**
 
@@ -232,10 +261,10 @@ Migrate baselines between local storage and Snap.
 snapdrift migrate-baselines --to snap [--config <path>] [--baseline-dir <dir>]
 ```
 
-- Reads local manifest + baseline images from the baseline directory.
+- Reads `results.json`, `manifest.json`, and `screenshots/*.png` from the local baseline directory.
 - Uploads as the initial accepted baseline on Snap via `POST /v1/visual/projects/:id/baselines`.
-- Idempotent: skips upload if a baseline already exists with the matching commit SHA.
-- Requires snapdrift.json with `provider: "snap"` (or snap config).
+- Idempotent: if a baseline already exists for the same commit SHA (derived from `GITHUB_SHA` or `git rev-parse HEAD`), the upload is skipped.
+- Screenshots are base64-encoded in the request body; very large suites may want to migrate per-route.
 
 **Download Snap baselines to local:**
 
@@ -244,9 +273,11 @@ snapdrift migrate-baselines --to local --from snap [--accept-cross-engine] [--co
 ```
 
 - Downloads baselines from Snap's export endpoint.
-- Writes to the local baseline directory.
-- Without `--accept-cross-engine`: hard-errors if the exported baselines were captured by a different engine.
-- With `--accept-cross-engine`: overrides the engine name to `snapdrift-local` in the imported manifest (visual differences may occur).
+- Writes `results.json`, `manifest.json`, and `screenshots/*.png` to the local baseline directory.
+- Writes `.migration-metadata.json` next to the baseline recording `source`, `migratedAt`, and the engine that produced the export.
+- Without `--accept-cross-engine`: hard-errors if the exported manifest's engine name is not `snapdrift-local`.
+- With `--accept-cross-engine`: overrides the engine name to `snapdrift-local` in the imported manifest (visual differences may occur when the captures came from a different engine).
+- Requires the Snap export endpoint to be available; if it is not yet wired up, the command fails with an actionable message instead of producing a partial baseline.
 
 ### init
 
@@ -256,10 +287,93 @@ snapdrift migrate-baselines --to local --from snap [--accept-cross-engine] [--co
 snapdrift init --from-snap-action <workflow-yaml-path>
 ```
 
-- Reads an existing Snap `github-action/` workflow YAML.
-- Translates Snap action inputs into `.github/snapdrift.json`.
-- Emits `.github/MIGRATION_NOTES.md` listing warnings and deferred decisions.
-- Idempotent: refuses to overwrite an existing `snapdrift.json`.
+- Reads an existing `snap/github-action` workflow YAML.
+- Locates the step that uses `snap/github-action` (or any action whose `uses:` matches `snap/.../action`).
+- Translates known inputs into `.github/snapdrift.json` and sets `provider: "snap"`.
+- Emits `.github/MIGRATION_NOTES.md` grouped by severity (warnings first, then notes).
+- Idempotent against `snapdrift.json`: refuses to overwrite an existing file.
+
+The codemod maps fields one-to-one when it can. The full mapping is:
+
+| Snap action input | snapdrift config |
+|:------------------|:-----------------|
+| `threshold` / `diff-threshold` | `diff.threshold` |
+| `fail-on-changes` | `diff.mode: "fail-on-changes"` |
+| `fail-on-incomplete` | `diff.mode: "fail-on-incomplete"` |
+| (no enforcement flag) | `diff.mode: "report-only"` |
+| `snap-api-key-env` | `snap.apiKeyEnv` |
+| `snap-api-url` | `snap.apiUrl` |
+| `snap-project-id` | `snap.projectId` |
+| `format` | dropped (warning — SnapDrift is PNG-only) |
+| `baseline_tag` | dropped (warning — SnapDrift uses commit-based baselines) |
+| `routes` / page list | left empty (warning — fill in `routes[]` manually) |
+| `baseUrl` | placeholder `http://localhost:3000` (warning — update to your real app) |
+
+Two files are written: `.github/snapdrift.json` and `.github/MIGRATION_NOTES.md`.
+
+## Snap provider
+
+When `provider: "snap"`, every `capture` / `diff` / `publishBaseline` call goes through `SnapProvider`, which talks to Snap's hosted `/v1/visual/*` API instead of writing to the runner filesystem. The local provider keeps working exactly as before.
+
+### Local-capture hybrid
+
+If `baseUrl` resolves to a local address (see [`isLocalBaseUrl`](#islocalbaseurl-detection) below), SnapDrift runs Playwright on the runner to render the page and uploads the resulting screenshots to Snap. This is necessary whenever your `baseUrl` is a server only the runner can reach (the common case) — Snap's render worker cannot reach a `127.0.0.1` or `localhost` server.
+
+The hybrid path is transparent to the user: the same provider factory picks it, and the output `results.json` carries `provider: "snap"` plus `captureMode: "local-upload"` so downstream consumers can tell which path produced the run. The action's `Install Playwright Chromium` step is gated on this hybrid, so a `provider: "snap"` config with a remote `baseUrl` will not download Playwright Chromium.
+
+### API contract
+
+SnapDrift uses a small, stable subset of the Snap API:
+
+| Endpoint | Used by |
+|:---------|:--------|
+| `POST /v1/visual/projects/:id/runs` | Create a run; client passes `baseUrl`, `trigger`, optional `baselineId` and `branch` |
+| `POST /v1/visual/runs/:run_id/captures` | Submit each route as a capture; client passes `routeId`, `routePath`, `viewportDescriptorJson` |
+| `POST /v1/visual/captures/:capture_id/local-result` | Hybrid path: upload the locally rendered PNG and its dimensions |
+| `POST /v1/visual/projects/:id/baselines` | Publish a baseline from a run's rendered captures (primary path) or upload a pre-built local baseline (migration path) |
+| `GET /v1/visual/projects/:id/baselines/latest` | Resolve the latest accepted baseline for diff runs |
+| `GET /v1/visual/runs/:run_id` | Poll a run until it reaches a terminal state (`pass`, `fail`, `error`, or `new`) |
+
+`new` is a terminal state for baseline runs: a fresh capture with no baseline to diff against settles to `new` and `publishBaseline` harvests its object keys. Treating `new` as in-flight (the natural reading) would have the client poll forever.
+
+### Retry and fallback
+
+The Snap HTTP client classifies responses and applies the following rules:
+
+- **2xx** — success, return the parsed body.
+- **4xx** — non-retryable. The client throws `SnapApiError(status, message, path)` immediately. `onUnavailable` is **not** consulted for 4xx — a 404 from `/baselines/latest` is a "no baseline yet" signal, but a 4xx from `/runs` is a configuration error that retrying won't fix.
+- **5xx** — retryable up to 3 attempts with exponential backoff (`1 s` → `2 s` → `4 s`, capped at `30 s` total). If the final attempt still returns 5xx, the client falls through to the `onUnavailable` handler.
+- **Network errors** — same retry/backoff behavior as 5xx. After exhaustion, falls through to the `onUnavailable` handler.
+
+`onUnavailable` is consulted once retries are exhausted:
+
+- `"fail"` (default) — throw the underlying error to fail the action.
+- `"warn-and-skip"` — log a warning, throw `SnapSkipError`. The wrapper actions catch this and write a skipped summary, exiting 0.
+- `"fallback-local"` — log a warning, throw `SnapFallbackError`. The wrapper actions catch this and continue the pipeline with `LocalProvider`.
+
+### `isLocalBaseUrl` detection
+
+`isLocalBaseUrl(baseUrl)` returns `true` when the URL hostname is:
+
+- `localhost` or any subdomain ending in `.localhost`
+- `0.0.0.0`
+- `::1`
+- Any IPv4 address in `127.0.0.0/8` (for example `127.0.0.1`)
+
+The function is intentionally permissive about bracketed IPv6 (`[::1]`) and case (`LocalHost`). It returns `false` on any URL that fails to parse.
+
+### Error classes
+
+All four error classes are exported from `lib/provider.mjs` (and re-exported by the underlying `@snapdrift/manifest` package). They are the contract for "Snap cannot proceed" — wrapper actions and CLI commands handle them as a group.
+
+| Class | Thrown when | Typical handler |
+|:------|:------------|:----------------|
+| `SnapApiError` | A 4xx response was received, or a 5xx/network error was retried to exhaustion. Carries `status` and `path` properties. | Surface the message; do not retry. |
+| `SnapUnavailableError` | A network error or 5xx was retried to exhaustion (used internally; usually re-wrapped as `SnapApiError`). | Treat as a temporary outage. |
+| `SnapFallbackError` | `onUnavailable: "fallback-local"` is set and Snap could not be reached. | Catch and switch to `LocalProvider` for the rest of the pipeline. |
+| `SnapSkipError` | `onUnavailable: "warn-and-skip"` is set and Snap could not be reached. | Catch and exit cleanly with a skipped summary. |
+
+The wrapper actions (`actions/baseline`, `actions/pr-diff`) catch `SnapSkipError` and `SnapFallbackError` themselves. Custom orchestrations that call `provider.capture()` or `provider.diff()` directly should do the same.
 
 ## Primary entrypoints
 

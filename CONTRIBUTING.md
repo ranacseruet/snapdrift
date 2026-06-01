@@ -20,23 +20,24 @@ Releases are cut by maintainers. The publish workflow fires automatically when a
 
 **Prerequisites (one-time repo setup):**
 
-1. Create an npm access token with publish permissions at [npmjs.com](https://www.npmjs.com).
-2. Add it as a repository secret named `NPM_TOKEN` under **Settings → Secrets and variables → Actions**.
+The `publish.yml` workflow uses [npm trusted publishing (OIDC)](https://docs.npmjs.com/generating-provenance-statements), so no npm token is required as a repository secret. The maintainer's npm account must be configured as a trusted publisher for both the root `snapdrift` package and each `@snapdrift/*` workspace package — see the [npm docs on trusted publishers](https://docs.npmjs.com/trusted-publishers) for the one-time setup.
 
 **Release steps:**
 
 1. Merge all changes to `main` — CI must be green.
 2. Move items from `## Unreleased` in `CHANGELOG.md` to a new `## x.y.z - YYYY-MM-DD` entry and commit.
-3. Create a GitHub release:
-   - Tag: `vx.y.z` (e.g. `v0.2.0`), targeting `main`
+3. Bump the `version` field in `package.json` and the `version` of any `@snapdrift/*` workspace package that changed. Commit.
+4. Create a GitHub release:
+   - Tag: `vx.y.z` (e.g. `v0.4.0`), targeting `main`
    - Title: `vx.y.z`
    - Body: paste the changelog entry for this version
-4. Publishing the release triggers the `publish.yml` workflow, which runs the full quality gate and then publishes to npm with [provenance attestation](https://docs.npmjs.com/generating-provenance-statements).
+5. Publishing the release triggers the `publish.yml` workflow, which runs the full quality gate and then publishes to npm with provenance attestation. Workspace packages are published in dependency order before the root `snapdrift` package; each `npm publish` is idempotent (`|| true`) so re-runs after a partial publish are safe.
 
 **Verify:**
 
 ```bash
 npm view snapdrift@x.y.z
+npm view @snapdrift/manifest@x.y.z
 ```
 
 ## Release Usage
@@ -82,7 +83,7 @@ npm run test:coverage
 NODE_OPTIONS='--experimental-vm-modules' npx jest tests/snapdrift-smoke.test.js
 ```
 
-The six test files in `tests/` cover config validation, capture, compare, staging, PR comment generation, and action contract integrity. Tests are unit-level — they do not run Playwright or require a live app.
+The test suite has 15 files in `tests/` plus additional ones in each `packages/*/tests/`. Coverage spans config validation, capture, compare, staging, PR comment generation, action contract integrity, provider selection, SnapProvider behavior, the migrate-baselines and init commands, the CLI dispatcher, and an end-to-end capture-compare integration test. Tests are unit/contract-level — they do not run Playwright or require a live app.
 
 ## Making Changes
 
