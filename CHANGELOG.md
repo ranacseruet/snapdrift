@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-06-08
+
 ### Features
 
 - **Snap local-capture hybrid** — when `provider: "snap"` and `baseUrl` resolves to a local address (localhost, `127.0.0.0/8`, `::1`, `0.0.0.0`), Playwright now runs on the runner to render the page, and the resulting PNG is uploaded to Snap via `POST /v1/visual/captures/:id/local-result`. This makes it possible to point SnapDrift at a server only the runner can reach — the common case — without exposing the server to Snap's render worker. Captures are flagged with `localCapture: true` so Snap keeps them out of the render queue, and the output `results.json` records `provider: "snap"` plus `captureMode: "local-upload"`.
@@ -13,6 +15,10 @@
 - **Run-creation includes `branch` and `baselineId`** — `branch` is sent from `GITHUB_HEAD_REF` (PR source) or `GITHUB_REF_NAME` (push); `baselineId` is the latest accepted baseline for the project, so the backend can diff every capture. Without `baselineId` Snap short-circuits to `diffed` with no comparison data.
 - **4xx never falls back, even with `onUnavailable` set** — clarifies the contract: `onUnavailable` is consulted only after 5xx/network retries are exhausted, never on a 4xx (which is a configuration error, not an outage).
 - **`actions/pr-diff` no longer installs Playwright when `provider: "snap"` and the run won't need it** — gated on the same `isLocalBaseUrl` check the `baseline` action uses.
+
+### Infrastructure
+
+- **`@snapdrift/manifest` v1.2.0** — added the `ProviderCaptureOptions.purpose` type contract for baseline-publish versus diff captures.
 
 ## 0.4.0 - 2026-05-26
 
