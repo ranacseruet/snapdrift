@@ -615,6 +615,68 @@ describe('SnapProvider.diff() baseline mapping', () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
+
+  // Issue #93: a stale/wrong captured page diffs at 0% against the baseline,
+  // silently hiding real regressions. Warn when every compared route is an
+  // exact pixel-identical match.
+  async function runDiffWith(captures) {
+    const mockFetch = async (url) => {
+      if (url.includes('/visual/runs/')) {
+        return okResponse({ id: 'run_zero', status: 'pass', captures });
+      }
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-zero-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_zero', projectId: 'test-project-42' }));
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+    const writes = [];
+    const original = process.stderr.write;
+    process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+    try {
+      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      return { summary, stderr: writes.join('') };
+    } finally {
+      process.stderr.write = original;
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('warns when every compared route is a pixel-identical 0% match (stale-capture guard)', async () => {
+    const { summary, stderr } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 },
+      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0 }
+    ]);
+    expect(summary.matchedScreenshots).toBe(2);
+    expect(stderr).toMatch(/pixel-identical/);
+    expect(stderr).toMatch(/issue #93/);
+  });
+
+  it('does not warn when at least one route shows non-zero drift', async () => {
+    const { stderr } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 },
+      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0.005 }
+    ]);
+    expect(stderr).not.toMatch(/pixel-identical/);
+  });
+
+  it('does not warn for a single pixel-identical route (indistinguishable from a clean diff)', async () => {
+    const { stderr } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 }
+    ]);
+    expect(stderr).not.toMatch(/pixel-identical/);
+  });
 });
 
 // ---------------------------------------------------------------------------

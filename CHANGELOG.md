@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- **Stale-capture false-negative guard (#93)** — capture logs now print the fully resolved target URL per route (`... -> https://.../path`), so a `baseUrl` pointing at production instead of the PR preview is visible at a glance. Additionally, `SnapProvider.diff` now emits a warning when a diff run compared more than one route against a real baseline yet every comparison came back pixel-identical (0% drift) — the tell-tale signature of capturing a stale or wrong page rather than a genuine "no change". The guard only warns (never fails), since a PR with no visual change legitimately produces the same shape.
+
 ## 0.5.0 - 2026-06-08
 
 ### Features

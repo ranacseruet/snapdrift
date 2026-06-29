@@ -235,7 +235,17 @@ async function captureViewportRoutes(context, entries, baseUrl, screenshotsRoot,
   const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
   await Promise.all(entries.map(({ route, originalIndex }) =>
     limit(async () => {
-      console.log(`[SnapDrift] Capturing route ${originalIndex + 1}/${totalRoutes}: ${route.id} (${viewportLabel(route.viewport)})`);
+      // Log the fully resolved target URL, not just the route id. When a run
+      // captures a stale or wrong page (e.g. baseUrl points at production
+      // instead of the PR preview), the resolved URL in the CI log is the
+      // fastest way to spot it. See issue #93. A malformed route.path is left
+      // for captureRoute to surface as a per-route failure, so fall back to the
+      // raw path here rather than letting URL parsing abort the whole batch.
+      let targetUrl = route.path;
+      try {
+        targetUrl = new URL(route.path, baseUrl).toString();
+      } catch { /* keep the raw path for the log line */ }
+      console.log(`[SnapDrift] Capturing route ${originalIndex + 1}/${totalRoutes}: ${route.id} (${viewportLabel(route.viewport)}) -> ${targetUrl}`);
       out[originalIndex] = await captureRouteWithRetry(context, route, baseUrl, screenshotsRoot);
     })
   ));
