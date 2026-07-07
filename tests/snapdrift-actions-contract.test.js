@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 async function readAction(actionPath) {
     return yaml.load(await fs.readFile(actionPath, 'utf8'));

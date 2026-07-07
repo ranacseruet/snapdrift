@@ -56,7 +56,7 @@ describe('runInitFromAction', () => {
     const workflowPath = path.join(tempDir, 'workflow.yml');
     const workflow = makeSnapWorkflow();
     // Write as YAML using js-yaml
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     // Change cwd to temp dir so .github/ is created there
@@ -83,7 +83,7 @@ describe('runInitFromAction', () => {
   it('creates MIGRATION_NOTES.md with warnings', async () => {
     const workflowPath = path.join(tempDir, 'workflow.yml');
     const workflow = makeSnapWorkflow();
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     const originalCwd = process.cwd();
@@ -114,7 +114,7 @@ describe('runInitFromAction', () => {
       on: { push: { branches: ['main'] } },
       jobs: { build: { 'runs-on': 'ubuntu-latest', steps: [{ uses: 'actions/checkout@v4' }] } }
     };
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     await expect(runInitFromAction(workflowPath))
@@ -124,7 +124,7 @@ describe('runInitFromAction', () => {
   it('refuses to overwrite existing snapdrift.json (idempotency)', async () => {
     const workflowPath = path.join(tempDir, 'workflow.yml');
     const workflow = makeSnapWorkflow();
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     const originalCwd = process.cwd();
@@ -145,7 +145,7 @@ describe('runInitFromAction', () => {
   it('preserves threshold of zero instead of defaulting to 0.01', async () => {
     const workflowPath = path.join(tempDir, 'workflow.yml');
     const workflow = makeSnapWorkflow({ threshold: '0', 'fail-on-changes': undefined, format: undefined, baseline_tag: undefined, 'snap-api-key-env': undefined, 'snap-project-id': undefined });
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     const originalCwd = process.cwd();
@@ -166,7 +166,7 @@ describe('runInitFromAction', () => {
     const workflow = makeSnapWorkflow({ threshold: undefined, 'fail-on-changes': undefined, format: undefined, baseline_tag: undefined, 'snap-api-key-env': undefined, 'snap-project-id': undefined });
     // Remove the snap-specific with entries
     workflow.jobs.screenshots.steps[1].with = {};
-    const yaml = (await import('js-yaml')).default;
+    const yaml = await import('js-yaml');
     await fs.writeFile(workflowPath, yaml.dump(workflow));
 
     const originalCwd = process.cwd();
