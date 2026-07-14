@@ -1,6 +1,6 @@
 {
   "name": "@snapdrift/adapter-fs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Filesystem I/O adapter for SnapDrift — reads baselines from disk, writes reports to disk",
   "type": "module",
   "main": "src/index.mjs",
