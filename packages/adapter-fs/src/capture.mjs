@@ -52,6 +52,30 @@ function sanitizeRouteId(id) {
     .replace(/[\x00-\x1f\x7f]/g, '');
 }
 
+/**
+ * Throws if a navigation resolved to an HTTP error status (>= 400).
+ *
+ * `page.goto` resolves even on a 404/500 because the error body still "loads",
+ * so without this guard a broken route (wrong slug, outage) silently
+ * screenshots its error page and uploads it as a valid baseline. `response` is
+ * null only for non-navigation schemes (e.g. about:blank), which we treat as
+ * fine. Redirects are already followed by Playwright, so `status()` is the
+ * final response's status.
+ *
+ * @param {{ status: () => number } | null} response
+ * @param {SnapdriftRouteConfig} route
+ * @param {string} targetUrl
+ * @returns {void}
+ */
+export function assertNavigationOk(response, route, targetUrl) {
+  if (response && response.status() >= 400) {
+    throw new Error(
+      `Route "${route.id}" returned HTTP ${response.status()} for ${targetUrl} — ` +
+      `refusing to capture an error page as a screenshot. Check the route path/baseUrl.`
+    );
+  }
+}
+
 /** @typedef {import('../../manifest/types/index').VisualViewport} VisualViewport */
 
 /**
@@ -129,10 +153,13 @@ async function captureRoute(context, route, baseUrl, screenshotsRoot) {
   const page = await context.newPage();
   try {
     const targetUrl = new URL(route.path, baseUrl).toString();
-    await page.goto(targetUrl, {
+    const response = await page.goto(targetUrl, {
       waitUntil: 'load',
       timeout: route.navigationTimeout ?? SNAPDRIFT_NAVIGATION_TIMEOUT_MS
     });
+
+    assertNavigationOk(response, route, targetUrl);
+
     await page.waitForTimeout(SNAPDRIFT_SETTLE_DELAY_MS);
 
     const imagePath = path.join('screenshots', `${sanitizeRouteId(route.id)}.png`);
