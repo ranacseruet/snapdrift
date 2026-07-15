@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- **Reject error pages during capture** — `runBaselineCapture` now checks the HTTP status of each route navigation and fails the route if it resolves to a 4xx/5xx. `page.goto` resolves even on a 404/500 (the error body still loads), so previously a broken route — wrong slug, misconfigured `baseUrl`, or an outage — would silently screenshot its error page and upload it as a valid baseline. The failure flows into the existing retry-then-fail path, so a genuinely broken capture now fails loudly instead of poisoning the baseline. Complements the 0% -drift heuristic guard from #93 with a direct status check. Redirects (3xx) still pass, since Playwright follows them and reports the final status; `null` responses (non-navigation schemes) are treated as fine.
+
 ## 0.5.1 - 2026-07-14
 
 ### Fixes

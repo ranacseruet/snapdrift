@@ -5,4 +5,4 @@ export { comparePngs, resolveImagePath, loadJson, clearFileIndexCache } from './
 export { generateDriftReport, runDriftCheckCli } from './drift-report.mjs';
 export { stageArtifacts, getDefaultArtifactBundleDir } from './stage.mjs';
 export { writeDriftSummary } from './drift-summary-io.mjs';
-export { runBaselineCapture } from './capture.mjs';
+export { runBaselineCapture, assertNavigationOk } from './capture.mjs';

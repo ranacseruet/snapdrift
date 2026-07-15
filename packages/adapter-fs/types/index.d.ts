@@ -4,6 +4,7 @@
 
 import type {
   VisualRegressionConfig,
+  VisualRegressionRouteConfig,
   VisualDiffSummary
 } from '@snapdrift/manifest';
 
@@ -130,3 +131,14 @@ export function runBaselineCapture(
   screenshotsRoot: string;
   selectedRouteIds: string[];
 }>;
+
+/**
+ * Throws if a Playwright navigation resolved to an HTTP error status (>= 400),
+ * so an error page is never captured as a valid screenshot. A `null` response
+ * (non-navigation scheme, e.g. about:blank) is treated as fine.
+ */
+export function assertNavigationOk(
+  response: { status: () => number } | null,
+  route: VisualRegressionRouteConfig,
+  targetUrl: string
+): void;
