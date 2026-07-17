@@ -272,12 +272,13 @@ snapdrift migrate-baselines --to snap [--config <path>] [--baseline-dir <dir>]
 snapdrift migrate-baselines --to local --from snap [--accept-cross-engine] [--config <path>] [--baseline-dir <dir>]
 ```
 
-- Downloads baselines from Snap's export endpoint.
-- Writes `results.json`, `manifest.json`, and `screenshots/*.png` to the local baseline directory.
+- Downloads the project's export archive from Snap's export endpoint (`GET /v1/visual/projects/:id/export`, a tar containing every accepted baseline's screenshots, capture profile, and source manifest). Requires an API key with the `visual:export` scope.
+- Imports the **most recent accepted baseline** (by `createdAt`) from the archive; older accepted baselines in the export are ignored.
+- Writes `results.json`, `manifest.json`, and `screenshots/*.png` to the local baseline directory. Screenshot filenames are derived from the baseline's route ids (`screenshots/<routeId>.png`), matching what a local capture would produce.
 - Writes `.migration-metadata.json` next to the baseline recording `source`, `migratedAt`, and the engine that produced the export.
-- Without `--accept-cross-engine`: hard-errors if the exported manifest's engine name is not `snapdrift-local`.
+- Without `--accept-cross-engine`: hard-errors if the exported baseline's engine name is not `snapdrift-local` (e.g. `snap-hosted` for baselines rendered by Snap's worker).
 - With `--accept-cross-engine`: overrides the engine name to `snapdrift-local` in the imported manifest (visual differences may occur when the captures came from a different engine).
-- Requires the Snap export endpoint to be available; if it is not yet wired up, the command fails with an actionable message instead of producing a partial baseline.
+- Fails with an actionable message — instead of producing a partial baseline — when the project has no accepted baselines, when the selected baseline predates manifest tracking (no source manifest recorded at publish time), when the key lacks the `visual:export` scope (403), or when the export exceeds Snap's size caps (413).
 
 ### init
 

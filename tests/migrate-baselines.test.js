@@ -271,9 +271,36 @@ describe('runMigrateToLocal', () => {
     delete process.env.SNAP_TEST_API_KEY;
   });
 
-  it('errors when export endpoint is not available (stub)', async () => {
-    const baselineDir = path.join(tempDir, 'baseline');
-    const config = {
+  // Build the same plain ustar tar layout Snap's export endpoint emits.
+  function buildExportTar(entries) {
+    const octal = (value, length) => value.toString(8).padStart(length - 1, '0') + '\0';
+    const chunks = [];
+    for (const entry of entries) {
+      const body = typeof entry.body === 'string' ? Buffer.from(entry.body, 'utf8') : Buffer.from(entry.body);
+      const header = Buffer.alloc(512, 0);
+      header.write(entry.name.slice(0, 100), 0, 'utf8');
+      header.write(octal(0o644, 8), 100, 'ascii');
+      header.write(octal(0, 8), 108, 'ascii');
+      header.write(octal(0, 8), 116, 'ascii');
+      header.write(octal(body.length, 12), 124, 'ascii');
+      header.write(octal(Math.floor(Date.now() / 1000), 12), 136, 'ascii');
+      header.fill(' ', 148, 156);
+      header.write('0', 156, 'ascii');
+      header.write('ustar\0', 257, 'ascii');
+      header.write('00', 263, 'ascii');
+      let checksum = 0;
+      for (const byte of header) checksum += byte;
+      header.write(octal(checksum, 8), 148, 'ascii');
+      chunks.push(header, body);
+      const pad = (512 - (body.length % 512)) % 512;
+      if (pad) chunks.push(Buffer.alloc(pad, 0));
+    }
+    chunks.push(Buffer.alloc(1024, 0));
+    return Buffer.concat(chunks);
+  }
+
+  function makeConfig() {
+    return {
       provider: 'snap',
       snap: { apiKeyEnv: 'SNAP_TEST_API_KEY', projectId: 'test-project' },
       baselineArtifactName: 'test',
@@ -285,8 +312,10 @@ describe('runMigrateToLocal', () => {
       routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
       diff: { threshold: 0.01, mode: 'report-only' }
     };
+  }
 
-    const opts = {
+  function makeOpts(baselineDir, overrides = {}) {
+    return {
       command: 'migrate-baselines',
       open: false,
       routes: [],
@@ -295,13 +324,97 @@ describe('runMigrateToLocal', () => {
       diffDir: path.join(tempDir, 'diff'),
       to: 'local',
       from: 'snap',
-      acceptCrossEngine: false
+      acceptCrossEngine: false,
+      ...overrides
+    };
+  }
+
+  async function withMockedFetch(response, run) {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => response;
+    try {
+      return await run();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  it('imports the exported baseline and writes results, manifest, screenshots, and metadata', async () => {
+    const baselineDir = path.join(tempDir, 'baseline');
+    const pngBuffer = await createPngBuffer();
+    const tar = buildExportTar([
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({
+          project: { id: 'test-project', slug: 'test' },
+          baselines: [{
+            id: 'bsl_1',
+            projectId: 'test-project',
+            refBranch: 'main',
+            refSha: 'abc1234567890def',
+            status: 'accepted',
+            createdAt: '2026-07-01T00:00:00.000Z',
+            sourceManifest: {
+              schemaVersion: 1,
+              sourceRunId: 'run_1',
+              routes: [{
+                routeId: 'home',
+                routePath: '/',
+                viewportDescriptorJson: JSON.stringify({ width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false }),
+                objectKey: 'visual/test-project/home.png'
+              }]
+            },
+            objects: [{ sourceKey: 'visual/test-project/home.png', archivePath: 'bsl_1/images/abcd1234abcd1234.png' }]
+          }]
+        })
+      },
+      { name: 'bsl_1/images/abcd1234abcd1234.png', body: pngBuffer },
+      { name: 'bsl_1/capture_profile.json', body: JSON.stringify({ schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }) },
+      { name: 'MIGRATION_NOTES.md', body: '# notes\n' }
+    ]);
+
+    const response = {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => tar.buffer.slice(tar.byteOffset, tar.byteOffset + tar.byteLength),
+      text: async () => ''
     };
 
-    const originalExitCode = process.exitCode;
-    await runMigrateToLocal(config, opts);
-    expect(process.exitCode).toBe(1);
-    process.exitCode = originalExitCode;
+    await withMockedFetch(response, () => runMigrateToLocal(makeConfig(), makeOpts(baselineDir)));
+
+    const results = JSON.parse(await fs.readFile(path.join(baselineDir, 'results.json'), 'utf-8'));
+    expect(results.headSha).toBe('abc1234567890def');
+    expect(results.baselineId).toBe('bsl_1');
+
+    const manifest = JSON.parse(await fs.readFile(path.join(baselineDir, 'manifest.json'), 'utf-8'));
+    expect(manifest.screenshots).toHaveLength(1);
+    expect(manifest.screenshots[0].imagePath).toBe('screenshots/home.png');
+    expect(manifest.screenshots[0].viewport).toBe('desktop');
+
+    const written = await fs.readFile(path.join(baselineDir, 'screenshots', 'home.png'));
+    expect(Buffer.compare(written, pngBuffer)).toBe(0);
+
+    const metadata = JSON.parse(await fs.readFile(path.join(baselineDir, '.migration-metadata.json'), 'utf-8'));
+    expect(metadata.source).toBe('snap');
+    expect(metadata.engine).toEqual({ name: 'snapdrift-local', version: 'v0' });
+  });
+
+  it('propagates a clear error when the project has no accepted baselines', async () => {
+    const baselineDir = path.join(tempDir, 'baseline');
+    const tar = buildExportTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'test-project' }, baselines: [] }) }
+    ]);
+    const response = {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => tar.buffer.slice(tar.byteOffset, tar.byteOffset + tar.byteLength),
+      text: async () => ''
+    };
+
+    await withMockedFetch(response, async () => {
+      await expect(runMigrateToLocal(makeConfig(), makeOpts(baselineDir)))
+        .rejects.toThrow(/no accepted baselines to export/);
+    });
   });
 
   it('throws if snap config is missing', async () => {

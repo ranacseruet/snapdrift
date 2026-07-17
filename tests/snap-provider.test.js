@@ -944,9 +944,199 @@ describe('SnapProvider.exportBaselines()', () => {
     delete process.env.SNAP_TEST_API_KEY;
   });
 
-  it('throws clear error (endpoint not yet available)', async () => {
-    const provider = new SnapProvider(validSnapConfig);
+  // -- tar-building helpers (same plain ustar layout the Snap export endpoint emits) --
+
+  function tarHeader(name, size) {
+    const octal = (value, length) => value.toString(8).padStart(length - 1, '0') + '\0';
+    const header = Buffer.alloc(512, 0);
+    header.write(name.slice(0, 100), 0, 'utf8');
+    header.write(octal(0o644, 8), 100, 'ascii');
+    header.write(octal(0, 8), 108, 'ascii');
+    header.write(octal(0, 8), 116, 'ascii');
+    header.write(octal(size, 12), 124, 'ascii');
+    header.write(octal(Math.floor(Date.now() / 1000), 12), 136, 'ascii');
+    header.fill(' ', 148, 156);
+    header.write('0', 156, 'ascii');
+    header.write('ustar\0', 257, 'ascii');
+    header.write('00', 263, 'ascii');
+    let checksum = 0;
+    for (const byte of header) checksum += byte;
+    header.write(octal(checksum, 8), 148, 'ascii');
+    return header;
+  }
+
+  function buildTar(entries) {
+    const chunks = [];
+    for (const entry of entries) {
+      const body = typeof entry.body === 'string' ? Buffer.from(entry.body, 'utf8') : Buffer.from(entry.body);
+      chunks.push(tarHeader(entry.name, body.length), body);
+      const pad = (512 - (body.length % 512)) % 512;
+      if (pad) chunks.push(Buffer.alloc(pad, 0));
+    }
+    chunks.push(Buffer.alloc(1024, 0));
+    return Buffer.concat(chunks);
+  }
+
+  function tarResponse(buffer) {
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+      text: async () => buffer.toString('utf-8')
+    };
+  }
+
+  /** Minimal valid 2x3 PNG (IHDR only is enough for dimension parsing). */
+  function tinyPng(width, height) {
+    const png = Buffer.alloc(33, 0);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+    png.writeUInt32BE(13, 8); // IHDR length
+    png.write('IHDR', 12, 'ascii');
+    png.writeUInt32BE(width, 16);
+    png.writeUInt32BE(height, 20);
+    return png;
+  }
+
+  const DESKTOP_DESCRIPTOR_JSON = JSON.stringify({
+    width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false
+  });
+
+  function makeBaseline(overrides = {}) {
+    return {
+      id: 'bsl_export_1',
+      projectId: 'test-project-42',
+      refBranch: 'main',
+      refSha: 'abc123def456',
+      status: 'accepted',
+      createdAt: '2026-07-01T00:00:00.000Z',
+      sourceManifest: {
+        schemaVersion: 1,
+        sourceRunId: 'run_src_1',
+        routes: [{
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+          objectKey: 'visual/p/home.png'
+        }]
+      },
+      objects: [{ sourceKey: 'visual/p/home.png', archivePath: 'bsl_export_1/images/aaaa1111bbbb2222.png' }],
+      ...overrides
+    };
+  }
+
+  it('downloads the export tar and maps it to results/manifest/screenshots/engine', async () => {
+    const png = tinyPng(2, 3);
+    const baseline = makeBaseline();
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'test-project-42', slug: 'test' }, baselines: [baseline] }) },
+      { name: 'bsl_export_1/images/aaaa1111bbbb2222.png', body: png },
+      { name: 'bsl_export_1/capture_profile.json', body: JSON.stringify({ schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }) },
+      { name: 'MIGRATION_NOTES.md', body: '# notes\n' }
+    ]);
+
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, headers: opts?.headers });
+      return tarResponse(tar);
+    };
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const exported = await provider.exportBaselines();
+
+    // Request shape
+    expect(requests[0].url).toBe('https://snap.i2dev.com/v1/visual/projects/test-project-42/export');
+    expect(requests[0].method).toBe('GET');
+    expect(requests[0].headers['Authorization']).toBe('Bearer test-api-key-1234');
+
+    // Screenshots: filename derived from the route id, bytes from the archive
+    expect(exported.screenshots).toHaveLength(1);
+    expect(exported.screenshots[0].filename).toBe('home.png');
+    expect(Buffer.compare(exported.screenshots[0].data, png)).toBe(0);
+
+    // Manifest entry references the same filename the caller will write,
+    // with real image dimensions and the preset name round-tripped.
+    const entry = exported.manifest.screenshots[0];
+    expect(entry.id).toBe('home');
+    expect(entry.path).toBe('/');
+    expect(entry.imagePath).toBe('screenshots/home.png');
+    expect(entry.viewport).toBe('desktop');
+    expect(entry.width).toBe(2);
+    expect(entry.height).toBe(3);
+    expect(exported.manifest.captureProfile.engine.name).toBe('snapdrift-local');
+
+    // Results mirror the manifest and carry migration provenance
+    expect(exported.results.baselineId).toBe('bsl_export_1');
+    expect(exported.results.headSha).toBe('abc123def456');
+    expect(exported.results.refBranch).toBe('main');
+    expect(exported.results.routes).toHaveLength(1);
+    expect(exported.results.routes[0]).toMatchObject({
+      id: 'home', path: '/', status: 'passed', imagePath: 'screenshots/home.png', width: 2, height: 3
+    });
+
+    // Engine passes through from the capture profile
+    expect(exported.engine).toEqual({ name: 'snapdrift-local', version: 'v0' });
+  });
+
+  it('picks the newest accepted baseline of two by createdAt', async () => {
+    const png = tinyPng(1, 1);
+    const older = makeBaseline({
+      id: 'bsl_old',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/old.png' }]
+      },
+      objects: [{ sourceKey: 'visual/p/old.png', archivePath: 'bsl_old/images/1111.png' }]
+    });
+    const newer = makeBaseline({
+      id: 'bsl_new',
+      createdAt: '2026-07-02T00:00:00.000Z',
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/new.png' }]
+      },
+      objects: [{ sourceKey: 'visual/p/new.png', archivePath: 'bsl_new/images/2222.png' }]
+    });
+    const tar = buildTar([
+      // Older listed last so the pick is proven to come from createdAt, not array order.
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [newer, older] }) },
+      { name: 'bsl_old/images/1111.png', body: png },
+      { name: 'bsl_new/images/2222.png', body: png },
+      { name: 'bsl_old/capture_profile.json', body: '{}' },
+      { name: 'bsl_new/capture_profile.json', body: JSON.stringify({ engine: { name: 'snapdrift-local', version: 'v0' } }) }
+    ]);
+
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const exported = await provider.exportBaselines();
+
+    expect(exported.results.baselineId).toBe('bsl_new');
+    expect(exported.engine.name).toBe('snapdrift-local');
+  });
+
+  it('throws a clear error when the export has no accepted baselines', async () => {
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [] }) }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
     await expect(provider.exportBaselines())
-      .rejects.toThrow(/not yet available/);
+      .rejects.toThrow(/no accepted baselines to export/);
+  });
+
+  it('throws a scope-specific error on 403', async () => {
+    const mockFetch = async () => errorResponse(403, { error: 'insufficient scope', code: 'unauthorized_visual_scope' });
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    await expect(provider.exportBaselines())
+      .rejects.toThrow(/visual:export/);
+  });
+
+  it('throws a clear error for a legacy baseline with no source manifest', async () => {
+    const legacy = makeBaseline({ sourceManifest: null, objects: [] });
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [legacy] }) },
+      { name: 'bsl_export_1/capture_profile.json', body: '{}' }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    await expect(provider.exportBaselines())
+      .rejects.toThrow(/predates manifest tracking/);
   });
 });
