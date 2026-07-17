@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **`migrate-baselines --to local --from snap` is now functional** — `SnapProvider.exportBaselines` downloads the project's export archive from Snap's `GET /v1/visual/projects/:id/export` endpoint (requires an API key with the `visual:export` scope), parses the tar in pure JS, selects the most recent accepted baseline, and maps it back to the local baseline layout (`results.json`, `manifest.json`, `screenshots/<routeId>.png`). The imported engine name is passed through truthfully — baselines rendered by Snap's hosted worker report their own engine (falling back to `snap-hosted`) and require `--accept-cross-engine` to import, while baselines originally published by SnapDrift report `snapdrift-local` and import cleanly. Clear errors cover a missing `visual:export` scope (403), an unknown project (404), oversized exports (413), projects with no accepted baselines, and legacy baselines that predate manifest tracking. Previously this command failed with a "Snap export endpoint is not yet available" stub error.
+
 ### Fixes
 
 - **Reject error pages during capture** — `runBaselineCapture` now checks the HTTP status of each route navigation and fails the route if it resolves to a 4xx/5xx. `page.goto` resolves even on a 404/500 (the error body still loads), so previously a broken route — wrong slug, misconfigured `baseUrl`, or an outage — would silently screenshot its error page and upload it as a valid baseline. The failure flows into the existing retry-then-fail path, so a genuinely broken capture now fails loudly instead of poisoning the baseline. Complements the 0% -drift heuristic guard from #93 with a direct status check. Redirects (3xx) still pass, since Playwright follows them and reports the final status; `null` responses (non-navigation schemes) are treated as fine.

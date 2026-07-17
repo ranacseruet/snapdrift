@@ -227,7 +227,7 @@ Conversely, downloading a Snap baseline back to a local directory (useful for re
 snapdrift migrate-baselines --to local --from snap
 ```
 
-The reverse direction requires the Snap export endpoint to be available; if it isn't, the command fails with an actionable error. See the [Contracts reference](contracts.md#migration-commands) for the full flag set, the engine-compatibility check, and the metadata file written for idempotency.
+The reverse direction downloads the project's export archive from Snap (`GET /v1/visual/projects/:id/export`, which requires an API key with the `visual:export` scope) and imports the most recent accepted baseline into the local baseline directory. See the [Contracts reference](contracts.md#migration-commands) for the full flag set, the engine-compatibility check, and the metadata file written for idempotency.
 
 If you're adopting SnapDrift as a replacement for the upstream `snap/github-action`, the `init` codemod translates the workflow YAML and emits a `MIGRATION_NOTES.md` with everything that couldn't be auto-translated:
 
