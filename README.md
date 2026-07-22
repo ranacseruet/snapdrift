@@ -104,6 +104,12 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 - Dimension shifts are reported separately from pixel drift
 - Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
 
+## Outgrew GitHub artifacts?
+
+Baselines live as GitHub Actions artifacts by default — quick to start, but they expire (~90 days), are scoped to one repo, and every PR re-renders on your CI runner. When visual regression becomes load-bearing, set `provider: "snap"` to move rendering off your runner and baselines into durable, shared storage with a review dashboard — same routes, same diff config, one line changed. Snap's hosted Visual CI is built for small teams (plans from $9.99/mo).
+
+→ **[Hosted Visual CI with Snap](https://snap.i2dev.com/ci)**
+
 ## Docs
 
 - [Integration Guide](docs/integration-guide.md)
