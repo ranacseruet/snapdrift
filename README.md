@@ -106,7 +106,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 
 ## Outgrew GitHub artifacts?
 
-Baselines live as GitHub Actions artifacts by default — quick to start, but they expire (~90 days), are scoped to one repo, and every PR re-renders on your CI runner. When visual regression becomes load-bearing, set `provider: "snap"` to move rendering off your runner and baselines into durable, shared storage with a review dashboard — same routes, same diff config, one line changed. Snap's hosted Visual CI is built for small teams (plans from $9.99/mo).
+Baselines live as GitHub Actions artifacts by default — quick to start, but they expire (30 days by default), are scoped to one repo, and every PR re-renders on your CI runner. When visual regression becomes load-bearing, `provider: "snap"` moves baselines into durable, shared storage with a review dashboard — and, when `baseUrl` points at a public preview URL Snap can reach, renders on Snap's hosted fleet instead of your runner (with a localhost `baseUrl`, capture stays a local-Playwright-and-upload hybrid). Same routes, same diff config; add a `snap` config block and API key per the [hosted-provider setup](docs/integration-guide.md#hosted-snap-provider). Snap's hosted Visual CI is built for small teams (plans from $9.99/mo).
 
 → **[Hosted Visual CI with Snap](https://snap.i2dev.com/ci)**
 
