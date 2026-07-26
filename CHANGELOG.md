@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **`snapdrift baseline` command** — establishes a baseline for the configured provider. With `provider: "snap"` it captures each route through Snap, waits for the hosted renders, and then publishes a baseline from the stored object keys. Previously `publishBaseline()` was reachable only from `actions/baseline`, so anyone not running GitHub Actions had **no supported way to seed a hosted project** — `snapdrift capture` submits a run but never creates a baseline from it. With `provider: "local"` the command behaves like `capture`, since the captured files are themselves the baseline. Honours `onUnavailable: fallback-local` by skipping the publish step when the capture falls back locally. (ranacseruet/snapdrift#106)
+
+### Fixes
+
+- **Baselines published outside GitHub Actions are attributed correctly** — `publishBaseline()` read the branch and commit only from `GITHUB_REF_NAME` / `GITHUB_HEAD_REF` / `GITHUB_SHA`, so a baseline published from a terminal was recorded as branch `main` at SHA `unknown`, making baselines cut from different commits indistinguishable in the dashboard and in exported metadata. It now falls back to `git rev-parse` when those variables are absent (and to `main` / `unknown` only outside a git repository). Previously unreachable, since there was no CLI publish path.
+
+### Breaking changes
+
+- **`migrate-baselines --to snap` now fails with a pointer to `snapdrift baseline`**, and `SnapProvider.migrateBaselineFromLocal()` has been removed. The body it posted (`manifest`/`results`/`screenshots` as objects) was never read by Snap's baseline endpoint: the PNGs were never uploaded to storage and the manifest referenced local filenames rather than Snap object keys, so the call could only ever create a baseline with no images behind it — one that `migrate-baselines --to local --from snap` would then refuse to export. The request previously failed with an opaque 500 and is now rejected with `400 unsupported_baseline_body` (i2Dev-com/snap#653). The reverse direction, `--to local --from snap`, is unaffected.
+
 ## 0.6.0 - 2026-07-17
 
 ### Features

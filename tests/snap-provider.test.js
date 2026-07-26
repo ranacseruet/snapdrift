@@ -882,7 +882,7 @@ describe('SnapProvider.checkBaselineExists()', () => {
   });
 });
 
-describe('SnapProvider.migrateBaselineFromLocal()', () => {
+describe('SnapProvider.migrateBaselineFromLocal() — removed in 0.7.0', () => {
   beforeEach(() => {
     process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
   });
@@ -890,49 +890,18 @@ describe('SnapProvider.migrateBaselineFromLocal()', () => {
     delete process.env.SNAP_TEST_API_KEY;
   });
 
-  it('POSTs baseline data with screenshots and returns result', async () => {
-    const requests = [];
-    const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
-      return okResponse({ id: 'baseline-new-1' });
-    };
-
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    const result = await provider.migrateBaselineFromLocal({
-      results: { routes: [], startedAt: new Date().toISOString() },
-      manifest: { screenshots: [], generatedAt: new Date().toISOString() },
-      screenshots: [{ filename: 'home.png', data: 'base64data' }],
-      headSha: 'abc123def456'
+  // Guards against reintroduction: the body it sent (manifest/results/screenshots
+  // as objects) was never read by Snap, so it could only produce a baseline with
+  // no stored pixels. Snap now rejects it with 400 unsupported_baseline_body.
+  // publishBaseline() after capture() is the supported path.
+  it('is no longer exposed on the provider', () => {
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => okResponse({}),
+      sleepFn: () => Promise.resolve()
     });
 
-    expect(result.uploaded).toBe(1);
-    expect(result.skipped).toBe(0);
-    expect(result.baselineId).toBe('baseline-new-1');
-
-    // Verify the POST request
-    const post = requests[0];
-    expect(post.method).toBe('POST');
-    expect(post.body.idempotencyKey).toBe('baseline-migrate-abc123def456');
-    expect(post.body.screenshots).toHaveLength(1);
-    expect(post.body.headSha).toBe('abc123def456');
-  });
-
-  it('uses SHA-derived idempotency key', async () => {
-    const requests = [];
-    const mockFetch = async (url, opts) => {
-      requests.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
-      return okResponse({ id: 'b1' });
-    };
-
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await provider.migrateBaselineFromLocal({
-      results: {},
-      manifest: {},
-      screenshots: [],
-      headSha: 'deadbeef'
-    });
-
-    expect(requests[0].body.idempotencyKey).toBe('baseline-migrate-deadbeef');
+    expect(provider.migrateBaselineFromLocal).toBeUndefined();
+    expect(typeof provider.publishBaseline).toBe('function');
   });
 });
 

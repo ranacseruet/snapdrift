@@ -69,14 +69,17 @@ That is the full integration. See the [Integration Guide](docs/integration-guide
 SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app — no GitHub Actions required. Use it during development to validate UI changes before pushing.
 
 ```bash
-# Capture a baseline
+# Establish a baseline — for provider "snap" this also publishes it
+snapdrift baseline
+
+# Capture screenshots without publishing anything
 snapdrift capture
 
-# Compare against it after making UI changes
+# Compare against the baseline after making UI changes
 snapdrift diff --open
 
-# Migrate local baselines to the hosted Snap backend
-snapdrift migrate-baselines --to snap
+# Export hosted baselines back to the local layout
+snapdrift migrate-baselines --to local --from snap
 
 # Translate an existing Snap github-action workflow into snapdrift.json
 snapdrift init --from-snap-action .github/workflows/snap.yml
