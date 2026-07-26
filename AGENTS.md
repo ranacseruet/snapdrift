@@ -40,9 +40,9 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `drift-summary.mjs` — Re-exports `buildDriftSummary` and `writeDriftSummary`
    - `pr-comment.mjs` — Re-exports `buildReportCommentBody`, `PR_COMMENT_MARKER[S]`, `escapeMarkdown`
    - `report.mjs` — Wires the default filesystem `imageReader` for HTML reports
-   - `cli.mjs` — CLI entry point: `parseArgs` + command dispatch for `capture`, `diff`, `migrate-baselines`, `init`
+   - `cli.mjs` — CLI entry point: `parseArgs` + command dispatch for `capture`, `baseline`, `diff`, `migrate-baselines`, `init`. `baseline` is the only CLI path that publishes a baseline to Snap (capture + `publishBaseline`)
    - `provider.mjs` — `createProvider(name, config)` factory + `LocalProvider` implementation; re-exports `SnapProvider` and the four Snap error classes from `snap-provider.mjs`
-   - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline`/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`migrateBaselineFromLocal`, `exportBaselines`, `checkBaselineExists`) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
+   - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline`/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`exportBaselines`, `checkBaselineExists`; `migrateBaselineFromLocal` removed in 0.7.0 — Snap rejects that body) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
    - `migrate-baselines.mjs` — `migrate-baselines` command handlers (`runMigrateToSnap`, `runMigrateToLocal`)
    - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to `snapdrift.json`
 
@@ -109,7 +109,8 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 | `tests/snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract, provider wiring |
 | `tests/snapdrift-config.test.js` | `snapdrift-config` shim exports |
 | `tests/report.test.js` | HTML report image embedding |
-| `tests/migrate-baselines.test.js` | Migration command parsing, `runMigrateToSnap`, `runMigrateToLocal` engine validation |
+| `tests/migrate-baselines.test.js` | Migration command parsing, `runMigrateToSnap` retirement, `runMigrateToLocal` engine validation |
+| `tests/cli-baseline-command.test.js` | `snapdrift baseline` — capture→publish ordering, local no-publish, fallback-local no-publish |
 | `tests/init-from-action.test.js` | Snap action YAML parsing, field translation, warning generation, idempotency |
 | `tests/cli.test.js` | CLI `parseArgs` + command dispatch |
 | `tests/integration/capture-compare-pipeline.test.js` | End-to-end capture → stage → compare pipeline with synthetic PNG fixtures |

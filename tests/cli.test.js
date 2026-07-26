@@ -33,6 +33,20 @@ describe('parseArgs', () => {
         expect(opts.command).toBe('capture');
     });
 
+    it('parses baseline command', () => {
+        const opts = parseArgs(['node', 'snapdrift', 'baseline']);
+        expect(opts.command).toBe('baseline');
+    });
+
+    it('parses baseline command with --config and --routes', () => {
+        const opts = parseArgs([
+            'node', 'snapdrift', 'baseline', '--config', 'custom/snapdrift.json', '--routes', 'home,about'
+        ]);
+        expect(opts.command).toBe('baseline');
+        expect(opts.configPath).toBe('custom/snapdrift.json');
+        expect(opts.routes).toEqual(['home', 'about']);
+    });
+
     it('parses diff command explicitly', () => {
         const opts = parseArgs(['node', 'snapdrift', 'diff']);
         expect(opts.command).toBe('diff');

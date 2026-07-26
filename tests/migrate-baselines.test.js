@@ -235,22 +235,43 @@ describe('runMigrateToSnap', () => {
     delete process.env.GITHUB_SHA;
   });
 
-  it('throws if snap config is missing', async () => {
-    const baselineDir = path.join(tempDir, 'baseline');
-    const config = {
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'http://localhost:3000',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    };
-    const opts = { baselineDir, to: 'snap' };
+  const baseConfig = {
+    baselineArtifactName: 'test',
+    workingDirectory: '.',
+    baseUrl: 'http://localhost:3000',
+    resultsFile: 'results.json',
+    manifestFile: 'manifest.json',
+    screenshotsRoot: 'screenshots',
+    routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+    diff: { threshold: 0.01, mode: 'report-only' }
+  };
 
-    await expect(runMigrateToSnap(config, opts))
-      .rejects.toThrow(/Migration requires snap config/);
+  // The direction is retired: Snap never read the manifest/results/screenshots
+  // fields this body carried, so it could only ever create an unexportable
+  // baseline — and now returns 400 unsupported_baseline_body outright.
+  it('always throws, pointing at the supported `snapdrift baseline` command', async () => {
+    const opts = { baselineDir: path.join(tempDir, 'baseline'), to: 'snap' };
+
+    await expect(runMigrateToSnap(baseConfig, opts))
+      .rejects.toThrow(/no longer supported/);
+    await expect(runMigrateToSnap(baseConfig, opts))
+      .rejects.toThrow(/snapdrift baseline/);
+  });
+
+  it('throws even when snap config is present and baselines exist on disk', async () => {
+    const baselineDir = path.join(tempDir, 'baseline');
+    await fs.mkdir(path.join(baselineDir, 'screenshots'), { recursive: true });
+    await fs.writeFile(path.join(baselineDir, 'results.json'), JSON.stringify({ headSha: 'abc123' }));
+    await fs.writeFile(path.join(baselineDir, 'manifest.json'), JSON.stringify({ screenshots: [] }));
+
+    const config = {
+      ...baseConfig,
+      provider: 'snap',
+      snap: { apiKeyEnv: 'SNAP_TEST_API_KEY', projectId: 'prj_test' }
+    };
+
+    await expect(runMigrateToSnap(config, { baselineDir, to: 'snap' }))
+      .rejects.toThrow(/no longer supported/);
   });
 });
 

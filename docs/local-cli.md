@@ -22,6 +22,36 @@ npx snapdrift <command>
 
 ## Commands
 
+### `snapdrift baseline`
+
+Establishes the baseline for whichever provider the config selects. This is the command to reach for when seeding a project.
+
+```
+snapdrift baseline [options]
+```
+
+- **`provider: "local"`** — identical to `snapdrift capture`: the screenshots written to the baseline directory *are* the baseline.
+- **`provider: "snap"`** — captures each route through Snap, waits for the hosted renders to finish, then publishes a baseline referencing the stored objects. `snapdrift capture` alone does **not** do this: it submits the run and stops, leaving the project with no baseline.
+
+If `snap.onUnavailable` is `fallback-local` and Snap cannot be reached, the capture falls back to a local baseline and nothing is published.
+
+**Options**
+
+| Flag | Default | Description |
+|:-----|:--------|:------------|
+| `--config <path>` | `.github/snapdrift.json` | Path to the config file |
+| `--routes <ids>` | all routes | Comma-separated route IDs to capture |
+| `--baseline-dir <path>` | `.snapdrift/baseline` | Directory to write baseline screenshots and metadata (local provider) |
+
+**Example**
+
+```bash
+snapdrift baseline
+snapdrift baseline --routes home-desktop,home-mobile
+```
+
+---
+
 ### `snapdrift capture`
 
 Captures full-page screenshots of all configured routes and saves them as a local baseline.
@@ -82,15 +112,15 @@ snapdrift diff --baseline-dir snapshots/baseline --diff-dir snapshots/diff
 
 ### `snapdrift migrate-baselines`
 
-Move baselines between the local filesystem and the hosted Snap backend. Requires a config with `provider: "snap"` (or a `snap` block) for the direction being targeted.
+Export baselines from the hosted Snap backend to the local filesystem. Requires a config with `provider: "snap"` (or a `snap` block).
 
-**Upload local baselines to Snap:**
+**`--to snap` is not supported (removed in 0.7.0).**
 
 ```bash
-snapdrift migrate-baselines --to snap
+snapdrift migrate-baselines --to snap   # always fails
 ```
 
-Reads `results.json`, `manifest.json`, and `screenshots/*.png` from the local baseline directory, then POSTs them to Snap as the initial accepted baseline for the current commit. Idempotent: if a baseline already exists for the same commit SHA the upload is skipped.
+Snap cannot accept a pre-built local baseline bundle: the screenshots it carries are never uploaded to Snap storage, and its manifest references local filenames rather than Snap object keys, so the result would be a baseline with no pixels behind it. The endpoint rejects the request with `400 unsupported_baseline_body`. Use [`snapdrift baseline`](#snapdrift-baseline) instead — it captures each route through Snap so the images actually land in storage, then publishes a manifest that points at them.
 
 **Download Snap baselines to a local directory:**
 
