@@ -19,7 +19,7 @@ jest.unstable_mockModule('../lib/provider.mjs', () => ({
 }));
 
 const { runBaselineCommand } = await import('../lib/cli.mjs');
-const { SnapFallbackError } = await import('../lib/snap-provider.mjs');
+const { SnapFallbackError, SnapSkipError } = await import('../lib/snap-provider.mjs');
 
 const BASELINE_DIR = '/tmp/snapdrift-baseline';
 
@@ -130,6 +130,24 @@ describe('runBaselineCommand — provider: "local"', () => {
     expect(provider.publishBaseline).not.toHaveBeenCalled();
     expect(createProviderMock).toHaveBeenCalledWith('local', {});
     expect(stdout.join('')).toMatch(/Captured 2 route\(s\)/);
+  });
+});
+
+describe('runBaselineCommand — onUnavailable: warn-and-skip', () => {
+  it('exits cleanly without publishing when Snap is unavailable', async () => {
+    const provider = makeProvider({
+      captureImpl: () => {
+        throw new SnapSkipError('Snap API 500: internal server error');
+      }
+    });
+    loadSnapdriftConfigMock.mockResolvedValue({ config: { provider: 'snap' } });
+    createProviderMock.mockReturnValue(provider);
+
+    // warn-and-skip means "do not fail my build for this" — the command must
+    // resolve, not reject, matching runDiffCommand's handling of the same error.
+    await expect(runBaselineCommand(opts())).resolves.toBeUndefined();
+    expect(provider.publishBaseline).not.toHaveBeenCalled();
+    expect(stdout.join('')).toMatch(/Baseline skipped \(Snap unavailable, warn-and-skip mode\)/);
   });
 });
 
