@@ -724,6 +724,61 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
+
+  // Previously these fell through to a "legacy" branch that POSTed
+  // manifest/results as objects — a body Snap has never read, which now returns
+  // 400 unsupported_baseline_body. Failing with the real cause beats emitting a
+  // request that is guaranteed to fail. See #109.
+  it('fails with the real cause when results.json has no runId, without calling the API', async () => {
+    const requests = [];
+    const mockFetch = async (url) => {
+      requests.push(url);
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-norunid-'));
+    const resultsPath = path.join(dir, 'results.json');
+    // A local-provider results.json: valid JSON, no runId.
+    await fs.writeFile(resultsPath, JSON.stringify({ status: 'ok', screenshots: [] }));
+    try {
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(/no run id found/);
+      expect(requests).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('surfaces the read error when results.json is missing or unparseable', async () => {
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => okResponse({}),
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-badresults-'));
+    try {
+      // Missing file — the read error used to be swallowed by a bare catch.
+      await expect(
+        provider.publishBaseline({ resultsPath: path.join(dir, 'nope.json') })
+      ).rejects.toThrow(/Could not read that file/);
+
+      const badPath = path.join(dir, 'results.json');
+      await fs.writeFile(badPath, '{not json');
+      await expect(provider.publishBaseline({ resultsPath: badPath })).rejects.toThrow(
+        /Could not read that file/
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails clearly when given neither resultsPath nor bundleDir', async () => {
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => okResponse({}),
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.publishBaseline({})).rejects.toThrow(
+      /neither resultsPath nor bundleDir/
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -749,7 +804,7 @@ describe('SnapProvider retry behavior', () => {
     };
 
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await provider.publishBaseline({ bundleDir: os.tmpdir() });
+    await provider.checkBaselineExists('abc123');
     expect(callCount).toBe(2);
   });
 
@@ -761,7 +816,7 @@ describe('SnapProvider retry behavior', () => {
     };
 
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.publishBaseline({ bundleDir: os.tmpdir() }))
+    await expect(provider.checkBaselineExists('abc123'))
       .rejects.toThrow(/Snap API 401/);
     expect(callCount).toBe(1);
   });
@@ -778,21 +833,21 @@ describe('SnapProvider onUnavailable modes', () => {
   it('fail mode (default) throws on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fail' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.publishBaseline({}))
+    await expect(provider.checkBaselineExists('abc123'))
       .rejects.toThrow(/Snap API 500/);
   });
 
   it('fallback-local mode throws SnapFallbackError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fallback-local' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.publishBaseline({}))
+    await expect(provider.checkBaselineExists('abc123'))
       .rejects.toBeInstanceOf(SnapFallbackError);
   });
 
   it('warn-and-skip mode throws SnapSkipError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.publishBaseline({}))
+    await expect(provider.checkBaselineExists('abc123'))
       .rejects.toBeInstanceOf(SnapSkipError);
   });
 });
