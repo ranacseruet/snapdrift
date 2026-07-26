@@ -111,6 +111,7 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 | `tests/report.test.js` | HTML report image embedding |
 | `tests/migrate-baselines.test.js` | Migration command parsing, `runMigrateToSnap` retirement, `runMigrateToLocal` engine validation |
 | `tests/cli-baseline-command.test.js` | `snapdrift baseline` — capture→publish ordering, local no-publish, warn-and-skip / fallback-local across both phases |
+| `tests/cli-capture-command.test.js` | `snapdrift capture` — onUnavailable warn-and-skip / fallback-local, non-availability errors still propagate |
 | `tests/resolve-git-ref.test.js` | `resolveGitRef` — Actions env vars vs local git fallback for baseline attribution |
 | `tests/init-from-action.test.js` | Snap action YAML parsing, field translation, warning generation, idempotency |
 | `tests/cli.test.js` | CLI `parseArgs` + command dispatch |
