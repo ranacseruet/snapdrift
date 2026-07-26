@@ -42,7 +42,7 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `report.mjs` — Wires the default filesystem `imageReader` for HTML reports
    - `cli.mjs` — CLI entry point: `parseArgs` + command dispatch for `capture`, `baseline`, `diff`, `migrate-baselines`, `init`. `baseline` is the only CLI path that publishes a baseline to Snap (capture + `publishBaseline`)
    - `provider.mjs` — `createProvider(name, config)` factory + `LocalProvider` implementation; re-exports `SnapProvider` and the four Snap error classes from `snap-provider.mjs`
-   - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline`/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`exportBaselines`, `checkBaselineExists`; `migrateBaselineFromLocal` removed in 0.7.0 — Snap rejects that body) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
+   - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline` (requires a Snap run id; no legacy bundle path)/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`exportBaselines`, `checkBaselineExists`; `migrateBaselineFromLocal` removed in 0.7.0 — Snap rejects that body) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
    - `migrate-baselines.mjs` — `migrate-baselines` command handlers (`runMigrateToSnap`, `runMigrateToLocal`)
    - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to `snapdrift.json`
 

@@ -8,6 +8,7 @@
 
 ### Fixes
 
+- **`publishBaseline()` fails with the real cause instead of a doomed request** — when `results.json` was missing, unparseable, or carried no `runId`, it fell through to a legacy branch that POSTed `manifest`/`results` as objects. Snap has never read those fields, so that request could only fail — with an opaque 500 before, and `400 unsupported_baseline_body` since i2Dev-com/snap#653 — while a bare `catch {}` hid the underlying read error. The legacy branch is removed; the method now reports that no run id was found, including the read error when there was one. Reached whenever a non-Snap `results.json` (for example one written by the local provider) was passed in. (#109)
 - **Baselines published outside GitHub Actions are attributed correctly** — `publishBaseline()` read the branch and commit only from `GITHUB_REF_NAME` / `GITHUB_HEAD_REF` / `GITHUB_SHA`, so a baseline published from a terminal was recorded as branch `main` at SHA `unknown`, making baselines cut from different commits indistinguishable in the dashboard and in exported metadata. It now falls back to `git rev-parse` when those variables are absent (and to `main` / `unknown` only outside a git repository). Previously unreachable, since there was no CLI publish path.
 
 ### Breaking changes
