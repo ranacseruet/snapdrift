@@ -8,6 +8,7 @@
 
 ### Fixes
 
+- **`snapdrift capture` honours `onUnavailable: "warn-and-skip"`** — the mode makes `#handleUnavailable` throw `SnapSkipError`, which `diff` and `baseline` catch and turn into a clean exit. `capture` let it propagate to the CLI entry point, which writes the error to stderr and exits 1 — failing the build the user explicitly configured *not* to fail when Snap is unavailable. (#108)
 - **Baselines published outside GitHub Actions are attributed correctly** — `publishBaseline()` read the branch and commit only from `GITHUB_REF_NAME` / `GITHUB_HEAD_REF` / `GITHUB_SHA`, so a baseline published from a terminal was recorded as branch `main` at SHA `unknown`, making baselines cut from different commits indistinguishable in the dashboard and in exported metadata. It now falls back to `git rev-parse` when those variables are absent (and to `main` / `unknown` only outside a git repository). Previously unreachable, since there was no CLI publish path.
 
 ### Breaking changes

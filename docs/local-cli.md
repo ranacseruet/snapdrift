@@ -234,7 +234,7 @@ Add `.snapdrift/` to your `.gitignore` to keep local run output out of version c
 
 | Code | Meaning |
 |:-----|:--------|
-| `0` | Clean — no drift above threshold, `diff.mode` is `report-only`, the diff was intentionally skipped (e.g. `SnapSkipError` from `onUnavailable: "warn-and-skip"`), or the command was a `capture` / `migrate-baselines` / `init` that completed |
+| `0` | Clean — no drift above threshold, `diff.mode` is `report-only`, the command was intentionally skipped under `onUnavailable: "warn-and-skip"` (`diff`, `capture` and `baseline` all exit 0 in that case), or the command was a `capture` / `baseline` / `migrate-baselines --to local` / `init` that completed |
 | `1` | Drift enforced — `diff.mode` caused the run to fail, a required command argument was missing, or the `--to local` engine-name check failed (see [Drift modes](../README.md#drift-modes)) |
 
 Enforcement follows the same `diff.mode` rules as the GitHub Actions workflow. Set `"mode": "report-only"` during local development to always get a report without a failing exit code.
