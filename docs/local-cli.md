@@ -33,7 +33,11 @@ snapdrift baseline [options]
 - **`provider: "local"`** — identical to `snapdrift capture`: the screenshots written to the baseline directory *are* the baseline.
 - **`provider: "snap"`** — captures each route through Snap, waits for the hosted renders to finish, then publishes a baseline referencing the stored objects. `snapdrift capture` alone does **not** do this: it submits the run and stops, leaving the project with no baseline.
 
-If `snap.onUnavailable` is `fallback-local` and Snap cannot be reached, the capture falls back to a local baseline and nothing is published.
+`snap.onUnavailable` is honoured across both phases — the capture *and* the publish that follows it. `warn-and-skip` exits 0 without a baseline; `fallback-local` captures locally so you still end up with one.
+
+**Baseline attribution.** The published baseline records the branch and commit it was cut from. Inside GitHub Actions these come from `GITHUB_REF_NAME` / `GITHUB_HEAD_REF` and `GITHUB_SHA`; run locally, they are read from git (`rev-parse --abbrev-ref HEAD` and `rev-parse HEAD`). Outside a git repository they fall back to `main` and `unknown`, so run the command from your checkout if you want the baseline attributed correctly.
+
+**`snap.projectId` must be an explicit `prj_...` id** for local runs. `"auto"` derives the id from `GITHUB_REPOSITORY`, which is not set outside Actions — the command fails early telling you to set an explicit id.
 
 **Options**
 

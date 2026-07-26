@@ -133,6 +133,42 @@ describe('runBaselineCommand — provider: "local"', () => {
   });
 });
 
+// Snap can go down *after* capture succeeds — while polling the render or
+// posting the baseline. The configured onUnavailable behaviour has to hold for
+// that window too, not just for the capture call.
+describe('runBaselineCommand — Snap becomes unavailable during publish', () => {
+  it('warn-and-skip exits cleanly rather than failing the build', async () => {
+    const provider = makeProvider({
+      publishImpl: () => {
+        throw new SnapSkipError('Snap API 500: internal server error');
+      }
+    });
+    loadSnapdriftConfigMock.mockResolvedValue({ config: { provider: 'snap' } });
+    createProviderMock.mockReturnValue(provider);
+
+    await expect(runBaselineCommand(opts())).resolves.toBeUndefined();
+    expect(stdout.join('')).toMatch(/Baseline publish skipped \(Snap unavailable, warn-and-skip mode\)/);
+    expect(stdout.join('')).not.toMatch(/published successfully/);
+  });
+
+  it('fallback-local still leaves the user with a local baseline', async () => {
+    const snapProvider = makeProvider({
+      publishImpl: () => {
+        throw new SnapFallbackError('Snap unreachable');
+      }
+    });
+    const localProvider = makeProvider();
+    loadSnapdriftConfigMock.mockResolvedValue({ config: { provider: 'snap' } });
+    createProviderMock
+      .mockReturnValueOnce(snapProvider)
+      .mockReturnValueOnce(localProvider);
+
+    await expect(runBaselineCommand(opts())).resolves.toBeUndefined();
+    expect(localProvider.capture).toHaveBeenCalled();
+    expect(stdout.join('')).toMatch(/local fallback — nothing published to Snap/);
+  });
+});
+
 describe('runBaselineCommand — onUnavailable: warn-and-skip', () => {
   it('exits cleanly without publishing when Snap is unavailable', async () => {
     const provider = makeProvider({

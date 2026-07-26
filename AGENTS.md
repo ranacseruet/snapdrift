@@ -110,7 +110,8 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 | `tests/snapdrift-config.test.js` | `snapdrift-config` shim exports |
 | `tests/report.test.js` | HTML report image embedding |
 | `tests/migrate-baselines.test.js` | Migration command parsing, `runMigrateToSnap` retirement, `runMigrateToLocal` engine validation |
-| `tests/cli-baseline-command.test.js` | `snapdrift baseline` — capture→publish ordering, local no-publish, fallback-local no-publish |
+| `tests/cli-baseline-command.test.js` | `snapdrift baseline` — capture→publish ordering, local no-publish, warn-and-skip / fallback-local across both phases |
+| `tests/resolve-git-ref.test.js` | `resolveGitRef` — Actions env vars vs local git fallback for baseline attribution |
 | `tests/init-from-action.test.js` | Snap action YAML parsing, field translation, warning generation, idempotency |
 | `tests/cli.test.js` | CLI `parseArgs` + command dispatch |
 | `tests/integration/capture-compare-pipeline.test.js` | End-to-end capture → stage → compare pipeline with synthetic PNG fixtures |
