@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Updated the README, Integration Guide, and baseline workflow template action examples to use the current `v0.7.0` release.
+
 ## 0.7.0 - 2026-07-26
 
 ### Features
