@@ -15,9 +15,10 @@ branding:
 # action's own directory. `tests/marketplace-metadata.test.js` fails the build if those pins drift
 # from the root `package.json` version.
 #
-# The release commit replaces these tags with the release commit SHA plus a trailing `# vX.Y.Z`
-# comment, so that a consumer pinning this action to a SHA gets an immutable chain rather than a
-# mutable tag one level down. The test accepts either form.
+# The pins are commit SHAs carrying the version in a trailing comment, so that a consumer pinning
+# this action to a SHA gets an immutable chain rather than a mutable tag one level down. The SHA is
+# the commit that introduced the release's wrapper actions; the release commit cannot reference its
+# own SHA. The test accepts a plain `@vX.Y.Z` tag too, for unreleased refs.
 
 inputs:
   mode:
@@ -145,7 +146,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@v0.8.0
+      uses: ranacseruet/snapdrift/actions/baseline@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.0
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
@@ -155,7 +156,7 @@ runs:
     - name: SnapDrift pull request diff
       id: pr-diff
       if: inputs.mode == 'pr-diff'
-      uses: ranacseruet/snapdrift/actions/pr-diff@v0.8.0
+      uses: ranacseruet/snapdrift/actions/pr-diff@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.0
       with:
         github-token: ${{ inputs.github-token }}
         repo-config-path: ${{ inputs.repo-config-path }}
