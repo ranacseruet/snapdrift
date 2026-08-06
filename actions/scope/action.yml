@@ -1,6 +1,10 @@
 name: SnapDrift Scope
 description: Determine whether SnapDrift should run and which configured routes should be selected for the current change set.
 
+branding:
+  icon: filter
+  color: purple
+
 inputs:
   github-token:
     description: Token used to query pull request changed files.

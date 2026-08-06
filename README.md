@@ -3,6 +3,7 @@
 ![SnapDrift](assets/snapdrift-logo-banner.png)
 
 ![CI](https://github.com/ranacseruet/snapdrift/actions/workflows/ci.yml/badge.svg)
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-SnapDrift-purple?logo=github)](https://github.com/marketplace/actions/snapdrift)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -47,8 +48,9 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift/actions/baseline@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
+    mode: baseline
     repo-config-path: .github/snapdrift.json
 ```
 
@@ -56,13 +58,16 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift/actions/pr-diff@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
+    mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
     repo-config-path: .github/snapdrift.json
 ```
 
 That is the full integration. See the [Integration Guide](docs/integration-guide.md) for workflow examples, permissions, compatibility notes, advanced overrides, and the hosted Snap backend (`provider: "snap"`).
+
+The root action dispatches on `mode`. The same pipelines are also published as standalone actions — `ranacseruet/snapdrift/actions/baseline` and `ranacseruet/snapdrift/actions/pr-diff` — along with the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions for custom orchestration.
 
 ## Local CLI
 

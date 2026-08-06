@@ -1,6 +1,10 @@
 name: SnapDrift Resolve Baseline
 description: Resolve and download the latest successful SnapDrift baseline from main.
 
+branding:
+  icon: download-cloud
+  color: purple
+
 inputs:
   github-token:
     description: Token used to query workflow runs and download artifacts.

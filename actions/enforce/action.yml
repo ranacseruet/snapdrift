@@ -1,6 +1,10 @@
 name: SnapDrift Enforce
 description: Evaluate the SnapDrift summary against diff.mode and fail when required.
 
+branding:
+  icon: shield
+  color: purple
+
 inputs:
   summary-path:
     description: Path to the SnapDrift summary JSON.

@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
@@ -82,6 +82,7 @@
     "./lib/init-from-action.mjs": "./lib/init-from-action.mjs"
   },
   "files": [
+    "action.yml",
     "actions/",
     "bin/",
     "lib/",

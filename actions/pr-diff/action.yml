@@ -1,6 +1,10 @@
 name: SnapDrift PR Diff
 description: Run the end-to-end SnapDrift pull request pipeline, including scope resolution, skipped-report handling, artifact upload, PR reporting, and enforcement.
 
+branding:
+  icon: eye
+  color: purple
+
 inputs:
   github-token:
     description: Token used to inspect pull request files, fetch baselines, and publish SnapDrift PR reports.

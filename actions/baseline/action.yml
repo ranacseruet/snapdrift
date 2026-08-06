@@ -1,6 +1,10 @@
 name: SnapDrift Baseline
 description: Capture configured routes, stage a SnapDrift baseline, and upload it with the configured artifact name.
 
+branding:
+  icon: camera
+  color: purple
+
 inputs:
   repo-config-path:
     description: Path to the SnapDrift config file.
