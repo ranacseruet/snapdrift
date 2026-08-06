@@ -46,7 +46,7 @@ SnapDrift owns route selection, capture, comparison, skipped-report generation, 
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
@@ -71,7 +71,7 @@ Then add SnapDrift after the app is running:
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,10 +86,14 @@ The wrappers remain published in their own right, and are equivalent to the disp
 
 | Entry point | Equivalent to |
 |-------------|---------------|
-| `ranacseruet/snapdrift@v0.7.0` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.7.0` |
-| `ranacseruet/snapdrift@v0.7.0` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.7.0` |
+| `ranacseruet/snapdrift@v0.8.0` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.8.0` |
+| `ranacseruet/snapdrift@v0.8.0` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.8.0` |
 
 Use the wrappers directly when you want to skip the dispatcher's input indirection, and the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions when you need to orchestrate the stages yourself.
+
+### Pinning
+
+The dispatcher loads its wrapper from a pinned ref of this same repository. Released versions pin that ref to a commit SHA, so resolving `ranacseruet/snapdrift` to a SHA freezes the whole chain. If you are consuming an unreleased ref (`@main`, or a branch), the inner ref is a tag instead, and a SHA pin on the dispatcher does not freeze what it delegates to — pin the wrapper actions directly if that matters to you.
 
 ## Example workflow (Node app)
 
@@ -126,7 +130,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.7.0
+        uses: ranacseruet/snapdrift@v0.8.0
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -166,7 +170,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.7.0
+        uses: ranacseruet/snapdrift@v0.8.0
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -48,7 +48,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
@@ -58,7 +58,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.7.0
+  uses: ranacseruet/snapdrift@v0.8.0
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -70,7 +70,7 @@ jobs:
       # ────────────────────────────────────────────────────────────────────────
 
       - name: Publish SnapDrift baseline
-        uses: ranacseruet/snapdrift@v0.7.0
+        uses: ranacseruet/snapdrift@v0.8.0
         with:
           mode: baseline
           repo-config-path: .github/snapdrift.json
