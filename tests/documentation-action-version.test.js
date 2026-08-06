@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ACTION_REF_PATTERN = /uses:\s+ranacseruet\/snapdrift\/actions\/(?:baseline|pr-diff)@(\S+)/g;
+// Matches the root marketplace action and the wrapper actions, in `uses:` lines and in prose.
+const ACTION_REF_PATTERN = /ranacseruet\/snapdrift(?:\/actions\/[a-z-]+)?@(v[^\s`'"]+)/g;
 const DOCUMENTATION_FILES = [
   'README.md',
   'docs/integration-guide.md',
@@ -13,7 +14,7 @@ const DOCUMENTATION_FILES = [
 ];
 
 describe('documentation action versions', () => {
-  it('pins every public action example to the root package version', async () => {
+  it('pins every public action reference to the root package version', async () => {
     const [documentation, packageJson] = await Promise.all([
       Promise.all(DOCUMENTATION_FILES.map((file) => fs.readFile(path.join(REPO_ROOT, file), 'utf8'))),
       fs.readFile(path.join(REPO_ROOT, 'package.json'), 'utf8').then(JSON.parse),

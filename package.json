@@ -82,6 +82,7 @@
     "./lib/init-from-action.mjs": "./lib/init-from-action.mjs"
   },
   "files": [
+    "action.yml",
     "actions/",
     "bin/",
     "lib/",

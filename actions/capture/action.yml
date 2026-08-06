@@ -1,6 +1,10 @@
 name: SnapDrift Capture
 description: Capture configured SnapDrift routes and emit the standard results and manifest files.
 
+branding:
+  icon: camera
+  color: purple
+
 inputs:
   repo-config-path:
     description: Path to the SnapDrift config file.

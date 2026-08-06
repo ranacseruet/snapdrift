@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+### Features
+
+- **Root `action.yml` for the GitHub Marketplace** — SnapDrift's nine composite actions all live under `actions/*`, and Marketplace lists exactly one action per repository whose metadata file must sit at the repository root, so none of them were publishable. `ranacseruet/snapdrift@vX` is now a dispatcher action that runs the baseline pipeline with `mode: baseline` and the pull request pipeline with `mode: pr-diff`, forwarding every input and output of the corresponding wrapper. Existing `ranacseruet/snapdrift/actions/*@vX` references are unaffected and stay supported. The dispatcher pins absolute inner refs rather than `uses: ./actions/...`, because a relative `uses:` inside a composite action resolves against the caller's workspace; `tests/marketplace-metadata.test.js` fails the build if those pins drift from the package version.
+- **`branding` on every action** — required for the Marketplace listing, and applied to all nine sub-actions so the metadata stays consistent if any of them is ever split into its own repository. `npm run validate:actions` now rejects a missing icon or a color outside GitHub's allowed set, and covers the root action.
+
 ### Documentation
 
 - Updated the README, Integration Guide, and baseline workflow template action examples to use the current `v0.7.0` release.
+- Documented the root action as the primary entry point across the README quickstart, the Integration Guide, and the baseline workflow template, with a new "Choosing an entry point" section mapping each `mode` to its equivalent wrapper action. The documentation version contract test now covers root-action references and prose references, not just `uses:` lines for the two wrappers.
 
 ## 0.7.0 - 2026-07-26
 

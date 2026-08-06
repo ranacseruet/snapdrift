@@ -1,0 +1,168 @@
+name: SnapDrift
+description: Capture, compare, and report UI drift for Playwright-based apps — baseline publishing and pull request visual diffs in one action.
+author: CodeSamplez
+
+branding:
+  icon: eye
+  color: purple
+
+# GitHub Marketplace lists exactly one action per repository, and its metadata file must live at
+# the repository root. This dispatcher is that entry point: it forwards to the wrapper actions
+# under `actions/`, which remain directly usable (and unchanged) for custom orchestration.
+#
+# The inner `uses:` refs are pinned to the current release tag rather than a relative path because
+# `uses: ./path` inside a composite action resolves against the *caller's* workspace, not the
+# action's own directory. `tests/marketplace-metadata.test.js` fails the build if those pins drift
+# from the root `package.json` version.
+
+inputs:
+  mode:
+    description: Which SnapDrift pipeline to run — `pr-diff` for pull request drift detection, or `baseline` to publish a baseline.
+    required: false
+    default: pr-diff
+  repo-config-path:
+    description: Path to the SnapDrift config file.
+    required: false
+    default: .github/snapdrift.json
+  route-ids:
+    description: Optional comma-separated route ids. In `pr-diff` mode, providing these skips changed-file scope detection.
+    required: false
+    default: ''
+  artifact-retention-days:
+    description: Retention period for the uploaded artifact.
+    required: false
+    default: '30'
+  github-token:
+    description: Token used to inspect pull request files, fetch baselines, and publish SnapDrift PR reports. Used in `pr-diff` mode only.
+    required: false
+    default: ${{ github.token }}
+
+  # `baseline` mode only.
+  upload-artifact:
+    description: Whether to upload the staged baseline artifact. Used in `baseline` mode only.
+    required: false
+    default: 'true'
+
+  # `pr-diff` mode only.
+  pr-number:
+    description: Optional pull request number override.
+    required: false
+    default: ''
+  force-run:
+    description: Whether to force a full run when route ids are not explicitly provided.
+    required: false
+    default: 'false'
+  force-run-reason:
+    description: Reason to report when force-run is enabled.
+    required: false
+    default: forced
+  baseline-repository:
+    description: Repository in owner/name format that publishes the baseline.
+    required: false
+    default: ''
+  baseline-workflow-id:
+    description: Workflow id or filename to search for the baseline.
+    required: false
+    default: ci.yml
+  baseline-branch:
+    description: Branch that publishes the baseline.
+    required: false
+    default: main
+  comment-on-pr:
+    description: Whether to publish the SnapDrift PR report.
+    required: false
+    default: 'true'
+  max-changed-rows:
+    description: Maximum number of changed-route rows shown in the PR comment before truncation.
+    required: false
+    default: '20'
+  max-error-rows:
+    description: Maximum number of error rows shown in the PR comment before truncation.
+    required: false
+    default: '10'
+
+outputs:
+  # Shared across both modes.
+  artifact-name:
+    description: Name of the uploaded artifact.
+    value: ${{ steps.baseline.outputs.artifact-name || steps.pr-diff.outputs.artifact-name }}
+  bundle-dir:
+    description: Staged artifact bundle directory.
+    value: ${{ steps.baseline.outputs.bundle-dir || steps.pr-diff.outputs.bundle-dir }}
+  selected-route-ids:
+    description: Comma-separated route ids selected for the run.
+    value: ${{ steps.baseline.outputs.selected-route-ids || steps.pr-diff.outputs.selected-route-ids }}
+
+  # `baseline` mode only.
+  results-file:
+    description: Absolute path to the generated baseline results file.
+    value: ${{ steps.baseline.outputs.results-file }}
+  manifest-file:
+    description: Absolute path to the generated baseline manifest file.
+    value: ${{ steps.baseline.outputs.manifest-file }}
+  screenshots-root:
+    description: Absolute path to the generated screenshots root.
+    value: ${{ steps.baseline.outputs.screenshots-root }}
+
+  # `pr-diff` mode only.
+  should-run:
+    description: Whether the SnapDrift flow ran or intentionally skipped due to scope.
+    value: ${{ steps.pr-diff.outputs.should-run }}
+  scope-reason:
+    description: Reason for the final scope decision.
+    value: ${{ steps.pr-diff.outputs.scope-reason }}
+  baseline-found:
+    description: Whether a usable baseline was found.
+    value: ${{ steps.pr-diff.outputs.baseline-found }}
+  status:
+    description: Final SnapDrift status.
+    value: ${{ steps.pr-diff.outputs.status }}
+  summary-path:
+    description: Path to the final summary JSON file.
+    value: ${{ steps.pr-diff.outputs.summary-path }}
+  markdown-path:
+    description: Path to the final summary markdown file.
+    value: ${{ steps.pr-diff.outputs.markdown-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate mode
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        if [ "$MODE" != "pr-diff" ] && [ "$MODE" != "baseline" ]; then
+          echo "::error::Unsupported SnapDrift mode '$MODE'. Expected 'pr-diff' or 'baseline'."
+          exit 1
+        fi
+
+    - name: SnapDrift baseline
+      id: baseline
+      if: inputs.mode == 'baseline'
+      uses: ranacseruet/snapdrift/actions/baseline@v0.7.0
+      with:
+        repo-config-path: ${{ inputs.repo-config-path }}
+        route-ids: ${{ inputs.route-ids }}
+        artifact-retention-days: ${{ inputs.artifact-retention-days }}
+        upload-artifact: ${{ inputs.upload-artifact }}
+
+    - name: SnapDrift pull request diff
+      id: pr-diff
+      if: inputs.mode == 'pr-diff'
+      uses: ranacseruet/snapdrift/actions/pr-diff@v0.7.0
+      with:
+        github-token: ${{ inputs.github-token }}
+        repo-config-path: ${{ inputs.repo-config-path }}
+        pr-number: ${{ inputs.pr-number }}
+        route-ids: ${{ inputs.route-ids }}
+        force-run: ${{ inputs.force-run }}
+        force-run-reason: ${{ inputs.force-run-reason }}
+        baseline-repository: ${{ inputs.baseline-repository }}
+        baseline-workflow-id: ${{ inputs.baseline-workflow-id }}
+        baseline-branch: ${{ inputs.baseline-branch }}
+        artifact-retention-days: ${{ inputs.artifact-retention-days }}
+        comment-on-pr: ${{ inputs.comment-on-pr }}
+        max-changed-rows: ${{ inputs.max-changed-rows }}
+        max-error-rows: ${{ inputs.max-error-rows }}

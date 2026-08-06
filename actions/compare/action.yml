@@ -1,6 +1,10 @@
 name: SnapDrift Compare
 description: Compare the current capture against a baseline and emit the SnapDrift report files.
 
+branding:
+  icon: layers
+  color: purple
+
 inputs:
   repo-config-path:
     description: Path to the SnapDrift config file.

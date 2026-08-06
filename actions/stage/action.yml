@@ -1,6 +1,10 @@
 name: SnapDrift Stage
 description: Stage baseline or drift artifacts into the SnapDrift bundle structure before upload.
 
+branding:
+  icon: package
+  color: purple
+
 inputs:
   artifact-type:
     description: Either baseline or diff.
