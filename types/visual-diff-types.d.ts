@@ -1,3 +1,6 @@
+/** Object-shaped data decoded from an external JSON or YAML boundary. */
+export type JsonObject = Record<string, any>;
+
 export type VisualViewportPreset = 'desktop' | 'mobile';
 export interface VisualCustomViewport { width: number; height: number; }
 export type VisualViewport = VisualViewportPreset | VisualCustomViewport;
@@ -166,8 +169,8 @@ export interface MigrateToSnapResult {
 }
 
 export interface ExportedBaseline {
-  results: object;
-  manifest: object;
+  results: JsonObject;
+  manifest: JsonObject;
   screenshots: Array<{ filename: string; data: Buffer }>;
   engine: { name: string; version: string };
 }
