@@ -46,7 +46,7 @@ SnapDrift owns route selection, capture, comparison, skipped-report generation, 
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.8.0
+  uses: ranacseruet/snapdrift@v0.8.1
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
@@ -71,7 +71,7 @@ Then add SnapDrift after the app is running:
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.8.0
+  uses: ranacseruet/snapdrift@v0.8.1
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,8 +86,8 @@ The wrappers remain published in their own right, and are equivalent to the disp
 
 | Entry point | Equivalent to |
 |-------------|---------------|
-| `ranacseruet/snapdrift@v0.8.0` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.8.0` |
-| `ranacseruet/snapdrift@v0.8.0` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.8.0` |
+| `ranacseruet/snapdrift@v0.8.1` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.8.1` |
+| `ranacseruet/snapdrift@v0.8.1` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.8.1` |
 
 Use the wrappers directly when you want to skip the dispatcher's input indirection, and the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions when you need to orchestrate the stages yourself.
 
@@ -130,7 +130,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.8.0
+        uses: ranacseruet/snapdrift@v0.8.1
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -170,7 +170,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.8.0
+        uses: ranacseruet/snapdrift@v0.8.1
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
