@@ -1,5 +1,5 @@
 name: SnapDrift
-description: Capture, compare, and report UI drift for Playwright-based apps — baseline publishing and pull request visual diffs in one action.
+description: Visual regression for Playwright apps — capture routes, diff against a baseline, and report drift on pull requests.
 author: CodeSamplez
 
 branding:
@@ -15,10 +15,12 @@ branding:
 # action's own directory. `tests/marketplace-metadata.test.js` fails the build if those pins drift
 # from the root `package.json` version.
 #
-# The pins are commit SHAs carrying the version in a trailing comment, so that a consumer pinning
-# this action to a SHA gets an immutable chain rather than a mutable tag one level down. The SHA is
-# the commit that introduced the release's wrapper actions; the release commit cannot reference its
-# own SHA. The test accepts a plain `@vX.Y.Z` tag too, for unreleased refs.
+# The pins are commit SHAs, so that a consumer pinning this action to a SHA gets an immutable chain
+# rather than a mutable tag one level down. The SHA is the commit holding the wrapper content this
+# release ships — not the release tag itself, which a release commit cannot reference. It therefore
+# only moves when the wrappers change. The trailing comment records the release the pin was last
+# verified for, and the test requires it to match the package version, so every release has to look
+# at it. The test accepts a plain `@vX.Y.Z` tag too, for unreleased refs.
 
 inputs:
   mode:
@@ -146,7 +148,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.0
+      uses: ranacseruet/snapdrift/actions/baseline@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.1
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
@@ -156,7 +158,7 @@ runs:
     - name: SnapDrift pull request diff
       id: pr-diff
       if: inputs.mode == 'pr-diff'
-      uses: ranacseruet/snapdrift/actions/pr-diff@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.0
+      uses: ranacseruet/snapdrift/actions/pr-diff@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.1
       with:
         github-token: ${{ inputs.github-token }}
         repo-config-path: ${{ inputs.repo-config-path }}

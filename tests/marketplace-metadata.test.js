@@ -32,6 +32,8 @@ describe('GitHub Marketplace metadata', () => {
     expect(root.name).toBe('SnapDrift');
     expect(typeof root.description).toBe('string');
     expect(root.description.length).toBeGreaterThan(0);
+    // Marketplace rejects the listing at or above 125 characters.
+    expect(root.description.length).toBeLessThan(125);
     expect(root.runs.using).toBe('composite');
     expect(root.runs.steps.length).toBeGreaterThan(0);
   });

@@ -11,11 +11,16 @@ const actionsDir = path.join(repoRoot, 'actions');
 // https://docs.github.com/actions/creating-actions/metadata-syntax-for-github-actions#branding
 const BRANDING_COLORS = new Set(['white', 'yellow', 'blue', 'green', 'orange', 'red', 'purple', 'gray-dark']);
 
+// Marketplace rejects the listing if the description reaches this length. It applies only to the
+// published root action, so the sub-action descriptions are free to be as long as they need to be.
+const MARKETPLACE_DESCRIPTION_LIMIT = 125;
+
 /**
  * @param {string} actionPath
+ * @param {boolean} [isMarketplaceEntryPoint]
  * @returns {Promise<void>}
  */
-async function validateAction(actionPath) {
+async function validateAction(actionPath, isMarketplaceEntryPoint = false) {
   const raw = await fs.readFile(actionPath, 'utf8');
   const action = yaml.load(raw);
 
@@ -29,6 +34,11 @@ async function validateAction(actionPath) {
   }
   if (typeof metadata.description !== 'string' || metadata.description.length === 0) {
     throw new Error(`Action ${actionPath} is missing a description.`);
+  }
+  if (isMarketplaceEntryPoint && metadata.description.length >= MARKETPLACE_DESCRIPTION_LIMIT) {
+    throw new Error(
+      `Action ${actionPath} has a ${metadata.description.length}-character description; GitHub Marketplace requires fewer than ${MARKETPLACE_DESCRIPTION_LIMIT}.`,
+    );
   }
   if (typeof metadata.branding?.icon !== 'string' || metadata.branding.icon.length === 0) {
     throw new Error(`Action ${actionPath} is missing a branding icon.`);
@@ -47,14 +57,15 @@ async function validateAction(actionPath) {
 const entries = await fs.readdir(actionsDir, { withFileTypes: true });
 const actionDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
 
-// The root action.yml is the GitHub Marketplace entry point, so it is validated alongside the rest.
+// The root action.yml is the GitHub Marketplace entry point, so it is validated alongside the rest
+// and additionally held to the Marketplace listing rules.
 const actionPaths = [
   path.join(repoRoot, 'action.yml'),
   ...actionDirs.map((actionDir) => path.join(actionsDir, actionDir, 'action.yml')),
 ];
 
-for (const actionPath of actionPaths) {
-  await validateAction(actionPath);
+for (const [index, actionPath] of actionPaths.entries()) {
+  await validateAction(actionPath, index === 0);
 }
 
 console.log(`Validated ${actionPaths.length} SnapDrift action definitions.`);

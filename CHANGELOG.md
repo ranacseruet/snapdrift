@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 - 2026-08-06
+
+### Fixes
+
+- **The root action can actually be published to the Marketplace** — its description was 130 characters, and GitHub rejects the listing at 125 or more, so ticking "Publish this Action to the GitHub Marketplace" on the `v0.8.0` release failed validation. Shortened to 115 characters, leading with "visual regression" so the listing matches what people search for. `npm run validate:actions` and `tests/marketplace-metadata.test.js` now enforce the limit against the root action; the sub-action descriptions are unaffected, since the rule only applies to the published entry point.
+
 ## 0.8.0 - 2026-08-06
 
 ### Features
