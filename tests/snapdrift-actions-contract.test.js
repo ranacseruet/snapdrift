@@ -124,4 +124,97 @@ describe('SnapDrift action contracts', () => {
         expect(prDiffConfig.run).toContain('snap_local_capture=');
         expect(prDiffInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
     });
+
+    // Every outage path is implemented once, in lib/outage-policy.mjs, and
+    // exercised by tests/outage-policy.test.js. These assertions only guard the
+    // wiring: that the wrappers route through it and thread its results on to
+    // the steps that consume them. See ranacseruet/snapdrift#125.
+    describe('Snap outage handling', () => {
+        it('routes every wrapper phase through the shared outage policy', async () => {
+            const baseline = await readAction('actions/baseline/action.yml');
+            const prDiff = await readAction('actions/pr-diff/action.yml');
+
+            const baselineCapture = baseline.runs.steps.find((step) => step.id === 'capture');
+            const baselinePublish = baseline.runs.steps.find((step) => step.id === 'publish');
+            const prDiffCapture = prDiff.runs.steps.find((step) => step.id === 'capture');
+            const prDiffCompare = prDiff.runs.steps.find((step) => step.id === 'compare');
+
+            expect(baselineCapture.run).toContain('captureWithPolicy');
+            expect(baselinePublish.run).toContain('publishBaselineWithPolicy');
+            expect(prDiffCapture.run).toContain('captureWithPolicy');
+            expect(prDiffCompare.run).toContain('diffWithPolicy');
+        });
+
+        it('reports the effective provider so a local fallback is not diffed by Snap', async () => {
+            const baseline = await readAction('actions/baseline/action.yml');
+            const prDiff = await readAction('actions/pr-diff/action.yml');
+
+            const baselineCapture = baseline.runs.steps.find((step) => step.id === 'capture');
+            const prDiffCapture = prDiff.runs.steps.find((step) => step.id === 'capture');
+            const prDiffCompare = prDiff.runs.steps.find((step) => step.id === 'compare');
+
+            expect(baselineCapture.run).toContain('provider=${captured.providerName}');
+            expect(prDiffCapture.run).toContain('provider=${captured.providerName}');
+            expect(prDiffCompare.env.CAPTURE_PROVIDER).toBe('${{ steps.capture.outputs.provider }}');
+            expect(prDiffCompare.run).toContain('process.env.CAPTURE_PROVIDER');
+        });
+
+        it('writes a skipped summary for warn-and-skip rather than leaving the report empty', async () => {
+            const prDiff = await readAction('actions/pr-diff/action.yml');
+            const steps = prDiff.runs.steps;
+            const capture = steps.find((step) => step.id === 'capture');
+            const compare = steps.find((step) => step.id === 'compare');
+            const stage = steps.find((step) => step.id === 'stage');
+            const commentStep = steps.find(
+                (step) => step.with?.script && String(step.with.script).includes('SnapDrift did not produce a summary.')
+            );
+
+            expect(capture.run).toContain('writeDriftSummary');
+            expect(compare.run).toContain('writeDriftSummary');
+
+            // The skipped summary is only useful if the staging and reporting
+            // steps can actually find it.
+            expect(stage.env.SUMMARY_JSON_PATH).toContain('steps.capture.outputs.summary_path');
+            expect(commentStep.env.SUMMARY_PATH).toContain('steps.capture.outputs.summary_path');
+        });
+
+        it('threads a diff-time local recapture into the staged bundle', async () => {
+            const prDiff = await readAction('actions/pr-diff/action.yml');
+            const compare = prDiff.runs.steps.find((step) => step.id === 'compare');
+            const stage = prDiff.runs.steps.find((step) => step.id === 'stage');
+
+            expect(compare.env.LOCAL_SCREENSHOTS).toBe('${{ steps.capture.outputs.local_screenshots }}');
+            expect(compare.run).toContain('current_results_file=');
+            expect(stage.env.CURRENT_RESULTS_PATH).toContain('steps.compare.outputs.current_results_file');
+            expect(stage.env.CURRENT_MANIFEST_PATH).toContain('steps.compare.outputs.current_manifest_file');
+            expect(stage.env.CURRENT_SCREENSHOTS_ROOT).toContain('steps.compare.outputs.current_screenshots_root');
+        });
+
+        it('does not enforce diff.mode against a skipped summary', async () => {
+            const prDiff = await readAction('actions/pr-diff/action.yml');
+            const enforce = prDiff.runs.steps.find(
+                (step) => typeof step.run === 'string' && step.run.includes('shouldFailDriftCheck')
+            );
+            const skippedBaseline = prDiff.runs.steps.find((step) => step.id === 'skipped_baseline');
+
+            expect(enforce.if).toContain("steps.capture.outputs.provider != 'skipped'");
+            expect(enforce.if).toContain("steps.compare.outputs.skipped != 'true'");
+            // A skipped capture already wrote the summary; skipped_baseline must
+            // not overwrite it with a different reason.
+            expect(skippedBaseline.if).toContain("steps.capture.outputs.provider != 'skipped'");
+        });
+
+        it('stages and uploads a baseline captured by a publish-time local fallback', async () => {
+            const baseline = await readAction('actions/baseline/action.yml');
+            const stage = baseline.runs.steps.find((step) => step.id === 'stage');
+            const upload = baseline.runs.steps.find(
+                (step) => typeof step.uses === 'string' && step.uses.startsWith('actions/upload-artifact@')
+            );
+
+            expect(stage.if).toContain("steps.publish.outputs.provider == 'local'");
+            expect(upload.if).toContain("steps.publish.outputs.provider == 'local'");
+            expect(stage.env.RESULTS_PATH).toContain('steps.publish.outputs.results_file');
+            expect(baseline.outputs['results-file'].value).toContain('steps.publish.outputs.results_file');
+        });
+    });
 });

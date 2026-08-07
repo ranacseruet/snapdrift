@@ -230,6 +230,8 @@ By default SnapDrift writes baselines and reports to the runner filesystem (`pro
   - `"warn-and-skip"` — log a warning, write a skipped summary, and exit 0.
   - `"fallback-local"` — log a warning and run the rest of the pipeline with `LocalProvider`.
 
+Both behaviors apply at every phase of a run — capture, diff, and baseline publish. `fallback-local` switches the whole remainder of the pipeline to local artifacts and the local pixel engine; if Snap had already rendered the current capture server-side, the routes are recaptured on the runner first, so `actions/pr-diff` needs Playwright available (the wrapper installs it whenever `onUnavailable` is `fallback-local`). Nothing is published to Snap on a fallback run. See [Outage policy](contracts.md#outage-policy) for the full matrix.
+
 The Snap API client retries 5xx and network errors with exponential backoff (3 attempts, 1 s → 2 s → 4 s, capped at 30 s). 4xx errors never retry and never fall back.
 
 When `provider: "snap"` and `baseUrl` points to a local address (localhost, `127.0.0.0/8`, `::1`, or `0.0.0.0`), SnapDrift uses a **local-capture hybrid**: Playwright runs on the runner to render the page, then SnapDrift uploads the resulting screenshots to Snap. This makes it possible to point SnapDrift at a server that only the runner can reach (a typical case) without exposing the server to Snap's render worker.

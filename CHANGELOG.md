@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Snap outage handling is consistent across the CLI and both wrapper actions** — `warn-and-skip` and `fallback-local` were re-implemented independently in `lib/cli.mjs`, `actions/pr-diff` and `actions/baseline`, and the copies had drifted. `lib/outage-policy.mjs` now holds the single implementation (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`) that all three call, and the following are fixed as a result (#125):
+  - A `fallback-local` capture in `actions/pr-diff` captured locally but still emitted `provider=snap`, so the compare step rebuilt `SnapProvider` and handed it local results carrying no run id. The steps now receive the *effective* provider.
+  - A `fallback-local` diff swapped only the diff provider. A capture Snap had rendered server-side has a manifest but no PNGs on the runner, so the local pixel engine produced a dimension-only result rather than a comparison. The routes are now recaptured locally first, and the recaptured artifacts are what get staged and uploaded. When no baseline artifact was resolved, the run reports `missing_main_baseline_artifact` instead of crashing the local diff on a missing results file.
+  - `warn-and-skip` exited the wrapper without writing the documented skipped summary, so the PR comment fell through to its "Capture Failed" body. Capture-time and diff-time skips now write a skipped `summary.json`/`summary.md` with reason `snap_unavailable`, expose the summary outputs, stage the report, and exit 0. `diff.mode` is not enforced against a skipped summary.
+  - `actions/baseline` applied no policy at all to `publishBaseline()`. `warn-and-skip` now exits 0 without an artifact, and `fallback-local` captures locally and stages/uploads that bundle, so the run still leaves a usable baseline.
+  - `snapdrift diff` let a capture-time `SnapSkipError` reach the CLI entry point, which exits 1 — the opposite of what `warn-and-skip` is configured to do.
+
 ## 0.8.1 - 2026-08-06
 
 ### Fixes

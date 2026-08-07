@@ -352,6 +352,25 @@ The Snap HTTP client classifies responses and applies the following rules:
 - `"warn-and-skip"` — log a warning, throw `SnapSkipError`. The wrapper actions catch this and write a skipped summary, exiting 0.
 - `"fallback-local"` — log a warning, throw `SnapFallbackError`. The wrapper actions catch this and continue the pipeline with `LocalProvider`.
 
+### Outage policy
+
+Snap can go down at any phase of a run, and the configured `onUnavailable`
+behavior has to hold for all of them. `lib/outage-policy.mjs` is the single
+implementation, used by `lib/cli.mjs`, `actions/baseline` and `actions/pr-diff`
+alike:
+
+| Phase | `warn-and-skip` | `fallback-local` |
+|:------|:----------------|:-----------------|
+| Capture | Write a skipped `summary.json`/`summary.md` with reason `snap_unavailable`, expose the summary outputs, stage the report, exit 0. | Capture with `LocalProvider` and report the **effective** provider (`local`) so the rest of the pipeline uses local artifacts and the local pixel engine. |
+| Diff | Same skipped summary, exit 0. | Diff with `LocalProvider`. A capture that Snap rendered server-side has no PNGs on the runner, so the routes are **recaptured locally first**; the recaptured paths replace the Snap ones in the staged bundle. If no baseline artifact was resolved, the run reports `missing_main_baseline_artifact` instead of crashing the local diff. |
+| Baseline publish | Skip the publish and exit 0 without an artifact. | Capture locally and stage/upload that bundle, so the run still leaves a usable baseline. |
+
+Enforcement of `diff.mode` never runs against a skipped summary — a skipped run
+carries no diff counters, and `warn-and-skip` means "do not fail my build".
+
+A `fallback-local` capture leaves nothing on Snap: no run is published and no
+baseline is created. The fallback is a local run, not a deferred hosted one.
+
 ### `isLocalBaseUrl` detection
 
 `isLocalBaseUrl(baseUrl)` returns `true` when the URL hostname is:
@@ -374,7 +393,7 @@ All four error classes are exported from `lib/provider.mjs` and `lib/snap-provid
 | `SnapFallbackError` | `onUnavailable: "fallback-local"` is set and Snap could not be reached. | Catch and switch to `LocalProvider` for the rest of the pipeline. |
 | `SnapSkipError` | `onUnavailable: "warn-and-skip"` is set and Snap could not be reached. | Catch and exit cleanly with a skipped summary. |
 
-The wrapper actions (`actions/baseline`, `actions/pr-diff`) catch `SnapSkipError` and `SnapFallbackError` themselves. Custom orchestrations that call `provider.capture()` or `provider.diff()` directly should do the same.
+The wrapper actions (`actions/baseline`, `actions/pr-diff`) and the CLI both handle `SnapSkipError` and `SnapFallbackError` through `lib/outage-policy.mjs` (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`). Custom orchestrations that call `provider.capture()`, `provider.diff()` or `provider.publishBaseline()` directly should use those helpers rather than re-implementing the matrix.
 
 ## Primary entrypoints
 

@@ -42,6 +42,7 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `report.mjs` — Wires the default filesystem `imageReader` for HTML reports
    - `cli.mjs` — CLI entry point: `parseArgs` + command dispatch for `capture`, `baseline`, `diff`, `migrate-baselines`, `init`. `baseline` is the only CLI path that publishes a baseline to Snap (capture + `publishBaseline`)
    - `provider.mjs` — `createProvider(name, config)` factory + `LocalProvider` implementation; re-exports `SnapProvider` and the four Snap error classes from `snap-provider.mjs`
+   - `outage-policy.mjs` — single implementation of `snap.onUnavailable` (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`), used by `cli.mjs`, `actions/baseline` and `actions/pr-diff`. Returns the *effective* provider after a `fallback-local` switch and recaptures locally when a remote Snap capture has no PNGs to pixel-compare
    - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline` (requires a Snap run id; no legacy bundle path)/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`exportBaselines`, `checkBaselineExists`; `migrateBaselineFromLocal` removed in 0.7.0 — Snap rejects that body) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
    - `migrate-baselines.mjs` — `migrate-baselines` command handlers (`runMigrateToSnap`, `runMigrateToLocal`)
    - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to `snapdrift.json`
@@ -112,6 +113,8 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 | `tests/migrate-baselines.test.js` | Migration command parsing, `runMigrateToSnap` retirement, `runMigrateToLocal` engine validation |
 | `tests/cli-baseline-command.test.js` | `snapdrift baseline` — capture→publish ordering, local no-publish, warn-and-skip / fallback-local across both phases |
 | `tests/cli-capture-command.test.js` | `snapdrift capture` — onUnavailable warn-and-skip / fallback-local, non-availability errors still propagate |
+| `tests/cli-diff-command.test.js` | `snapdrift diff` — capture-time and diff-time `SnapSkipError` exit 0, fallback-local recaptures locally before diffing |
+| `tests/outage-policy.test.js` | `captureWithPolicy` / `diffWithPolicy` / `publishBaselineWithPolicy` — the full `onUnavailable` matrix the CLI and both wrapper actions share |
 | `tests/resolve-git-ref.test.js` | `resolveGitRef` — Actions env vars vs local git fallback for baseline attribution |
 | `tests/init-from-action.test.js` | Snap action YAML parsing, field translation, warning generation, idempotency |
 | `tests/cli.test.js` | CLI `parseArgs` + command dispatch |
