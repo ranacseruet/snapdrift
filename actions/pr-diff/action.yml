@@ -340,38 +340,54 @@ runs:
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
+        const policyModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/outage-policy.mjs');
+        const summaryModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/drift-summary.mjs');
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { captureWithPolicy, SNAP_UNAVAILABLE_REASON } = await import(pathToFileURL(policyModulePath));
+        const { writeDriftSummary } = await import(pathToFileURL(summaryModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-        const provider = createProvider(config.provider || 'local', config);
+        const providerName = config.provider || 'local';
+        const routeIds = splitCommaList(process.env.ROUTE_IDS);
 
-        let result;
-        try {
-          result = await provider.capture({
+        const captured = await captureWithPolicy({
+          provider: createProvider(providerName, config),
+          providerName,
+          config,
+          captureOptions: {
             configPath: process.env.REPO_CONFIG_PATH || undefined,
-            routeIds: splitCommaList(process.env.ROUTE_IDS)
+            routeIds
+          },
+          onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable — skipping visual regression (warn-and-skip).\n'),
+          onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable — falling back to local provider.\n')
+        });
+
+        if (captured.outcome === 'skipped') {
+          // warn-and-skip is documented as "write a skipped summary and exit 0".
+          // Without the summary the report step falls through to its
+          // "Capture Failed" body, which is not what happened. See #125.
+          const skipped = await writeDriftSummary({
+            reason: SNAP_UNAVAILABLE_REASON,
+            selectedRouteIds: routeIds
           });
-        } catch (err) {
-          if (err instanceof SnapSkipError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable — skipping visual regression (warn-and-skip).\n`);
-            await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
-            process.exit(0);
-          }
-          if (err instanceof SnapFallbackError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable — falling back to local provider.\n`);
-            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
-            result = await cp2('local', config).capture({
-              configPath: process.env.REPO_CONFIG_PATH || undefined,
-              routeIds: splitCommaList(process.env.ROUTE_IDS)
-            });
-          } else {
-            throw err;
-          }
+          const skipOutputs = [
+            `provider=skipped`,
+            `summary_path=${skipped.summaryPath}`,
+            `markdown_path=${skipped.markdownPath}`,
+            `status=${skipped.summary.status || ''}`
+          ].join('\n') + '\n';
+          await fs.appendFile(process.env.GITHUB_OUTPUT, skipOutputs);
+          process.exit(0);
         }
 
+        const result = captured.result;
         const outputs = [
-          `provider=${config.provider || 'local'}`,
+          // The *effective* provider, not the configured one: after a
+          // fallback-local capture the compare step must not rebuild
+          // SnapProvider around local results that carry no run id.
+          `provider=${captured.providerName}`,
+          `local_screenshots=${captured.localScreenshots ? 'true' : 'false'}`,
           `results_file=${result.resultsPath}`,
           `manifest_file=${result.manifestPath}`,
           `screenshots_root=${result.screenshotsRoot}`,
@@ -394,6 +410,10 @@ runs:
         BASELINE_SOURCE_SHA: ${{ steps.baseline.outputs.head_sha }}
         CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
         CURRENT_MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
+        CURRENT_SCREENSHOTS_ROOT: ${{ steps.capture.outputs.screenshots_root }}
+        CAPTURE_PROVIDER: ${{ steps.capture.outputs.provider }}
+        LOCAL_SCREENSHOTS: ${{ steps.capture.outputs.local_screenshots }}
+        BASELINE_FOUND: ${{ steps.baseline.outputs.found }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -402,45 +422,75 @@ runs:
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
+        const policyModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/outage-policy.mjs');
+        const summaryModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/drift-summary.mjs');
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { diffWithPolicy, MISSING_BASELINE_REASON, SNAP_UNAVAILABLE_REASON } = await import(pathToFileURL(policyModulePath));
+        const { writeDriftSummary } = await import(pathToFileURL(summaryModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-        const provider = createProvider(config.provider || 'local', config);
+        // The capture step reports the provider that actually ran, which is
+        // "local" once a fallback-local capture has happened.
+        const providerName = process.env.CAPTURE_PROVIDER || config.provider || 'local';
+        const routeIds = splitCommaList(process.env.ROUTE_IDS);
 
         const resolvedOutDir = path.resolve('qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
         const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
+
+        const captureOptions = {
+          configPath: process.env.REPO_CONFIG_PATH || undefined,
+          routeIds
+        };
 
         const diffOptions = {
           configPath: process.env.REPO_CONFIG_PATH || undefined,
           baselineResultsPath: process.env.BASELINE_RESULTS_PATH || undefined,
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
           baselineRunDir: process.env.BASELINE_RUN_DIR || undefined,
-          routeIds: splitCommaList(process.env.ROUTE_IDS),
+          routeIds,
           baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
           currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
-          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined
+          currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
+          currentRunDir: process.env.CURRENT_SCREENSHOTS_ROOT || undefined
         };
 
-        let diffResult;
-        try {
-          diffResult = await provider.diff(diffOptions);
-        } catch (err) {
-          if (err instanceof SnapSkipError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable during diff — skipping (warn-and-skip).\n`);
-            process.exit(0);
-          }
-          if (err instanceof SnapFallbackError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable during diff — falling back to local provider.\n`);
-            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
-            diffResult = await cp2('local', config).diff(diffOptions);
-          } else {
-            throw err;
-          }
+        const diffed = await diffWithPolicy({
+          provider: createProvider(providerName, config),
+          providerName,
+          diffOptions,
+          captureOptions,
+          localScreenshots: process.env.LOCAL_SCREENSHOTS !== 'false',
+          baselineAvailable: process.env.BASELINE_FOUND === 'true',
+          onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable during diff — skipping (warn-and-skip).\n'),
+          onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable during diff — falling back to local provider.\n'),
+          onRecapture: () => process.stderr.write('[SnapDrift] The current capture was rendered by Snap, so it has no local screenshots — recapturing locally before diffing.\n'),
+          onBaselineUnavailable: () => process.stderr.write('[SnapDrift] No baseline artifact is available, so the local diff cannot run.\n')
+        });
+
+        // Every non-throwing outcome writes a summary. A wrapper run that ends
+        // without one makes the report step claim "Capture Failed". See #125.
+        if (diffed.outcome !== 'diffed') {
+          const skipped = await writeDriftSummary({
+            reason: diffed.outcome === 'skipped' ? SNAP_UNAVAILABLE_REASON : MISSING_BASELINE_REASON,
+            baselineAvailable: diffed.outcome === 'skipped' ? undefined : false,
+            currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
+            selectedRouteIds: routeIds,
+            outDir: resolvedOutDir
+          });
+          const skipOutputs = [
+            `skipped=true`,
+            `summary_path=${skipped.summaryPath}`,
+            `markdown_path=${skipped.markdownPath}`,
+            `status=${skipped.summary.status || ''}`
+          ].join('\n') + '\n';
+          await fs.appendFile(process.env.GITHUB_OUTPUT, skipOutputs);
+          process.exit(0);
         }
-        const { summary, markdown } = diffResult;
+
+        const { summary, markdown } = diffed.result;
 
         await fs.mkdir(resolvedOutDir, { recursive: true });
         await Promise.all([
@@ -449,9 +499,16 @@ runs:
         ]);
 
         const outputs = [
+          `skipped=false`,
           `summary_path=${resolvedSummaryPath}`,
           `markdown_path=${resolvedMarkdownPath}`,
-          `status=${summary.status || ''}`
+          `status=${summary.status || ''}`,
+          // A fallback-local diff of a remote Snap capture recaptures on the
+          // runner; the staged bundle has to carry those PNGs, not the empty
+          // placeholder paths the Snap capture step emitted.
+          `current_results_file=${diffed.recapture?.resultsPath || ''}`,
+          `current_manifest_file=${diffed.recapture?.manifestPath || ''}`,
+          `current_screenshots_root=${diffed.recapture?.screenshotsRoot || ''}`
         ].join('\n') + '\n';
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
@@ -486,7 +543,7 @@ runs:
         EOF
 
     - id: skipped_baseline
-      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true' && steps.capture.outputs.provider != 'snap'
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true' && steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
       shell: bash
       env:
         MESSAGE: ${{ steps.baseline.outputs.message }}
@@ -521,14 +578,14 @@ runs:
     - id: stage
       shell: bash
       env:
-        SUMMARY_JSON_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
-        SUMMARY_MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
+        SUMMARY_JSON_PATH: ${{ steps.compare.outputs.summary_path || steps.capture.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
+        SUMMARY_MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.capture.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
         BASELINE_RESULTS_PATH: ${{ steps.baseline_paths.outputs.results_file }}
-        CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
+        CURRENT_RESULTS_PATH: ${{ steps.compare.outputs.current_results_file || steps.capture.outputs.results_file }}
         BASELINE_MANIFEST_PATH: ${{ steps.baseline_paths.outputs.manifest_file }}
-        CURRENT_MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
+        CURRENT_MANIFEST_PATH: ${{ steps.compare.outputs.current_manifest_file || steps.capture.outputs.manifest_file }}
         BASELINE_SCREENSHOTS_DIR: ${{ steps.baseline_paths.outputs.screenshots_dir }}
-        CURRENT_SCREENSHOTS_DIR: ${{ steps.capture.outputs.screenshots_root != '' && format('{0}/screenshots', steps.capture.outputs.screenshots_root) || '' }}
+        CURRENT_SCREENSHOTS_ROOT: ${{ steps.compare.outputs.current_screenshots_root || steps.capture.outputs.screenshots_root }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -537,6 +594,8 @@ runs:
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/stage-artifacts.mjs');
         const { stageArtifacts } = await import(pathToFileURL(modulePath));
+
+        const currentScreenshotsRoot = process.env.CURRENT_SCREENSHOTS_ROOT || '';
 
         const result = await stageArtifacts({
           artifactType: 'diff',
@@ -547,7 +606,7 @@ runs:
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
           baselineScreenshotsDir: process.env.BASELINE_SCREENSHOTS_DIR || undefined,
-          currentScreenshotsDir: process.env.CURRENT_SCREENSHOTS_DIR || undefined
+          currentScreenshotsDir: currentScreenshotsRoot ? path.join(currentScreenshotsRoot, 'screenshots') : undefined
         });
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
@@ -563,7 +622,7 @@ runs:
     - if: always()
       shell: bash
       env:
-        SUMMARY_FILE: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
+        SUMMARY_FILE: ${{ steps.compare.outputs.markdown_path || steps.capture.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path }}
       run: |
         if [ -f "$SUMMARY_FILE" ]; then
           cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
@@ -573,7 +632,7 @@ runs:
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
-        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
+        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.capture.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path }}
         ARTIFACT_NAME: ${{ steps.context.outputs.artifact_name }}
         RUN_URL: ${{ steps.context.outputs.run_url }}
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
@@ -674,7 +733,9 @@ runs:
             });
           }
 
-    - if: steps.scope.outputs.should_run == 'true' && steps.capture.outputs.provider != 'skipped' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
+    # A skipped compare writes a summary with no diff counters, so enforcement
+    # has nothing to evaluate — `warn-and-skip` means "do not fail my build".
+    - if: steps.scope.outputs.should_run == 'true' && steps.capture.outputs.provider != 'skipped' && steps.compare.outputs.skipped != 'true' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
       shell: bash
       run: |
         node --input-type=module <<'EOF'
@@ -700,9 +761,9 @@ runs:
         SCOPE_REASON: ${{ steps.scope.outputs.reason }}
         SELECTED_ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
         BASELINE_FOUND: ${{ steps.baseline.outputs.found || 'false' }}
-        STATUS: ${{ steps.compare.outputs.status || steps.skipped_baseline.outputs.status || steps.skipped_scope.outputs.status || '' }}
-        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path || '' }}
-        MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path || '' }}
+        STATUS: ${{ steps.compare.outputs.status || steps.capture.outputs.status || steps.skipped_baseline.outputs.status || steps.skipped_scope.outputs.status || '' }}
+        SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.capture.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path || '' }}
+        MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.capture.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path || '' }}
         BUNDLE_DIR: ${{ steps.stage.outputs.bundle_dir }}
       run: |
         {

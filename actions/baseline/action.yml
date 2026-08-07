@@ -32,16 +32,16 @@ outputs:
     value: ${{ steps.stage.outputs.bundle_dir }}
   results-file:
     description: Absolute path to the generated baseline results file.
-    value: ${{ steps.capture.outputs.results_file }}
+    value: ${{ steps.publish.outputs.results_file || steps.capture.outputs.results_file }}
   manifest-file:
     description: Absolute path to the generated baseline manifest file.
-    value: ${{ steps.capture.outputs.manifest_file }}
+    value: ${{ steps.publish.outputs.manifest_file || steps.capture.outputs.manifest_file }}
   screenshots-root:
     description: Absolute path to the generated screenshots root.
-    value: ${{ steps.capture.outputs.screenshots_root }}
+    value: ${{ steps.publish.outputs.screenshots_root || steps.capture.outputs.screenshots_root }}
   selected-route-ids:
     description: Comma-separated route ids captured in this run.
-    value: ${{ steps.capture.outputs.selected_route_ids }}
+    value: ${{ steps.publish.outputs.selected_route_ids || steps.capture.outputs.selected_route_ids }}
 
 runs:
   using: composite
@@ -103,49 +103,37 @@ runs:
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-        const { createProvider, SnapSkipError, SnapFallbackError } = await import(pathToFileURL(providerModulePath));
+        const policyModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/outage-policy.mjs');
+        const { createProvider } = await import(pathToFileURL(providerModulePath));
         const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { captureWithPolicy } = await import(pathToFileURL(policyModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-        const provider = createProvider(config.provider || 'local', config);
+        const providerName = config.provider || 'local';
 
-        let result;
-        try {
-          result = await provider.capture({
+        const captured = await captureWithPolicy({
+          provider: createProvider(providerName, config),
+          providerName,
+          config,
+          captureOptions: {
             configPath: process.env.REPO_CONFIG_PATH || undefined,
             routeIds: splitCommaList(process.env.ROUTE_IDS),
             purpose: 'baseline'
-          });
-        } catch (err) {
-          if (err instanceof SnapSkipError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable — skipping baseline capture (warn-and-skip).\n`);
-            await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
-            process.exit(0);
-          }
-          if (err instanceof SnapFallbackError) {
-            process.stderr.write(`[SnapDrift] Snap unavailable — falling back to local provider.\n`);
-            const { createProvider: cp2 } = await import(pathToFileURL(providerModulePath));
-            result = await cp2('local', config).capture({
-              configPath: process.env.REPO_CONFIG_PATH || undefined,
-              routeIds: splitCommaList(process.env.ROUTE_IDS)
-            });
-            // Report as local so publish is skipped and stage/upload run instead
-            const outputs = [
-              `provider=local`,
-              `results_file=${result.resultsPath}`,
-              `manifest_file=${result.manifestPath}`,
-              `screenshots_root=${result.screenshotsRoot}`,
-              `selected_route_ids=${result.selectedRouteIds.join(',')}`
-            ].join('\n') + '\n';
-            await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
-            process.exit(0);
-          } else {
-            throw err;
-          }
+          },
+          onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable — skipping baseline capture (warn-and-skip).\n'),
+          onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable — falling back to local provider.\n')
+        });
+
+        if (captured.outcome === 'skipped') {
+          await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
+          process.exit(0);
         }
 
+        const result = captured.result;
         const outputs = [
-          `provider=${config.provider || 'local'}`,
+          // The effective provider: reporting "local" after a fallback-local
+          // capture is what makes publish skip and stage/upload run instead.
+          `provider=${captured.providerName}`,
           `results_file=${result.resultsPath}`,
           `manifest_file=${result.manifestPath}`,
           `screenshots_root=${result.screenshotsRoot}`,
@@ -160,34 +148,67 @@ runs:
       shell: bash
       env:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
+        ROUTE_IDS: ${{ inputs.route-ids }}
         RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
       run: |
         node --input-type=module <<'EOF'
+        import fs from 'node:fs/promises';
         import path from 'node:path';
         import { pathToFileURL } from 'node:url';
 
         const providerModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/provider.mjs');
         const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
+        const policyModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/outage-policy.mjs');
         const { createProvider } = await import(pathToFileURL(providerModulePath));
-        const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+        const { loadSnapdriftConfig, splitCommaList } = await import(pathToFileURL(configModulePath));
+        const { publishBaselineWithPolicy } = await import(pathToFileURL(policyModulePath));
 
         const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-        const provider = createProvider('snap', config);
 
-        await provider.publishBaseline({
-          resultsPath: process.env.RESULTS_PATH || undefined
+        // Snap can go down after the capture submission succeeds — while polling
+        // the render or posting the baseline. onUnavailable has to cover that
+        // window too, or warn-and-skip still fails the build and fallback-local
+        // still leaves the repo with no baseline artifact. See #125.
+        const published = await publishBaselineWithPolicy({
+          provider: createProvider('snap', config),
+          publishOptions: { resultsPath: process.env.RESULTS_PATH || undefined },
+          captureOptions: {
+            configPath: process.env.REPO_CONFIG_PATH || undefined,
+            routeIds: splitCommaList(process.env.ROUTE_IDS),
+            purpose: 'baseline'
+          },
+          onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable — skipping baseline publish (warn-and-skip).\n'),
+          onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable during publish — capturing locally so the run still produces a baseline artifact.\n')
         });
+
+        if (published.outcome === 'skipped') {
+          await fs.appendFile(process.env.GITHUB_OUTPUT, `provider=skipped\n`);
+          process.exit(0);
+        }
+
+        if (published.outcome === 'fell-back') {
+          const recapture = published.recapture;
+          const outputs = [
+            `provider=local`,
+            `results_file=${recapture.resultsPath}`,
+            `manifest_file=${recapture.manifestPath}`,
+            `screenshots_root=${recapture.screenshotsRoot}`,
+            `selected_route_ids=${recapture.selectedRouteIds.join(',')}`
+          ].join('\n') + '\n';
+          await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
+          process.exit(0);
+        }
 
         process.stdout.write('[SnapDrift] Snap baseline published successfully.\n');
         EOF
 
     - id: stage
-      if: steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
+      if: (steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped') || steps.publish.outputs.provider == 'local'
       shell: bash
       env:
-        RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
-        MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
-        SCREENSHOTS_DIR: ${{ steps.capture.outputs.screenshots_root }}/screenshots
+        RESULTS_PATH: ${{ steps.publish.outputs.results_file || steps.capture.outputs.results_file }}
+        MANIFEST_PATH: ${{ steps.publish.outputs.manifest_file || steps.capture.outputs.manifest_file }}
+        SCREENSHOTS_DIR: ${{ steps.publish.outputs.screenshots_root || steps.capture.outputs.screenshots_root }}/screenshots
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -207,7 +228,7 @@ runs:
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);
         EOF
 
-    - if: inputs.upload-artifact == 'true' && steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
+    - if: inputs.upload-artifact == 'true' && ((steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped') || steps.publish.outputs.provider == 'local')
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ steps.config.outputs.artifact_name }}

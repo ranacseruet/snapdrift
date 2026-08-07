@@ -15,6 +15,13 @@ export function describeReason(reason) {
     };
   }
 
+  if (reason === 'snap_unavailable') {
+    return {
+      message: 'Snap could not be reached, so the visual regression run was skipped.',
+      markdownReason: 'Snap was unavailable and `snap.onUnavailable` is set to `warn-and-skip`'
+    };
+  }
+
   if (reason === 'no_snapdrift_relevant_changes') {
     return {
       message: 'No drift-relevant changes were detected in this pull request.',

@@ -486,6 +486,32 @@ describe('lib module exports are stable', () => {
         expect(Array.isArray(mod.PR_COMMENT_MARKERS)).toBe(true);
         expect(mod.PR_COMMENT_MARKERS).toEqual([mod.PR_COMMENT_MARKER]);
     });
+
+    it('outage policy module exports all expected symbols', async () => {
+        const mod = await import('../lib/outage-policy.mjs');
+        expect(typeof mod.captureWithPolicy).toBe('function');
+        expect(typeof mod.diffWithPolicy).toBe('function');
+        expect(typeof mod.publishBaselineWithPolicy).toBe('function');
+        expect(typeof mod.hasLocalScreenshots).toBe('function');
+        expect(typeof mod.SNAP_UNAVAILABLE_REASON).toBe('string');
+        expect(typeof mod.MISSING_BASELINE_REASON).toBe('string');
+    });
+
+    // The exports map is the only thing that makes a lib module importable by an
+    // npm consumer — a missing subpath fails with ERR_PACKAGE_PATH_NOT_EXPORTED
+    // no matter that the file ships in `files`. Adding a module without its
+    // entry is an easy omission, so assert the two stay in step.
+    it('publishes every lib module through the package exports map', async () => {
+        const [packageJson, libFiles] = await Promise.all([
+            fs.readFile(path.join(ACTION_ROOT, 'package.json'), 'utf8').then(JSON.parse),
+            fs.readdir(path.join(ACTION_ROOT, 'lib'))
+        ]);
+
+        const expected = libFiles.filter((file) => file.endsWith('.mjs')).map((file) => `./lib/${file}`).sort();
+        const exported = Object.keys(packageJson.exports).filter((key) => key.startsWith('./lib/')).sort();
+
+        expect(exported).toEqual(expected);
+    });
 });
 
 // ---------------------------------------------------------------------------
