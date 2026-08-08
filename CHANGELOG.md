@@ -10,6 +10,7 @@
   - `warn-and-skip` exited the wrapper without writing the documented skipped summary, so the PR comment fell through to its "Capture Failed" body. Capture-time and diff-time skips now write a skipped `summary.json`/`summary.md` with reason `snap_unavailable`, expose the summary outputs, stage the report, and exit 0. `diff.mode` is not enforced against a skipped summary.
   - `actions/baseline` applied no policy at all to `publishBaseline()`. `warn-and-skip` now exits 0 without an artifact, and `fallback-local` captures locally and stages/uploads that bundle, so the run still leaves a usable baseline.
   - `snapdrift diff` let a capture-time `SnapSkipError` reach the CLI entry point, which exits 1 — the opposite of what `warn-and-skip` is configured to do.
+- **`shouldFailDriftCheck` no longer throws on a skipped summary** — it assumed every summary carried the full diff shape, so the final branch dereferenced `summaryData.errors.length` on `undefined` for the `{ status, reason, message, selectedRoutes }` shape a skipped run writes. `actions/enforce` defaults `summary-path` to exactly where those summaries land, so anyone orchestrating with the low-level actions rather than `actions/pr-diff` got a raw `TypeError` instead of a clean pass whenever a run was skipped for scope, a missing baseline, or a Snap outage. A summary with `status: "skipped"` or no `diff.mode` now returns `false` before any mode branch, and both `shouldFailDriftCheck` and `determineDriftStatus` default their array and counter reads (#132).
 
 ## 0.8.1 - 2026-08-06
 

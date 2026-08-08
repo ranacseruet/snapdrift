@@ -210,6 +210,12 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 | `fail-on-incomplete` | Errors, dimension shifts, or missing captures occur |
 | `strict` | Any drift or incomplete comparison appears |
 
+A summary with `status: "skipped"` — or any summary carrying no `diff.mode` —
+never stops the run, whichever mode is configured. A skipped run has no diff
+counters to enforce against, so `shouldFailDriftCheck` returns `false` for it
+before any mode branch is reached. This holds for `actions/enforce` invoked
+directly, not just for the guarded enforcement step inside `actions/pr-diff`.
+
 ## Viewport presets
 
 | Preset | Width | Height | Scale factor | Mobile | Touch |

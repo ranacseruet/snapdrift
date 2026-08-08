@@ -429,6 +429,22 @@ describe('enforcement modes cover the full contract', () => {
             expect(() => shouldFailDriftCheck({ ...clean, diffMode: mode })).not.toThrow();
         });
     }
+
+    // actions/enforce reads whatever summary.json holds, and a skipped run
+    // writes one there too. See ranacseruet/snapdrift#132.
+    it('passes the summary a skipped run actually writes', async () => {
+        const { buildDriftSummary } = await import('../lib/drift-summary.mjs');
+
+        for (const reason of [
+            'no_snapdrift_relevant_changes',
+            'missing_main_baseline_artifact',
+            'snap_unavailable'
+        ]) {
+            const { summary } = buildDriftSummary({ reason, selectedRouteIds: [] });
+            const roundTripped = JSON.parse(JSON.stringify(summary));
+            expect(shouldFailDriftCheck(roundTripped)).toBe(false);
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -84,3 +84,42 @@ describe('@snapdrift/manifest — shouldFailDriftCheck', () => {
     expect(shouldFailDriftCheck(makeSummary({ diffMode: 'strict' }))).toBe(false);
   });
 });
+
+// A skipped run writes a summary with none of the diff counters — see
+// buildDriftSummary in @snapdrift/adapter-report-md. Enforcing against one used
+// to throw a TypeError rather than pass. See ranacseruet/snapdrift#132.
+describe('@snapdrift/manifest — skipped summaries', () => {
+  /**
+   * The exact shape buildDriftSummary emits, kept literal so this test fails if
+   * the enforcement path ever regresses to assuming the full diff shape.
+   */
+  function makeSkippedSummary(reason) {
+    return {
+      status: 'skipped',
+      reason,
+      message: 'skipped',
+      selectedRoutes: []
+    };
+  }
+
+  for (const reason of ['no_snapdrift_relevant_changes', 'missing_main_baseline_artifact', 'snap_unavailable']) {
+    test(`shouldFailDriftCheck passes a run skipped for ${reason}`, () => {
+      expect(shouldFailDriftCheck(makeSkippedSummary(reason))).toBe(false);
+    });
+  }
+
+  test('shouldFailDriftCheck passes a summary with no diffMode', () => {
+    expect(shouldFailDriftCheck({})).toBe(false);
+    expect(shouldFailDriftCheck({ changedScreenshots: 3 })).toBe(false);
+  });
+
+  test('shouldFailDriftCheck still enforces when a diffMode is present', () => {
+    expect(shouldFailDriftCheck({ status: 'changes-detected', diffMode: 'fail-on-changes', changedScreenshots: 1 })).toBe(true);
+    expect(shouldFailDriftCheck({ status: 'incomplete', diffMode: 'strict', missingInBaseline: 1 })).toBe(true);
+  });
+
+  test('determineDriftStatus does not throw on a partial summary', () => {
+    expect(determineDriftStatus(makeSkippedSummary('snap_unavailable'))).toBe('clean');
+    expect(determineDriftStatus({ missingInCurrent: 1 })).toBe('incomplete');
+  });
+});

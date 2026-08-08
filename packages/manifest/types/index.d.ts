@@ -195,8 +195,11 @@ export interface VisualDiffSummary {
 
 // --- Drift status classification ---
 
-export function determineDriftStatus(summaryData: VisualDiffSummary): 'clean' | 'changes-detected' | 'incomplete';
-export function shouldFailDriftCheck(summaryData: VisualDiffSummary): boolean;
+// Both accept a partial summary: a skipped run's summary.json carries only
+// `status`, `reason`, `message` and `selectedRoutes`, and `actions/enforce`
+// reads whatever summary.json holds without narrowing it first.
+export function determineDriftStatus(summaryData: Partial<VisualDiffSummary>): 'clean' | 'changes-detected' | 'incomplete';
+export function shouldFailDriftCheck(summaryData: Partial<VisualDiffSummary>): boolean;
 
 // --- Provider abstraction ---
 
