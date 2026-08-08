@@ -1,6 +1,7 @@
 // @ts-check
 
 /** @typedef {import('../types/index.d.ts').VisualDiffSummary} DriftSummary */
+/** @typedef {import('../types/index.d.ts').VisualDriftSkippedSummary} DriftSkippedSummary */
 
 /**
  * True when the summary reports something that leaves the run incomplete —
@@ -37,10 +38,12 @@ export function determineDriftStatus(summaryData) {
  * baselines, and Snap outages — carries only `status`, `reason`, `message` and
  * `selectedRoutes`. There is no diff to enforce against, so it never fails.
  *
- * @param {Partial<DriftSummary>} summaryData
+ * @param {Partial<DriftSummary> | DriftSkippedSummary} summaryData
  * @returns {boolean}
  */
 export function shouldFailDriftCheck(summaryData) {
+  // Narrowing on `status` takes the skipped shape out of the union, so the
+  // counter reads below only ever see a (partial) diff summary.
   if (summaryData.status === 'skipped' || !summaryData.diffMode) {
     return false;
   }

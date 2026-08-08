@@ -193,13 +193,29 @@ export interface VisualDiffSummary {
   dashboardUrl?: string;
 }
 
+/**
+ * What a skipped run writes to `summary.json` — no diff was performed, so none
+ * of the diff counters exist. Emitted by `buildDriftSummary` for scope skips,
+ * missing baselines, and Snap outages. See docs/contracts.md § Skipped summary.
+ */
+export interface VisualDriftSkippedSummary {
+  status: 'skipped';
+  reason: string;
+  message?: string;
+  selectedRoutes?: string[];
+  /** Set only for the missing-baseline reason. */
+  baselineAvailable?: boolean;
+  /** Set only for the missing-baseline reason. */
+  currentResultsPath?: string;
+}
+
 // --- Drift status classification ---
 
-// Both accept a partial summary: a skipped run's summary.json carries only
-// `status`, `reason`, `message` and `selectedRoutes`, and `actions/enforce`
-// reads whatever summary.json holds without narrowing it first.
+// Both take a partial summary because `actions/enforce` reads whatever
+// `summary.json` holds without narrowing it first, and shouldFailDriftCheck
+// additionally accepts the skipped shape, which it always passes.
 export function determineDriftStatus(summaryData: Partial<VisualDiffSummary>): 'clean' | 'changes-detected' | 'incomplete';
-export function shouldFailDriftCheck(summaryData: Partial<VisualDiffSummary>): boolean;
+export function shouldFailDriftCheck(summaryData: Partial<VisualDiffSummary> | VisualDriftSkippedSummary): boolean;
 
 // --- Provider abstraction ---
 

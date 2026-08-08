@@ -118,8 +118,11 @@ describe('@snapdrift/manifest — skipped summaries', () => {
     expect(shouldFailDriftCheck({ status: 'incomplete', diffMode: 'strict', missingInBaseline: 1 })).toBe(true);
   });
 
+  // determineDriftStatus is never handed a skipped summary — it is what
+  // produces the status in the first place — but it shares the counter reads,
+  // so it gets the same defaults.
   test('determineDriftStatus does not throw on a partial summary', () => {
-    expect(determineDriftStatus(makeSkippedSummary('snap_unavailable'))).toBe('clean');
+    expect(determineDriftStatus({})).toBe('clean');
     expect(determineDriftStatus({ missingInCurrent: 1 })).toBe('incomplete');
   });
 });
