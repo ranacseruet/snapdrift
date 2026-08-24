@@ -31,11 +31,11 @@ snapdrift baseline [options]
 ```
 
 - **`provider: "local"`** — identical to `snapdrift capture`: the screenshots written to the baseline directory *are* the baseline.
-- **`provider: "snap"`** — captures each route through Snap, waits for the hosted renders to finish, then publishes a baseline referencing the stored objects. `snapdrift capture` alone does **not** do this: it submits the run and stops, leaving the project with no baseline.
+- **`provider: "snap"`** — canonical baseline publication is CI-only. Run the baseline action from GitHub Actions on the Snap project's default branch; it captures every configured route, waits for the complete hosted run, then publishes a baseline referencing the stored objects. A local `snapdrift baseline` fails before creating a hosted run, and partial `--routes` selection is rejected as well. `snapdrift capture` may still be used locally for non-publishing diagnostics.
 
 `snap.onUnavailable` is honoured across both phases — the capture *and* the publish that follows it. `warn-and-skip` exits 0 without a baseline; `fallback-local` captures locally so you still end up with one.
 
-**Baseline attribution.** The published baseline records the branch and commit it was cut from. Inside GitHub Actions these come from `GITHUB_REF_NAME` / `GITHUB_HEAD_REF` and `GITHUB_SHA`; run locally, they are read from git (`rev-parse --abbrev-ref HEAD` and `rev-parse HEAD`). Outside a git repository they fall back to `main` and `unknown`, so run the command from your checkout if you want the baseline attributed correctly.
+**Baseline attribution.** A hosted publication records the exact `GITHUB_REF_NAME` and 40-character `GITHUB_SHA` supplied by GitHub Actions. SnapDrift refuses to infer these values from a developer checkout, preventing a local command from being presented as a canonical default-branch publication.
 
 **`snap.projectId` must be an explicit `prj_...` id** for local runs. `"auto"` derives the id from `GITHUB_REPOSITORY`, which is not set outside Actions — the command fails early telling you to set an explicit id.
 
@@ -44,13 +44,14 @@ snapdrift baseline [options]
 | Flag | Default | Description |
 |:-----|:--------|:------------|
 | `--config <path>` | `.github/snapdrift.json` | Path to the config file |
-| `--routes <ids>` | all routes | Comma-separated route IDs to capture |
+| `--routes <ids>` | all routes | Comma-separated route IDs for a local-provider baseline; hosted baselines require all configured routes |
 | `--baseline-dir <path>` | `.snapdrift/baseline` | Directory to write baseline screenshots and metadata (local provider) |
 
 **Example**
 
 ```bash
 snapdrift baseline
+# Scoped baseline capture remains available with provider: "local"
 snapdrift baseline --routes home-desktop,home-mobile
 ```
 
@@ -296,7 +297,7 @@ The `report.html` path is printed whenever the status is anything other than `cl
 |:---------|:-----------|:------------|
 | `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture`, `diff` | Max concurrent route captures per viewport context (positive integer, default `5`). Set to `1` to restore serial behavior for apps with shared session or auth state. |
 | `SNAPDRIFT_CONFIG_PATH` | `capture`, `diff`, `migrate-baselines` | Override the config file path. Equivalent to `--config`. |
-| `SNAPDRIFT_ROUTE_IDS` | `capture`, `diff` | Comma-separated route ids to scope to. Equivalent to `--routes`. |
+| `SNAPDRIFT_ROUTE_IDS` | `capture`, `baseline`, `diff` | Comma-separated route ids to scope to. Equivalent to `--routes`; it may not reduce a hosted baseline's complete route set. |
 
 `SNAPDRIFT_CAPTURE_CONCURRENCY` is the same env var consumed by the GitHub Actions wrapper; tweak it the same way for both environments.
 
@@ -304,7 +305,7 @@ The `report.html` path is printed whenever the status is anything other than `cl
 
 ## Tips
 
-- **Partial runs**: use `--routes` to capture or compare only the routes you are actively changing.
+- **Partial runs**: use `--routes` to capture or compare only the routes you are actively changing. A hosted baseline is the exception: its GitHub Actions run always requires the complete configured route set.
 - **Multiple baselines**: use `--baseline-dir` to maintain separate baselines per branch or feature.
 - **CI parity**: the CLI uses the same capture and comparison engine as the GitHub Actions workflow, so results are comparable.
 - **Self-contained HTML report**: `report.html` embeds baseline, current, and diff images as base64. Open it from any machine — no server required, and no relative-path resolution surprises. (The HTML report is a local-CLI feature; the GitHub Actions wrapper ships only `summary.json` + `summary.md` in its artifact bundle.)

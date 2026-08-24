@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.8.2 - 2026-08-24
 
 ### Fixes
 
+- **Hosted baseline publication is now complete and fail-closed** — a scoped `route-ids` / `--routes` baseline run could publish only the changed routes and replace a larger accepted baseline, causing every omitted route to appear missing on the next PR (i2Dev-com/snap#720). `provider: "snap"` baseline capture now requires every configured route (local baselines, non-publishing captures, and hosted PR diffs remain scopeable), records the exact configured/selected route and viewport set plus one resolved branch/commit and canonical workflow identity/run number, and publishes only when the source run contains a successful stored capture for every expected identity. Complete requests send `publicationMode: "complete"` and `sourceRunId`, reuse the run's `branch` / `prHeadSha` as publication `refBranch` / `refSha`, and derive the baseline id deterministically from the run id so retries are stable. Missing, failed, duplicate, unexpected, or stale captures abort without publishing.
 - **Snap outage handling is consistent across the CLI and both wrapper actions** — `warn-and-skip` and `fallback-local` were re-implemented independently in `lib/cli.mjs`, `actions/pr-diff` and `actions/baseline`, and the copies had drifted. `lib/outage-policy.mjs` now holds the single implementation (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`) that all three call, and the following are fixed as a result (#125):
   - A `fallback-local` capture in `actions/pr-diff` captured locally but still emitted `provider=snap`, so the compare step rebuilt `SnapProvider` and handed it local results carrying no run id. The steps now receive the *effective* provider.
   - A `fallback-local` diff swapped only the diff provider. A capture Snap had rendered server-side has a manifest but no PNGs on the runner, so the local pixel engine produced a dimension-only result rather than a comparison. The routes are now recaptured locally first, and the recaptured artifacts are what get staged and uploaded. When no baseline artifact was resolved, the run reports `missing_main_baseline_artifact` instead of crashing the local diff on a missing results file.

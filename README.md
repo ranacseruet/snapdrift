@@ -48,17 +48,19 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.8.1
+  uses: ranacseruet/snapdrift@v0.8.2
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
 ```
 
+With `provider: "snap"`, baseline publication is a complete, fail-closed snapshot: it must run from the project's default branch and capture every configured route. Snap records the canonical workflow identity plus its GitHub run number so the API can reject stale overlapping publishers. Route scoping remains available for pull request diffs, non-publishing `snapdrift capture`, and local-provider baselines.
+
 **3. Run SnapDrift on pull requests:**
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.8.1
+  uses: ranacseruet/snapdrift@v0.8.2
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -71,10 +73,10 @@ The root action dispatches on `mode`. The same pipelines are also published as s
 
 ## Local CLI
 
-SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app — no GitHub Actions required. Use it during development to validate UI changes before pushing.
+SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app. Use it during development to validate UI changes before pushing. Canonical hosted baseline publication is the exception: `provider: "snap"` baselines are accepted only from GitHub Actions on the project default branch.
 
 ```bash
-# Establish a baseline — for provider "snap" this also publishes it
+# Establish a local-provider baseline
 snapdrift baseline
 
 # Capture screenshots without publishing anything
@@ -111,6 +113,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 - One global `diff.threshold`
 - Dimension shifts are reported separately from pixel drift
 - Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
+- Hosted Snap baselines publish only from the default branch and always include the complete configured route set
 
 ## Outgrew GitHub artifacts?
 

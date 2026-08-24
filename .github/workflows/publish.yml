@@ -39,6 +39,9 @@ jobs:
       - name: Validate action YML files
         run: npm run validate:actions
 
+      - name: Validate immutable release pins
+        run: npm run validate:release
+
       - name: Validate package shape
         run: npm run pack:check
 

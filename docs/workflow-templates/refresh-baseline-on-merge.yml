@@ -17,12 +17,6 @@
 # resolver in actions/pr-diff (which filters on event: 'push'). A merge into
 # the default branch produces a push event, so this fires exactly when needed.
 #
-# Optional — refresh only on a specific label:
-#   If you don't want to refresh on every push, you can gate on a label applied
-#   before merging. Use the pull_request: labeled event in a separate workflow to
-#   set an output, or simply restrict this workflow to specific paths.
-#   See the commented block below for a label-based gate using a preceding job.
-
 name: SnapDrift Refresh Baseline
 
 on:
@@ -35,12 +29,12 @@ permissions:
 
 jobs:
   refresh-baseline:
-    # Optional: gate on a label to avoid refreshing on every push.
-    # Requires a preceding job that checks for the label on the most recent
-    # merged PR and sets an output. Replace "snapdrift:refresh-baseline" with
-    # your label name.
-    # if: needs.check-label.outputs.refresh == 'true'
-
+    # Preserve the in-flight publisher and queue the next merge behind it. This
+    # keeps older SnapDrift clients safe during a rolling release; SnapDrift's
+    # workflow-scoped sequence is an additional stale-source guard.
+    concurrency:
+      group: snapdrift-baseline-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
@@ -69,8 +63,26 @@ jobs:
       #     done
       # ────────────────────────────────────────────────────────────────────────
 
+      - name: Verify current default-branch candidate
+        id: baseline_candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_sha="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [ -z "$latest_sha" ]; then
+            echo "::error::Could not resolve the current default-branch commit."
+            exit 1
+          fi
+          if [ "$GITHUB_SHA" = "$latest_sha" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale baseline candidate $GITHUB_SHA; current branch head is $latest_sha."
+          fi
+
       - name: Publish SnapDrift baseline
-        uses: ranacseruet/snapdrift@v0.8.1
+        if: steps.baseline_candidate.outputs.current == 'true'
+        uses: ranacseruet/snapdrift@v0.8.2
         with:
           mode: baseline
           repo-config-path: .github/snapdrift.json

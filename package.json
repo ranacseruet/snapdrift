@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
@@ -26,6 +26,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --project tsconfig.json",
     "validate:actions": "node scripts/validate-actions.mjs",
+    "validate:release": "node scripts/validate-release.mjs",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage --runInBand",
     "pack:check": "npm pack --dry-run --cache .npm-cache",

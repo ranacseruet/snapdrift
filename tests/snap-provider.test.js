@@ -1,5 +1,6 @@
 /** @jest-environment node */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +33,81 @@ function errorResponse(status, errorBody) {
     text: async () => JSON.stringify(errorBody),
     json: async () => errorBody
   };
+}
+
+const DESKTOP_DESCRIPTOR_JSON = JSON.stringify({
+  width: 1440,
+  height: 900,
+  deviceScaleFactor: 1,
+  isMobile: false,
+  hasTouch: false
+});
+const MOBILE_DESCRIPTOR_JSON = JSON.stringify({
+  width: 390,
+  height: 844,
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true
+});
+
+function overrideEnvironment(updates) {
+  const previous = Object.fromEntries(
+    Object.keys(updates).map((name) => [name, process.env[name]])
+  );
+  for (const [name, value] of Object.entries(updates)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  return () => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  };
+}
+
+function useHostedBaselineEnvironment() {
+  return overrideEnvironment({
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REF_NAME: 'main',
+    GITHUB_HEAD_REF: undefined,
+    GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_WORKFLOW_REF: 'ranacseruet/codesamplez-tools/.github/workflows/ci.yml@refs/heads/main',
+    GITHUB_RUN_NUMBER: '42'
+  });
+}
+
+function baselineRunMetadata(overrides = {}) {
+  return {
+    runId: 'run_pub',
+    projectId: 'test-project-42',
+    purpose: 'baseline',
+    refBranch: 'main',
+    refSha: 'abc123def456',
+    publicationWorkflowRef: 'ranacseruet/codesamplez-tools/.github/workflows/ci.yml@refs/heads/main',
+    publicationSequence: 42,
+    startedAt: '2026-08-24T00:00:00.000Z',
+    configuredRouteIds: ['home'],
+    selectedRouteIds: ['home'],
+    expectedCaptures: [{
+      routeId: 'home',
+      routePath: '/',
+      viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+    }],
+    ...overrides
+  };
+}
+
+function twoRouteBaselineRunMetadata(overrides = {}) {
+  return baselineRunMetadata({
+    configuredRouteIds: ['home', 'about'],
+    selectedRouteIds: ['home', 'about'],
+    expectedCaptures: [
+      { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+      { routeId: 'about', routePath: '/about', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+    ],
+    ...overrides
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +224,19 @@ describe('SnapProvider.capture()', () => {
       expect(result.selectedRouteIds).toEqual(['home']);
       expect(result.resultsPath).toBeTruthy();
       expect(result.manifestPath).toBeTruthy();
+
+      const runMetadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
+      expect(runMetadata).toMatchObject({
+        projectId: 'test-project-42',
+        purpose: 'diff',
+        configuredRouteIds: ['home'],
+        selectedRouteIds: ['home']
+      });
+      expect(runMetadata.expectedCaptures).toEqual([{
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }]);
 
       // Verify run creation POST
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
@@ -271,6 +360,13 @@ describe('SnapProvider.capture()', () => {
   });
 
   it('omits the baseline (and skips the latest-baseline lookup) for a baseline-purpose run', async () => {
+    const restoreEnvironment = useHostedBaselineEnvironment();
+    const expectedRef = {
+      refBranch: 'main',
+      refSha: 'a'.repeat(40),
+      publicationWorkflowRef: 'ranacseruet/codesamplez-tools/.github/workflows/ci.yml@refs/heads/main',
+      publicationSequence: 42
+    };
     const requests = [];
     const mockFetch = async (url, opts) => {
       requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
@@ -299,7 +395,7 @@ describe('SnapProvider.capture()', () => {
     };
     await fs.writeFile(configPath, JSON.stringify(config));
     try {
-      await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
+      const result = await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
 
       const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
       expect(latestGet).toBeUndefined();
@@ -308,6 +404,249 @@ describe('SnapProvider.capture()', () => {
       expect('baselineId' in runPost.body).toBe(false);
       // Suppress the server's auto-resolve-by-branch so a baseline run is never diffed.
       expect(runPost.body.skipBaselineResolution).toBe(true);
+      expect(runPost.body.branch).toBe(expectedRef.refBranch);
+      expect(runPost.body.prHeadSha).toBe(expectedRef.refSha);
+      expect(runPost.body.capturePlan).toEqual({
+        purpose: 'baseline',
+        publicationWorkflowRef: expectedRef.publicationWorkflowRef,
+        publicationSequence: expectedRef.publicationSequence,
+        configuredRouteIds: ['home'],
+        selectedRouteIds: ['home'],
+        expectedCaptures: [{
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }]
+      });
+
+      const metadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
+      expect(metadata).toMatchObject({
+        purpose: 'baseline',
+        refBranch: expectedRef.refBranch,
+        refSha: expectedRef.refSha,
+        publicationWorkflowRef: expectedRef.publicationWorkflowRef,
+        publicationSequence: expectedRef.publicationSequence,
+        configuredRouteIds: ['home'],
+        selectedRouteIds: ['home']
+      });
+    } finally {
+      restoreEnvironment();
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('rejects a scoped hosted baseline before creating a run', async () => {
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url) => {
+        requests.push(url);
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-partial-baseline-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop' },
+        { id: 'about', path: '/about', viewport: 'mobile' }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({
+        configPath,
+        routeIds: ['home'],
+        purpose: 'baseline'
+      })).rejects.toThrow(/requires all 2 configured route\(s\).*only 1 were selected/);
+      expect(requests).toEqual([]);
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('rejects a complete hosted baseline outside a resolved GitHub Actions commit', async () => {
+    const restoreEnvironment = overrideEnvironment({
+      GITHUB_ACTIONS: undefined,
+      GITHUB_REF_NAME: undefined,
+      GITHUB_HEAD_REF: undefined,
+      GITHUB_SHA: undefined,
+      GITHUB_RUN_NUMBER: undefined
+    });
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url) => {
+        requests.push(url);
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-non-ci-baseline-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, purpose: 'baseline' }))
+        .rejects.toThrow(/may only be published by GitHub Actions/);
+      expect(requests).toEqual([]);
+    } finally {
+      restoreEnvironment();
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('allows a scoped non-publishing hosted capture outside GitHub Actions', async () => {
+    const restoreEnvironment = overrideEnvironment({
+      GITHUB_ACTIONS: undefined,
+      GITHUB_REF_NAME: undefined,
+      GITHUB_HEAD_REF: undefined,
+      GITHUB_SHA: undefined,
+      GITHUB_RUN_NUMBER: undefined
+    });
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url, opts) => {
+        requests.push({
+          url,
+          method: opts?.method,
+          body: opts?.body ? JSON.parse(opts.body) : null
+        });
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-scoped-capture-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop' },
+        { id: 'about', path: '/about', viewport: 'mobile' }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      const result = await provider.capture({
+        configPath,
+        routeIds: ['home'],
+        purpose: 'capture'
+      });
+      expect(requests.some((request) => request.url.includes('/baselines/latest'))).toBe(false);
+      const runPost = requests.find(
+        (request) => request.url.includes('/runs') && !request.url.includes('/captures')
+      );
+      expect(runPost.body.skipBaselineResolution).toBe(true);
+      expect(runPost.body.capturePlan).toMatchObject({
+        purpose: 'diff',
+        configuredRouteIds: ['home', 'about'],
+        selectedRouteIds: ['home']
+      });
+      const metadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+      expect(metadata).toMatchObject({ purpose: 'capture', selectedRouteIds: ['home'] });
+      expect(metadata.refBranch).toBeUndefined();
+    } finally {
+      restoreEnvironment();
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('rejects a hosted baseline when GitHub Actions provides a non-commit SHA', async () => {
+    const restoreEnvironment = overrideEnvironment({
+      GITHUB_ACTIONS: 'true',
+      GITHUB_REF_NAME: 'main',
+      GITHUB_HEAD_REF: undefined,
+      GITHUB_SHA: 'not-a-commit',
+      GITHUB_RUN_NUMBER: '42'
+    });
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url) => {
+        requests.push(url);
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-invalid-sha-baseline-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, purpose: 'baseline' }))
+        .rejects.toThrow(/resolved 40-character GITHUB_SHA/);
+      expect(requests).toEqual([]);
+    } finally {
+      restoreEnvironment();
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('preserves route scoping for hosted PR-diff captures', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/baselines/latest')) return errorResponse(404, { error: 'no baseline' });
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-scoped-diff-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop' },
+        { id: 'about', path: '/about', viewport: 'mobile' }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      const result = await provider.capture({ configPath, routeIds: ['about'] });
+      expect(result.selectedRouteIds).toEqual(['about']);
+      const capturePosts = requests.filter((request) => /\/runs\/.+\/captures$/.test(request.url));
+      expect(capturePosts).toHaveLength(1);
+      expect(capturePosts[0].body.routeId).toBe('about');
+
+      const metadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
+      expect(metadata.configuredRouteIds).toEqual(['home', 'about']);
+      expect(metadata.selectedRouteIds).toEqual(['about']);
+      const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
+      expect(runPost.body.capturePlan).toEqual({
+        purpose: 'diff',
+        configuredRouteIds: ['home', 'about'],
+        selectedRouteIds: ['about'],
+        expectedCaptures: [{
+          routeId: 'about',
+          routePath: '/about',
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }]
+      });
     } finally {
       await fs.rm(configPath, { force: true });
     }
@@ -398,6 +737,13 @@ describe('SnapProvider.capture()', () => {
       expect(rewrittenResults.provider).toBe('snap');
       expect(rewrittenResults.captureMode).toBe('local-upload');
       expect(rewrittenResults.runId).toMatch(/^run_/);
+      expect(rewrittenResults.configuredRouteIds).toEqual(['home']);
+      expect(rewrittenResults.selectedRouteIds).toEqual(['home']);
+      expect(rewrittenResults.expectedCaptures).toEqual([{
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }]);
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -405,6 +751,13 @@ describe('SnapProvider.capture()', () => {
 
   it('local-upload baseline run omits the baseline so captures are never diffed', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-baseline-'));
+    const restoreEnvironment = useHostedBaselineEnvironment();
+    const expectedRef = {
+      refBranch: 'main',
+      refSha: 'a'.repeat(40),
+      publicationWorkflowRef: 'ranacseruet/codesamplez-tools/.github/workflows/ci.yml@refs/heads/main',
+      publicationSequence: 42
+    };
     const requests = [];
     const mockFetch = async (url, opts) => {
       requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
@@ -459,10 +812,34 @@ describe('SnapProvider.capture()', () => {
       expect('baselineId' in runPost.body).toBe(false);
       // Suppress the server's auto-resolve-by-branch so a baseline run is never diffed.
       expect(runPost.body.skipBaselineResolution).toBe(true);
+      expect(runPost.body.branch).toBe(expectedRef.refBranch);
+      expect(runPost.body.prHeadSha).toBe(expectedRef.refSha);
+      expect(runPost.body.capturePlan).toEqual({
+        purpose: 'baseline',
+        publicationWorkflowRef: expectedRef.publicationWorkflowRef,
+        publicationSequence: expectedRef.publicationSequence,
+        configuredRouteIds: ['home'],
+        selectedRouteIds: ['home'],
+        expectedCaptures: [{
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }]
+      });
 
       const uploadPost = requests.find((r) => r.url.includes('/local-result'));
       expect(uploadPost).toBeDefined();
+
+      const rewrittenResults = JSON.parse(await fs.readFile(
+        path.join(tempDir, 'capture', 'results.json'),
+        'utf-8'
+      ));
+      expect(rewrittenResults.refBranch).toBe(expectedRef.refBranch);
+      expect(rewrittenResults.refSha).toBe(expectedRef.refSha);
+      expect(rewrittenResults.publicationWorkflowRef).toBe(expectedRef.publicationWorkflowRef);
+      expect(rewrittenResults.publicationSequence).toBe(expectedRef.publicationSequence);
     } finally {
+      restoreEnvironment();
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -693,15 +1070,21 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
 
   it('publishes a baseline from a run that settles to terminal "new" (no prior baseline diffed)', async () => {
     const requests = [];
+    let pollCount = 0;
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({ url, method: opts?.method, headers: opts?.headers, body: opts?.body ? JSON.parse(opts.body) : null });
       if (url.includes('/visual/runs/')) {
+        const captures = [
+          { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+          { routeId: 'about', routePath: '/about', status: 'new', currentObjectKey: 'k/about/current.png', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+        ];
+        const responseCaptures = pollCount++ === 0
+          ? [captures[0]]
+          : (pollCount % 2 === 0 ? captures : captures.reverse());
         return okResponse({
           id: 'run_pub',
           status: 'new',
-          captures: [
-            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home/current.png', viewportDescriptorJson: '{"width":1440,"height":900}' }
-          ]
+          captures: responseCaptures
         });
       }
       return okResponse({ id: 'bsl_new_1' });
@@ -710,16 +1093,174 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-new-'));
     const resultsPath = path.join(dir, 'results.json');
-    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_pub', projectId: 'test-project-42' }));
+    await fs.writeFile(resultsPath, JSON.stringify(twoRouteBaselineRunMetadata()));
+    const bundleDirs = [];
     try {
-      const result = await provider.publishBaseline({ resultsPath });
-      expect(result.bundleDir).toBeTruthy();
+      bundleDirs.push(
+        (await provider.publishBaseline({ resultsPath })).bundleDir,
+        (await provider.publishBaseline({ resultsPath })).bundleDir
+      );
 
-      // A baseline create POST is issued from the rendered capture's object key.
-      const baselinePost = requests.find((r) => r.method === 'POST' && /\/baselines$/.test(r.url));
-      expect(baselinePost).toBeDefined();
+      const baselinePosts = requests.filter((r) => r.method === 'POST' && /\/baselines$/.test(r.url));
+      expect(baselinePosts).toHaveLength(2);
+      expect(requests.filter((r) => r.method === 'GET' && r.url.includes('/visual/runs/run_pub')))
+        .toHaveLength(3);
+      expect(baselinePosts[0].body).toEqual(baselinePosts[1].body);
+      expect(baselinePosts[0].headers['Idempotency-Key']).toBe('baseline-run_pub');
+      expect(baselinePosts[1].headers['Idempotency-Key']).toBe('baseline-run_pub');
+
+      const baselinePost = baselinePosts[0];
+      const expectedBaselineId = `bsl_${crypto.createHash('sha256').update('run_pub').digest('hex').slice(0, 24)}`;
+      expect(baselinePost.body).toMatchObject({
+        id: expectedBaselineId,
+        refBranch: 'main',
+        refSha: 'abc123def456',
+        publicationMode: 'complete',
+        sourceRunId: 'run_pub'
+      });
       const manifest = JSON.parse(baselinePost.body.manifestJson);
-      expect(manifest.routes[0].objectKey).toBe('k/home/current.png');
+      expect(manifest.sourceRunId).toBe(baselinePost.body.sourceRunId);
+      expect(manifest.routes.map((route) => route.routeId)).toEqual(['about', 'home']);
+      expect(manifest.routes.find((route) => route.routeId === 'home')).toMatchObject({
+        objectKey: 'k/home/current.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      });
+    } finally {
+      await Promise.all(bundleDirs.map((bundleDir) => fs.rm(bundleDir, { recursive: true, force: true })));
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps polling an older terminal run while expected captures are still rendering', async () => {
+    let pollCount = 0;
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      if (url.includes('/visual/runs/')) {
+        pollCount += 1;
+        return okResponse({
+          id: 'run_pub',
+          status: 'new',
+          captures: [{
+            routeId: 'home',
+            routePath: '/',
+            status: pollCount < 5 ? 'rendering' : 'new',
+            ...(pollCount < 5 ? {} : { currentObjectKey: 'k/home/current.png' }),
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+          }]
+        });
+      }
+      return okResponse({ id: 'bsl_new_1' });
+    };
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-slow-render-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(baselineRunMetadata()));
+
+    try {
+      await expect(provider.publishBaseline({ resultsPath })).resolves.toBeDefined();
+      expect(pollCount).toBe(5);
+      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url)))
+        .toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    {
+      name: 'a terminal error run',
+      metadata: baselineRunMetadata(),
+      runStatus: 'error',
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'error',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /complete baseline publication requires "new"/
+    },
+    {
+      name: 'a failed capture',
+      metadata: baselineRunMetadata(),
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'error', currentObjectKey: 'k/home.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /status "error"/
+    },
+    {
+      name: 'a capture without currentObjectKey',
+      metadata: baselineRunMetadata(),
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'new',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /has no currentObjectKey/
+    },
+    {
+      name: 'a duplicate route/viewport identity',
+      metadata: twoRouteBaselineRunMetadata(),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home-1.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+        { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home-2.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      expectedError: /duplicate source route\/viewport identity/
+    },
+    {
+      name: 'a missing configured capture',
+      metadata: twoRouteBaselineRunMetadata(),
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /has 1 capture\(s\), expected 2/
+    },
+    {
+      name: 'an extra capture identity',
+      metadata: baselineRunMetadata(),
+      captures: [{
+        routeId: 'about', routePath: '/about', status: 'new', currentObjectKey: 'k/about.png',
+        viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+      }],
+      expectedError: /unexpected route\/viewport capture/
+    },
+    {
+      name: 'a source-project mismatch',
+      metadata: baselineRunMetadata({ projectId: 'other-project' }),
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /belongs to project "other-project"/
+    },
+    {
+      name: 'malformed expected-capture metadata',
+      metadata: baselineRunMetadata({ expectedCaptures: [null] }),
+      captures: [{
+        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }],
+      expectedError: /duplicate or extra route "unknown"/
+    }
+  ])('fails closed without publishing when the run contains $name', async ({ metadata, runStatus = 'new', captures, expectedError }) => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      if (url.includes('/visual/runs/')) {
+        return okResponse({ id: metadata.runId, status: runStatus, captures });
+      }
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-invalid-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(metadata));
+
+    try {
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(expectedError);
+      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(false);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

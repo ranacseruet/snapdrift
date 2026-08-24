@@ -74,6 +74,32 @@ export interface VisualBaselineResults {
   passed?: boolean;
 }
 
+/** Exact route/viewport capture identity persisted for hosted baseline validation. */
+export interface SnapExpectedCaptureIdentity {
+  routeId: string;
+  routePath: string;
+  viewportDescriptorJson: string;
+}
+
+/** Metadata written by SnapProvider.capture() and consumed by publishBaseline(). */
+export interface SnapRunMetadata {
+  runId: string;
+  projectId: string;
+  purpose: 'baseline' | 'capture' | 'diff';
+  /** GitHub Actions source branch for hosted baseline runs; omitted for ordinary diff runs. */
+  refBranch?: string;
+  /** Resolved 40-character GitHub Actions commit for hosted baseline runs. */
+  refSha?: string;
+  /** Stable GitHub workflow identity that owns the publication sequence. */
+  publicationWorkflowRef?: string;
+  /** Monotonic GitHub Actions workflow run number for stale-publisher rejection. */
+  publicationSequence?: number;
+  startedAt: string;
+  configuredRouteIds: string[];
+  selectedRouteIds: string[];
+  expectedCaptures: SnapExpectedCaptureIdentity[];
+}
+
 export interface VisualDiffMissingItem {
   id: string;
   reason: string;

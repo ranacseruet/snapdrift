@@ -227,12 +227,13 @@ export interface ProviderCaptureOptions {
    * Why this capture is being taken.
    *   - 'baseline' — establishing new ground truth. The run is render-only and
    *     must never be diffed, so no prior baseline is attached.
+   *   - 'capture' — a non-publishing render-only diagnostic capture.
    *   - 'diff' (default) — comparing against the latest accepted baseline, which
    *     is attached to the run so the backend can produce a comparison.
    * Diffing a baseline-publish run is meaningless and can fail the publish
    * (e.g. dimension mismatch against the previous baseline).
    */
-  purpose?: 'baseline' | 'diff';
+  purpose?: 'baseline' | 'capture' | 'diff';
 }
 
 export interface ProviderCaptureResult {
