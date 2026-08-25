@@ -54,7 +54,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
     repo-config-path: .github/snapdrift.json
 ```
 
-With `provider: "snap"`, baseline publication is a complete, fail-closed snapshot: it must run from the project's default branch and capture every configured route. Snap records the canonical workflow identity plus its GitHub run number so the API can reject stale overlapping publishers. Route scoping remains available for pull request diffs, non-publishing `snapdrift capture`, and local-provider baselines.
+With `provider: "snap"`, baseline publication is a complete, fail-closed snapshot: it must run from the project's default branch and capture every configured route. Snap records the publication workflow identity plus a monotonic sequence so the API can reject stale overlapping publishers. GitHub Actions supplies these values automatically; other CI systems can provide `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`. Route scoping remains available for pull request diffs, non-publishing `snapdrift capture`, and local-provider baselines.
 
 **3. Run SnapDrift on pull requests:**
 
@@ -73,7 +73,7 @@ The root action dispatches on `mode`. The same pipelines are also published as s
 
 ## Local CLI
 
-SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app. Use it during development to validate UI changes before pushing. Canonical hosted baseline publication is the exception: `provider: "snap"` baselines are accepted only from GitHub Actions on the project default branch.
+SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app. Use it during development to validate UI changes before pushing. Canonical hosted baseline publication is the exception: `provider: "snap"` baselines require the project default branch plus explicit CI publication metadata; GitHub Actions provides that metadata automatically.
 
 ```bash
 # Establish a local-provider baseline

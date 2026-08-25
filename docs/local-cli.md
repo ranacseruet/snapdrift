@@ -31,11 +31,11 @@ snapdrift baseline [options]
 ```
 
 - **`provider: "local"`** — identical to `snapdrift capture`: the screenshots written to the baseline directory *are* the baseline.
-- **`provider: "snap"`** — canonical baseline publication is CI-only. Run the baseline action from GitHub Actions on the Snap project's default branch; it captures every configured route, waits for the complete hosted run, then publishes a baseline referencing the stored objects. A local `snapdrift baseline` fails before creating a hosted run, and partial `--routes` selection is rejected as well. `snapdrift capture` may still be used locally for non-publishing diagnostics.
+- **`provider: "snap"`** — canonical baseline publication is CI-only. Run it on the Snap project's default branch; GitHub Actions supplies the publication metadata automatically, while another CI system may set `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`. It captures every configured route, waits for the complete hosted run, then publishes a baseline referencing the stored objects. A local checkout without those metadata values fails before creating a hosted run, and partial `--routes` selection is rejected. `snapdrift capture` may still be used locally for non-publishing diagnostics.
 
 `snap.onUnavailable` is honoured across both phases — the capture *and* the publish that follows it. `warn-and-skip` exits 0 without a baseline; `fallback-local` captures locally so you still end up with one.
 
-**Baseline attribution.** A hosted publication records the exact `GITHUB_REF_NAME` and 40-character `GITHUB_SHA` supplied by GitHub Actions. SnapDrift refuses to infer these values from a developer checkout, preventing a local command from being presented as a canonical default-branch publication.
+**Baseline attribution.** A hosted publication records a 40-character commit and branch from GitHub Actions or the current git checkout, plus a publication workflow identity and sequence. Outside GitHub Actions, set `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`; without them SnapDrift refuses to create a canonical hosted baseline.
 
 **`snap.projectId` must be an explicit `prj_...` id** for local runs. `"auto"` derives the id from `GITHUB_REPOSITORY`, which is not set outside Actions — the command fails early telling you to set an explicit id.
 

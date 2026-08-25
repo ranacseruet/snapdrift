@@ -470,13 +470,16 @@ describe('SnapProvider.capture()', () => {
     }
   });
 
-  it('rejects a complete hosted baseline outside a resolved GitHub Actions commit', async () => {
+  it('rejects a complete hosted baseline without CI publication metadata', async () => {
     const restoreEnvironment = overrideEnvironment({
       GITHUB_ACTIONS: undefined,
       GITHUB_REF_NAME: undefined,
       GITHUB_HEAD_REF: undefined,
       GITHUB_SHA: undefined,
-      GITHUB_RUN_NUMBER: undefined
+      GITHUB_WORKFLOW_REF: undefined,
+      GITHUB_RUN_NUMBER: undefined,
+      SNAPDRIFT_PUBLICATION_WORKFLOW_REF: undefined,
+      SNAPDRIFT_PUBLICATION_SEQUENCE: undefined
     });
     const requests = [];
     const provider = new SnapProvider(validSnapConfig, {
@@ -499,8 +502,51 @@ describe('SnapProvider.capture()', () => {
 
     try {
       await expect(provider.capture({ configPath, purpose: 'baseline' }))
-        .rejects.toThrow(/may only be published by GitHub Actions/);
+        .rejects.toThrow(/publication workflow identity.*publication sequence/);
       expect(requests).toEqual([]);
+    } finally {
+      restoreEnvironment();
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
+  it('allows non-GitHub CI to publish with explicit publication metadata', async () => {
+    const restoreEnvironment = overrideEnvironment({
+      GITHUB_ACTIONS: undefined,
+      GITHUB_REF_NAME: 'main',
+      GITHUB_HEAD_REF: undefined,
+      GITHUB_SHA: 'b'.repeat(40),
+      GITHUB_WORKFLOW_REF: undefined,
+      GITHUB_RUN_NUMBER: undefined,
+      SNAPDRIFT_PUBLICATION_WORKFLOW_REF: 'gitlab/project/visual-baseline',
+      SNAPDRIFT_PUBLICATION_SEQUENCE: '7'
+    });
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url, opts) => {
+        requests.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-explicit-ci-baseline-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await provider.capture({ configPath, purpose: 'baseline' });
+      const runPost = requests.find((request) => request.url.includes('/runs') && !request.url.includes('/captures'));
+      expect(runPost.body.capturePlan).toMatchObject({
+        publicationWorkflowRef: 'gitlab/project/visual-baseline',
+        publicationSequence: 7
+      });
     } finally {
       restoreEnvironment();
       await fs.rm(configPath, { force: true });
@@ -595,7 +641,7 @@ describe('SnapProvider.capture()', () => {
 
     try {
       await expect(provider.capture({ configPath, purpose: 'baseline' }))
-        .rejects.toThrow(/resolved 40-character GITHUB_SHA/);
+        .rejects.toThrow(/40-character commit SHA/);
       expect(requests).toEqual([]);
     } finally {
       restoreEnvironment();
@@ -1165,6 +1211,45 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       expect(pollCount).toBe(5);
       expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url)))
         .toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails fast when a planned run has a stable incomplete capture set', async () => {
+    let pollCount = 0;
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      if (url.includes('/visual/runs/')) {
+        pollCount += 1;
+        return okResponse({
+          id: 'run_pub',
+          status: 'rendering',
+          captures: [{
+            routeId: 'home',
+            routePath: '/',
+            status: 'new',
+            currentObjectKey: 'k/home/current.png',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+          }]
+        });
+      }
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-stalled-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(twoRouteBaselineRunMetadata()));
+
+    try {
+      await expect(provider.publishBaseline({ resultsPath }))
+        .rejects.toThrow(/complete baseline publication requires "new"/);
+      expect(pollCount).toBe(31);
+      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(false);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

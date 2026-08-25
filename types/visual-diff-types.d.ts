@@ -86,13 +86,13 @@ export interface SnapRunMetadata {
   runId: string;
   projectId: string;
   purpose: 'baseline' | 'capture' | 'diff';
-  /** GitHub Actions source branch for hosted baseline runs; omitted for ordinary diff runs. */
+  /** CI source branch for hosted baseline runs; omitted for ordinary diff runs. */
   refBranch?: string;
-  /** Resolved 40-character GitHub Actions commit for hosted baseline runs. */
+  /** Resolved 40-character CI commit for hosted baseline runs. */
   refSha?: string;
-  /** Stable GitHub workflow identity that owns the publication sequence. */
+  /** Stable CI workflow identity that owns the publication sequence. */
   publicationWorkflowRef?: string;
-  /** Monotonic GitHub Actions workflow run number for stale-publisher rejection. */
+  /** Monotonic CI publication sequence for stale-publisher rejection. */
   publicationSequence?: number;
   startedAt: string;
   configuredRouteIds: string[];
