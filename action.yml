@@ -20,6 +20,11 @@ branding:
 # version uses its upcoming `@vX.Y.Z` tag; the release process replaces it with the commit that holds
 # the wrapper content. The contract test accepts either form and requires the declared version to
 # match package.json.
+#
+# The release workflow also runs `npm run check:pin-stale`, which fails when the pinned SHA predates
+# the newest commit touching `actions/`; that keeps a stale pin from silently serving old wrapper code
+# to Marketplace consumers. The check is release-time only, since the pin is expected to lag wrapper
+# changes on feature branches.
 
 inputs:
   mode:
@@ -147,7 +152,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@f1ded4c7c0eb944b35eb8f70f8711f4f84397813 # v0.8.2
+      uses: ranacseruet/snapdrift/actions/baseline@3485e898104125db1f45ab27361770356a7564a8 # v0.8.2
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
@@ -157,7 +162,7 @@ runs:
     - name: SnapDrift pull request diff
       id: pr-diff
       if: inputs.mode == 'pr-diff'
-      uses: ranacseruet/snapdrift/actions/pr-diff@f1ded4c7c0eb944b35eb8f70f8711f4f84397813 # v0.8.2
+      uses: ranacseruet/snapdrift/actions/pr-diff@3485e898104125db1f45ab27361770356a7564a8 # v0.8.2
       with:
         github-token: ${{ inputs.github-token }}
         repo-config-path: ${{ inputs.repo-config-path }}

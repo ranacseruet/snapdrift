@@ -13,7 +13,14 @@ jobs:
     name: Publish packages to npm
     runs-on: ubuntu-latest
     steps:
+      # `fetch-depth: 0` clones the full history so the stale-pin gate can evaluate whether the
+      # dispatcher's pinned SHA is an ancestor of the newest commit touching actions/. A shallow
+      # clone (the checkout default) omits that preceding commit, so `git merge-base` errors and the
+      # gate would misclassify every normal release — which necessarily pins a preceding commit — as
+      # stale and block the release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -41,6 +48,9 @@ jobs:
 
       - name: Validate immutable release pins
         run: npm run validate:release
+
+      - name: Validate dispatcher pin is not stale
+        run: npm run check:pin-stale
 
       - name: Validate package shape
         run: npm run pack:check

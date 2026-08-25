@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Chore
+
+- **The release workflow now fails when the root dispatcher's immutable pin predates wrapper changes** (#133). The Marketplace `action.yml` pins its inner `baseline` / `pr-diff` refs to an immutable commit SHA, but nothing detected when that pin went stale: between releases every change to `actions/baseline` or `actions/pr-diff` stayed invisible to consumers of the root action, so a release could ship bumped wrapper code while the dispatcher still executed old wrapper code at the pinned SHA. `npm run check:pin-stale` (new `scripts/check-pin-stale.mjs`) fails when the pinned SHA is older than the newest commit touching `actions/`. It runs in `publish.yml` (gated on a published release) rather than on every PR, because the pin is expected to lag wrapper changes on feature branches. The currently-stale pin in `action.yml` (which predated the #136 hosted-baseline fix) has been bumped to the latest `main` commit.
+
 ## 0.8.2 - 2026-08-24
 
 ### Fixes
