@@ -183,4 +183,44 @@ describe('runInitFromAction', () => {
       process.chdir(originalCwd);
     }
   });
+
+  it('keeps a valid local config and warns when only a project ID is present (no API-key source)', async () => {
+    const workflowPath = path.join(tempDir, 'workflow.yml');
+    const workflow = {
+      name: 'Visual Tests',
+      on: { pull_request: { branches: ['main'] } },
+      jobs: {
+        screenshots: {
+          'runs-on': 'ubuntu-latest',
+          steps: [
+            { uses: 'actions/checkout@v4' },
+            { uses: 'i2dev-com/snap/github-action@v1', with: { 'snap-project-id': 'my-project-42' } }
+          ]
+        }
+      }
+    };
+    const yaml = await import('js-yaml');
+    await fs.writeFile(workflowPath, yaml.dump(workflow));
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      const result = await runInitFromAction(workflowPath);
+      const configContent = await fs.readFile('.github/snapdrift.json', 'utf-8');
+      const config = JSON.parse(configContent);
+
+      // provider stays unset (local) so the generated config passes validation
+      // instead of later failing with "snap requires exactly one of ...".
+      expect(config.provider).toBeUndefined();
+
+      // A clear migration warning is emitted about the missing API-key source.
+      const notes = await fs.readFile('.github/MIGRATION_NOTES.md', 'utf-8');
+      expect(notes).toMatch(/API key source/i);
+      expect(notes).toContain('my-project-42');
+      expect(result.warningsCount).toBeGreaterThanOrEqual(1);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });

@@ -145,6 +145,17 @@ describe('SnapDrift action contracts', () => {
         expect(prDiffInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
     });
 
+    it('resolve-baseline honors an absolute download-path instead of always prefixing the workspace', async () => {
+      const resolveBaseline = await readAction('actions/resolve-baseline/action.yml');
+      const pathsStep = resolveBaseline.runs.steps.find((step) => step.id === 'paths');
+
+      expect(pathsStep).toBeDefined();
+      // Absolute paths are used directly; relative paths stay workspace-prefixed.
+      expect(pathsStep.run).toContain('case "$DOWNLOAD_PATH"');
+      expect(pathsStep.run).toContain('RUN_DIR="$DOWNLOAD_PATH"');
+      expect(pathsStep.run).toContain('${GITHUB_WORKSPACE}/${DOWNLOAD_PATH}');
+    });
+
     // Every outage path is implemented once, in lib/outage-policy.mjs, and
     // exercised by tests/outage-policy.test.js. These assertions only guard the
     // wiring: that the wrappers route through it and thread its results on to

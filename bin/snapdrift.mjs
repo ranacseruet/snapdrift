@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // @ts-check
 
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Resolve cli.mjs relative to this file so the bin entry works regardless of
-// where the consumer installs the package.
-const cliPath = new URL('../lib/cli.mjs', import.meta.url).pathname;
+// where the consumer installs the package. Use fileURLToPath(new URL(...)) rather
+// than URL.pathname so paths containing spaces or Windows drive letters survive
+// the conversion (URL.pathname percent-encodes them, then pathToFileURL re-encodes
+// the result, producing a path that does not exist).
+const cliPath = fileURLToPath(new URL('../lib/cli.mjs', import.meta.url));
 const { main } = await import(pathToFileURL(cliPath).href);
 
 main(process.argv).catch((error) => {

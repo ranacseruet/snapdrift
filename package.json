@@ -81,9 +81,10 @@
     "./lib/provider.mjs": "./lib/provider.mjs",
     "./lib/outage-policy.mjs": "./lib/outage-policy.mjs",
     "./lib/snap-provider.mjs": "./lib/snap-provider.mjs",
-    "./lib/migrate-baselines.mjs": "./lib/migrate-baselines.mjs",
-    "./lib/init-from-action.mjs": "./lib/init-from-action.mjs"
-  },
+     "./lib/migrate-baselines.mjs": "./lib/migrate-baselines.mjs",
+     "./lib/init-from-action.mjs": "./lib/init-from-action.mjs",
+     "./lib/resolve-baseline-paths.mjs": "./lib/resolve-baseline-paths.mjs"
+   },
   "files": [
     "action.yml",
     "actions/",
