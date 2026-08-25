@@ -27,6 +27,7 @@
     "typecheck": "tsc --project tsconfig.json",
     "validate:actions": "node scripts/validate-actions.mjs",
     "validate:release": "node scripts/validate-release.mjs",
+    "check:pin-stale": "node scripts/check-pin-stale.mjs",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage --runInBand",
     "pack:check": "npm pack --dry-run --cache .npm-cache",

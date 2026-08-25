@@ -27,7 +27,7 @@ The `publish.yml` workflow uses [npm trusted publishing (OIDC)](https://docs.npm
 1. Merge all changes slated for the release to `main` — CI must be green.
 2. Move items from `## Unreleased` in `CHANGELOG.md` to a new `## x.y.z - YYYY-MM-DD` entry and bump the `version` field in `package.json` plus any changed `@snapdrift/*` workspace package. Merge that release-preparation PR.
 3. Replace both root `action.yml` inner `@vX.Y.Z` references with the immutable implementation commit SHA, retaining the trailing `# vX.Y.Z` labels. A release commit cannot reference itself, so pin the latest `main` commit that already contains the wrapper implementation. Merge this pin-only PR.
-4. Run `npm run ci && npm run validate:release` from the exact commit that will be tagged. The strict release check rejects mutable inner tags, stale version labels, and a missing dated changelog entry.
+4. Run `npm run ci && npm run validate:release && npm run check:pin-stale` from the exact commit that will be tagged. The strict release check rejects mutable inner tags, stale version labels, and a missing dated changelog entry. `check:pin-stale` fails when the dispatcher's immutable pin predates the newest commit touching `actions/`, so a stale pin cannot silently serve old wrapper code to Marketplace consumers.
 5. Create a GitHub release:
    - Tag: `vx.y.z` (e.g. `v0.4.0`), targeting `main`
    - Title: `vx.y.z`
@@ -74,6 +74,9 @@ npm run typecheck
 # Validate composite action metadata
 npm run validate:actions
 
+# Fail when the root dispatcher's immutable pin predates wrapper changes (release-time check)
+npm run check:pin-stale
+
 # Run the full test suite
 npm test
 
@@ -84,7 +87,7 @@ npm run test:coverage
 NODE_OPTIONS='--experimental-vm-modules' npx jest tests/snapdrift-smoke.test.js
 ```
 
-The test suite has 15 files in `tests/` plus additional ones in each `packages/*/tests/`. Coverage spans config validation, capture, compare, staging, PR comment generation, action contract integrity, provider selection, SnapProvider behavior, the migrate-baselines and init commands, the CLI dispatcher, and an end-to-end capture-compare integration test. Tests are unit/contract-level — they do not run Playwright or require a live app.
+The test suite has 16 files in `tests/` plus additional ones in each `packages/*/tests/`. Coverage spans config validation, capture, compare, staging, PR comment generation, action contract integrity, provider selection, SnapProvider behavior, the migrate-baselines and init commands, the CLI dispatcher, and an end-to-end capture-compare integration test. Tests are unit/contract-level — they do not run Playwright or require a live app.
 
 ## Making Changes
 
