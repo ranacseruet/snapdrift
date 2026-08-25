@@ -77,12 +77,45 @@ describe('buildOpenCommand — path passed as a single argv element', () => {
   it('selects the platform-correct opener', () => {
     expect(buildOpenCommand('/x/report.html', 'darwin').cmd).toBe('open');
     expect(buildOpenCommand('/x/report.html', 'linux').cmd).toBe('xdg-open');
-    expect(buildOpenCommand('/x/report.html', 'win32').cmd).toBe('start');
+    // `start` is a cmd.exe built-in (not an executable), so Windows opens the
+    // registered handler through rundll32, keeping the path argument-safe.
+    expect(buildOpenCommand('/c/r/report.html', 'win32').cmd).toBe('rundll32');
   });
 
-  it('passes an empty title before the path on Windows (start treats the first arg as a title)', () => {
+  it('passes the path as a separate argument on Windows (via rundll32)', () => {
     const { args } = buildOpenCommand('/c/path to/report.html', 'win32');
-    expect(args[0]).toBe('');
+    expect(args[0]).toBe('url.dll,FileProtocolHandler');
     expect(args[1]).toBe('/c/path to/report.html');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseArgs — hyphenated option values and `--` (review feedback)
+// ---------------------------------------------------------------------------
+
+describe('parseArgs — accepts hyphenated values and an end-of-options marker', () => {
+  it('parses a hyphenated route id via inline --flag=value', () => {
+    const opts = parseArgs(['node', 'snapdrift', 'diff', '--routes=-mobile']);
+    expect(opts.routes).toEqual(['-mobile']);
+  });
+
+  it('parses a hyphenated route id passed bare (not mistaken for a flag)', () => {
+    const opts = parseArgs(['node', 'snapdrift', 'diff', '--routes', '-mobile']);
+    expect(opts.routes).toEqual(['-mobile']);
+  });
+
+  it('accepts a hyphenated config path via inline form', () => {
+    const opts = parseArgs(['node', 'snapdrift', 'diff', '--config=-weird-config.json']);
+    expect(opts.configPath).toBe('-weird-config.json');
+  });
+
+  it('rejects a value flag whose next token is the `--` marker', () => {
+    expect(() => parseArgs(['node', 'snapdrift', 'diff', '--routes', '--', '-mobile']))
+      .toThrow(/Missing value for flag --routes/);
+  });
+
+  it('treats a hyphenated token after `--` as the literal value of a following flag', () => {
+    const opts = parseArgs(['node', 'snapdrift', 'diff', '--', '--routes', '-mobile']);
+    expect(opts.routes).toEqual(['-mobile']);
   });
 });
