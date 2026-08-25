@@ -24,14 +24,15 @@ The `publish.yml` workflow uses [npm trusted publishing (OIDC)](https://docs.npm
 
 **Release steps:**
 
-1. Merge all changes to `main` — CI must be green.
-2. Move items from `## Unreleased` in `CHANGELOG.md` to a new `## x.y.z - YYYY-MM-DD` entry and commit.
-3. Bump the `version` field in `package.json` and the `version` of any `@snapdrift/*` workspace package that changed. Commit.
-4. Create a GitHub release:
+1. Merge all changes slated for the release to `main` — CI must be green.
+2. Move items from `## Unreleased` in `CHANGELOG.md` to a new `## x.y.z - YYYY-MM-DD` entry and bump the `version` field in `package.json` plus any changed `@snapdrift/*` workspace package. Merge that release-preparation PR.
+3. Replace both root `action.yml` inner `@vX.Y.Z` references with the immutable implementation commit SHA, retaining the trailing `# vX.Y.Z` labels. A release commit cannot reference itself, so pin the latest `main` commit that already contains the wrapper implementation. Merge this pin-only PR.
+4. Run `npm run ci && npm run validate:release` from the exact commit that will be tagged. The strict release check rejects mutable inner tags, stale version labels, and a missing dated changelog entry.
+5. Create a GitHub release:
    - Tag: `vx.y.z` (e.g. `v0.4.0`), targeting `main`
    - Title: `vx.y.z`
    - Body: paste the changelog entry for this version
-5. Publishing the release triggers the `publish.yml` workflow, which runs the full quality gate and then publishes to npm with provenance attestation. Workspace packages are published in dependency order before the root `snapdrift` package; each `npm publish` is idempotent (`|| true`) so re-runs after a partial publish are safe.
+6. Publishing the release triggers the `publish.yml` workflow, which reruns the full quality gate including `validate:release`, then publishes to npm with provenance attestation. Workspace packages are published in dependency order before the root `snapdrift` package; each `npm publish` is idempotent (`|| true`) so re-runs after a partial publish are safe.
 
 **Verify:**
 

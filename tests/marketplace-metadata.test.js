@@ -10,9 +10,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // https://docs.github.com/actions/creating-actions/metadata-syntax-for-github-actions#branding
 const BRANDING_COLORS = ['white', 'yellow', 'blue', 'green', 'orange', 'red', 'purple', 'gray-dark'];
 
-// Accepts either a tag pin (`@v1.2.3`) or a commit-SHA pin carrying the version in a trailing
-// comment (`@<sha> # v1.2.3`), matching how this repo pins third-party actions. Either way the
-// version the pin claims to be must equal the root package version.
+// Development branches may use the upcoming tag before the implementation commit exists; a
+// commit-SHA pin carries the version in a trailing comment. Either way the claimed version must
+// match package.json. The stricter validate:release gate rejects tags before publication.
 const INNER_ACTION_REF_PATTERN =
   /uses:\s+ranacseruet\/snapdrift\/actions\/(baseline|pr-diff)@(?:[0-9a-f]{40}\s+#\s+(v\S+)|(v\S+))/g;
 

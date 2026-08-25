@@ -65,6 +65,7 @@ describe('runCaptureCommand — onUnavailable', () => {
     // Must resolve, not reject: rejecting sets exit code 1 in bin/snapdrift.mjs,
     // which is precisely what warn-and-skip is configured to avoid.
     await expect(runCaptureCommand(opts())).resolves.toBeUndefined();
+    expect(provider.capture).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'capture' }));
     expect(stdout.join('')).toMatch(/Capture skipped \(Snap unavailable, warn-and-skip mode\)/);
   });
 

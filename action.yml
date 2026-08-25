@@ -15,12 +15,11 @@ branding:
 # action's own directory. `tests/marketplace-metadata.test.js` fails the build if those pins drift
 # from the root `package.json` version.
 #
-# The pins are commit SHAs, so that a consumer pinning this action to a SHA gets an immutable chain
-# rather than a mutable tag one level down. The SHA is the commit holding the wrapper content this
-# release ships — not the release tag itself, which a release commit cannot reference. It therefore
-# only moves when the wrappers change. The trailing comment records the release the pin was last
-# verified for, and the test requires it to match the package version, so every release has to look
-# at it. The test accepts a plain `@vX.Y.Z` tag too, for unreleased refs.
+# Released versions use commit SHAs, so a consumer pinning this action to a SHA gets an immutable
+# chain rather than a mutable tag one level down. Before that release commit exists, an unreleased
+# version uses its upcoming `@vX.Y.Z` tag; the release process replaces it with the commit that holds
+# the wrapper content. The contract test accepts either form and requires the declared version to
+# match package.json.
 
 inputs:
   mode:
@@ -32,7 +31,7 @@ inputs:
     required: false
     default: .github/snapdrift.json
   route-ids:
-    description: Optional comma-separated route ids. In `pr-diff` mode, providing these skips changed-file scope detection.
+    description: Optional comma-separated route ids for PR diffs or local baselines. Hosted baselines must capture every configured route.
     required: false
     default: ''
   artifact-retention-days:
@@ -148,7 +147,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.1
+      uses: ranacseruet/snapdrift/actions/baseline@f1ded4c7c0eb944b35eb8f70f8711f4f84397813 # v0.8.2
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
@@ -158,7 +157,7 @@ runs:
     - name: SnapDrift pull request diff
       id: pr-diff
       if: inputs.mode == 'pr-diff'
-      uses: ranacseruet/snapdrift/actions/pr-diff@539953ab07065be805be393d69bd3c9b6d53cf6e # v0.8.1
+      uses: ranacseruet/snapdrift/actions/pr-diff@f1ded4c7c0eb944b35eb8f70f8711f4f84397813 # v0.8.2
       with:
         github-token: ${{ inputs.github-token }}
         repo-config-path: ${{ inputs.repo-config-path }}

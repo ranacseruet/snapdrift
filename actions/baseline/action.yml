@@ -11,7 +11,7 @@ inputs:
     required: false
     default: .github/snapdrift.json
   route-ids:
-    description: Optional comma-separated route ids to capture.
+    description: Optional comma-separated route ids for local-provider baselines. Hosted Snap baselines must capture every configured route.
     required: false
     default: ''
   artifact-retention-days:

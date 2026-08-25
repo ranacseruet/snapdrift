@@ -322,6 +322,14 @@ Two files are written: `.github/snapdrift.json` and `.github/MIGRATION_NOTES.md`
 
 When `provider: "snap"`, every `capture` / `diff` / `publishBaseline` call goes through `SnapProvider`, which talks to Snap's hosted `/v1/visual/*` API instead of writing to the runner filesystem. The local provider keeps working exactly as before.
 
+### Complete hosted baseline publication
+
+A hosted baseline is an authoritative complete snapshot. For `purpose: "baseline"`, `SnapProvider.capture()` requires the selected route ids to equal the complete configured route set; `route-ids`, `--routes`, and `SNAPDRIFT_ROUTE_IDS` may not reduce it. It requires a resolved branch, 40-character commit SHA, publication workflow ref, and positive publication sequence. GitHub Actions provides these as `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_WORKFLOW_REF`, and `GITHUB_RUN_NUMBER`; other CI systems may set `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`. Local-provider baselines, non-publishing hosted captures, and hosted PR-diff runs retain scoped behavior.
+
+The capture `results.json` records `configuredRouteIds`, `selectedRouteIds`, and `expectedCaptures` (route id, path, and viewport descriptor), plus one resolved `refBranch` / `refSha`, publication workflow ref, and publication sequence. The run-creation request sends the same immutable set and sequence as `capturePlan` and sends the ref as `branch` / `prHeadSha`. Before publication, SnapDrift requires the source run to belong to the configured project, settle to terminal `new`, and contain exactly one successful `new` capture with a non-empty `currentObjectKey` for every expected route/viewport identity. It keeps polling while any expected capture remains non-terminal, even when an older server reports the run itself as terminal, but fails fast after a stable incomplete capture set. Failed, missing, duplicate, extra, path-mismatched, or malformed captures abort before the baseline request. If another default-branch baseline wins first, Snap returns `409 baseline_stale_source`; rerun the current baseline job.
+
+Publication sends `publicationMode: "complete"` and the source run id both as top-level `sourceRunId` and as `manifest.sourceRunId`. The baseline id is deterministically derived from the run id, and manifest routes are sorted, so a retry sends the same identity and payload. Reusing that id with different persisted fields is rejected; rerun the baseline job to obtain a new source run. `refBranch` / `refSha` come from the persisted capture metadata rather than resolving git a second time. Snap accepts complete publication only from the project's default branch (effective default `main`).
+
 ### Local-capture hybrid
 
 If `baseUrl` resolves to a local address (see [`isLocalBaseUrl`](#islocalbaseurl-detection) below), SnapDrift runs Playwright on the runner to render the page and uploads the resulting screenshots to Snap. This is necessary whenever your `baseUrl` is a server only the runner can reach (the common case) — Snap's render worker cannot reach a `127.0.0.1` or `localhost` server.
@@ -334,10 +342,10 @@ SnapDrift uses a small, stable subset of the Snap API:
 
 | Endpoint | Used by |
 |:---------|:--------|
-| `POST /v1/visual/projects/:id/runs` | Create a run; client passes `baseUrl`, `trigger`, optional `baselineId` and `branch` |
+| `POST /v1/visual/projects/:id/runs` | Create a run; client passes `baseUrl`, `trigger`, optional `baselineId` and `branch`, plus the immutable configured/selected route and expected-capture plan; baseline runs also pass the resolved commit as `prHeadSha` |
 | `POST /v1/visual/runs/:run_id/captures` | Submit each route as a capture; client passes `routeId`, `routePath`, `viewportDescriptorJson` |
 | `POST /v1/visual/captures/:capture_id/local-result` | Hybrid path: upload the locally rendered PNG and its dimensions |
-| `POST /v1/visual/projects/:id/baselines` | Publish a baseline from a run's rendered captures (primary path) or upload a pre-built local baseline (migration path) |
+| `POST /v1/visual/projects/:id/baselines` | Publish a complete default-branch baseline from a source run's validated captures |
 | `GET /v1/visual/projects/:id/baselines/latest` | Resolve the latest accepted baseline for diff runs |
 | `GET /v1/visual/runs/:run_id` | Poll a run until it reaches a terminal state (`pass`, `fail`, `error`, or `new`) |
 

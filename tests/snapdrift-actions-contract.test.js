@@ -53,6 +53,8 @@ describe('SnapDrift action contracts', () => {
 
         expect(baseline.inputs['repo-config-path'].default).toBe('.github/snapdrift.json');
         expect(baseline.inputs['route-ids'].default).toBe('');
+        expect(baseline.inputs['route-ids'].description).toMatch(/local-provider baselines/);
+        expect(baseline.inputs['route-ids'].description).toMatch(/Hosted Snap baselines must capture every configured route/);
         expect(baseline.inputs['artifact-retention-days'].default).toBe('30');
         expect(baseline.inputs['upload-artifact'].default).toBe('true');
         expect(baseline.outputs['artifact-name']).toBeTruthy();
@@ -65,6 +67,24 @@ describe('SnapDrift action contracts', () => {
         expect(prDiff.outputs['status']).toBeTruthy();
         expect(prDiff.outputs['summary-path']).toBeTruthy();
         expect(prDiff.outputs['bundle-dir']).toBeTruthy();
+    });
+
+    it('ships a complete default-branch baseline workflow template', async () => {
+        const workflow = await readAction('docs/workflow-templates/refresh-baseline-on-merge.yml');
+        const job = workflow.jobs['refresh-baseline'];
+        const candidate = job.steps.find(
+            (step) => step.name === 'Verify current default-branch candidate'
+        );
+        const publish = job.steps.find((step) => step.name === 'Publish SnapDrift baseline');
+
+        expect(workflow.on.push.branches).toEqual(['main']);
+        expect(workflow).not.toHaveProperty('concurrency');
+        expect(candidate.run).toContain('git ls-remote origin "refs/heads/${GITHUB_REF_NAME}"');
+        expect(candidate.run).toContain('GITHUB_SHA');
+        expect(candidate.run).toContain('current=true');
+        expect(publish.if).toBe("steps.baseline_candidate.outputs.current == 'true'");
+        expect(publish.uses).toBe('ranacseruet/snapdrift@v0.8.2');
+        expect(publish.with).not.toHaveProperty('route-ids');
     });
 
     it('actions that shell out to node or npm self-provision Node 22', async () => {

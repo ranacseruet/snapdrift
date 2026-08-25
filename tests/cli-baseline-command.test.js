@@ -131,6 +131,22 @@ describe('runBaselineCommand — provider: "local"', () => {
     expect(createProviderMock).toHaveBeenCalledWith('local', {});
     expect(stdout.join('')).toMatch(/Captured 2 route\(s\)/);
   });
+
+  it('retains scoped baseline capture for the local provider', async () => {
+    const provider = makeProvider();
+    loadSnapdriftConfigMock.mockResolvedValue({ config: {} });
+    createProviderMock.mockReturnValue(provider);
+
+    await runBaselineCommand(opts({ routes: ['home'] }));
+
+    expect(provider.capture).toHaveBeenCalledWith({
+      configPath: undefined,
+      routeIds: ['home'],
+      outDir: BASELINE_DIR,
+      purpose: 'baseline'
+    });
+    expect(provider.publishBaseline).not.toHaveBeenCalled();
+  });
 });
 
 // Snap can go down *after* capture succeeds — while polling the render or

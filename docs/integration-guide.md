@@ -46,14 +46,14 @@ SnapDrift owns route selection, capture, comparison, skipped-report generation, 
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.8.1
+  uses: ranacseruet/snapdrift@v0.8.2
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
     artifact-retention-days: '30'
 ```
 
-If you want only part of the route set, pass `route-ids`. If you don't want to upload the artifact (for example when using the Snap provider, which uploads via its own API), set `upload-artifact: 'false'`.
+For a local-provider baseline, `route-ids` may select part of the route set. A hosted Snap baseline is authoritative and must run in GitHub Actions on the project default branch with every configured route, so a partial `route-ids` value or unresolved CI commit fails before a run is created. Route scoping remains supported in `pr-diff` mode. If you don't want to upload the artifact (for example when using the Snap provider, which uploads via its own API), set `upload-artifact: 'false'`.
 
 ## Step 3: Run the pull request report
 
@@ -71,7 +71,7 @@ Then add SnapDrift after the app is running:
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.8.1
+  uses: ranacseruet/snapdrift@v0.8.2
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,8 +86,8 @@ The wrappers remain published in their own right, and are equivalent to the disp
 
 | Entry point | Equivalent to |
 |-------------|---------------|
-| `ranacseruet/snapdrift@v0.8.1` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.8.1` |
-| `ranacseruet/snapdrift@v0.8.1` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.8.1` |
+| `ranacseruet/snapdrift@v0.8.2` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.8.2` |
+| `ranacseruet/snapdrift@v0.8.2` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.8.2` |
 
 Use the wrappers directly when you want to skip the dispatcher's input indirection, and the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions when you need to orchestrate the stages yourself.
 
@@ -130,7 +130,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.8.1
+        uses: ranacseruet/snapdrift@v0.8.2
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -170,7 +170,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.8.1
+        uses: ranacseruet/snapdrift@v0.8.2
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -231,6 +231,8 @@ By default SnapDrift writes baselines and reports to the runner filesystem (`pro
   - `"fallback-local"` — log a warning and run the rest of the pipeline with `LocalProvider`.
 
 Both behaviors apply at every phase of a run — capture, diff, and baseline publish. `fallback-local` switches the whole remainder of the pipeline to local artifacts and the local pixel engine; if Snap had already rendered the current capture server-side, the routes are recaptured on the runner first, so `actions/pr-diff` needs Playwright available (the wrapper installs it whenever `onUnavailable` is `fallback-local`). Nothing is published to Snap on a fallback run. See [Outage policy](contracts.md#outage-policy) for the full matrix.
+
+Hosted baseline publication is complete and default-branch-only. SnapDrift rejects scoped baseline capture before creating the run, records the configured/selected route ids and exact route/viewport identities, and publishes only when every expected capture finishes successfully with a stored image. The run records one resolved branch and commit (`branch` / `prHeadSha`) plus a publication workflow ref and monotonic sequence. GitHub Actions provides these automatically; other CI systems may set `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`. Snap uses the sequence for same-workflow ordering and source-run timestamps for cross-workflow freshness. Missing, failed, duplicate, or unexpected captures abort publication without replacing the accepted baseline. If a source run loses the race to a newer candidate, the API returns `409 baseline_stale_source`; an inconsistent manifest/source workflow identity returns `409 baseline_source_run_mismatch` with `details.reason = "workflow_mismatch"`. Workflow-ref rotation itself is supported. This restriction does not apply to non-publishing hosted captures, hosted PR-diff runs, or local-provider baselines.
 
 The Snap API client retries 5xx and network errors with exponential backoff (3 attempts, 1 s → 2 s → 4 s, capped at 30 s). 4xx errors never retry and never fall back.
 
@@ -304,9 +306,7 @@ Use the provided workflow template to refresh the baseline automatically on ever
 
 Drop a copy into your repo at `.github/workflows/snapdrift-refresh-baseline.yml`, then fill in the `TODO` blocks with your app's build and start steps — the same steps you use in your PR workflow. The template uses a `push` trigger on the default branch so published artifacts are discoverable by the baseline resolver in `actions/pr-diff`.
 
-### Label-gated refreshes
-
-If you don't want to republish the baseline on every push, the template includes a commented `if` condition that gates on a label (e.g. `snapdrift:refresh-baseline`). A preceding job can check the most recent merged PR for the label and set an output to control whether the baseline refresh runs.
+Run this job after every successful default-branch build. Hosted publication is the only operation that may intentionally remove a configured route from the canonical baseline, so skipping merges can leave later PRs comparing against stale route configuration.
 
 ## Troubleshooting
 
