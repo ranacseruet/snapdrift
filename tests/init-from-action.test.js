@@ -223,4 +223,47 @@ describe('runInitFromAction', () => {
       process.chdir(originalCwd);
     }
   });
+
+  it('parses a moderately-nested flow collection within a time budget (parser regression guard)', async () => {
+    // GHSA-pm4m-ph32-ghv5 targets flow-collection parsing (exponential/
+    // quadratic time on nested inline { } / [ ] collections). js-yaml.dump()
+    // emits nested structures in block style, so this fixture embeds a
+    // multi-level inline flow collection directly to exercise the exact
+    // construct. Kept moderate (5 levels) so it stays fast on the fixed
+    // parser while still catching a regression to slow parsing.
+    const workflowYaml = [
+      'name: CI',
+      "on: {pull_request: {branches: [main]}}",
+      'jobs:',
+      '  screenshots:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - uses: actions/checkout@v4',
+      "      - uses: i2dev-com/snap/github-action@v1",
+      "        with: {threshold: '0.02', layers: {a: {b: {c: {d: {e: 4}}}}}}",
+      ''
+    ].join('\n');
+
+    const workflowPath = path.join(tempDir, 'workflow.yml');
+    await fs.writeFile(workflowPath, workflowYaml);
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const start = performance.now();
+      await runInitFromAction(workflowPath);
+      const elapsedMs = performance.now() - start;
+
+      // The fixed parser resolves a 5-level nested flow collection in well
+      // under a millisecond; approaching this budget would indicate
+      // quadratic/exponential flow-collection parsing (the advisory).
+      expect(elapsedMs).toBeLessThan(1000);
+
+      const configContent = await fs.readFile('.github/snapdrift.json', 'utf-8');
+      const config = JSON.parse(configContent);
+      expect(config.diff.threshold).toBe(0.02);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });
