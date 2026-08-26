@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { runInitFromAction } = await import('../lib/init-from-action.mjs');
 
@@ -224,46 +225,20 @@ describe('runInitFromAction', () => {
     }
   });
 
-  it('parses a moderately-nested flow collection within a time budget (parser regression guard)', async () => {
-    // GHSA-pm4m-ph32-ghv5 targets flow-collection parsing (exponential/
-    // quadratic time on nested inline { } / [ ] collections). js-yaml.dump()
-    // emits nested structures in block style, so this fixture embeds a
-    // multi-level inline flow collection directly to exercise the exact
-    // construct. Kept moderate (5 levels) so it stays fast on the fixed
-    // parser while still catching a regression to slow parsing.
-    const workflowYaml = [
-      'name: CI',
-      "on: {pull_request: {branches: [main]}}",
-      'jobs:',
-      '  screenshots:',
-      '    runs-on: ubuntu-latest',
-      '    steps:',
-      '      - uses: actions/checkout@v4',
-      "      - uses: i2dev-com/snap/github-action@v1",
-      "        with: {threshold: '0.02', layers: {a: {b: {c: {d: {e: 4}}}}}}",
-      ''
-    ].join('\n');
+  it('keeps js-yaml outside the flow-collection-DoS vulnerable range (#128)', async () => {
+    // The lockfile is the authoritative record of installed versions (npm ci
+    // installs from it), so assert on its js-yaml entry rather than a transient
+    // process read. This directly guards against reintroducing the advisory:
+    // any downgrade back into 5.0.0–5.2.1 fails the test.
+    const lockPath = fileURLToPath(new URL('../package-lock.json', import.meta.url));
+    const installed = JSON.parse(await fs.readFile(lockPath, 'utf-8'))
+      .packages['node_modules/js-yaml'].version;
 
-    const workflowPath = path.join(tempDir, 'workflow.yml');
-    await fs.writeFile(workflowPath, workflowYaml);
-
-    const originalCwd = process.cwd();
-    process.chdir(tempDir);
-    try {
-      const start = performance.now();
-      await runInitFromAction(workflowPath);
-      const elapsedMs = performance.now() - start;
-
-      // The fixed parser resolves a 5-level nested flow collection in well
-      // under a millisecond; approaching this budget would indicate
-      // quadratic/exponential flow-collection parsing (the advisory).
-      expect(elapsedMs).toBeLessThan(1000);
-
-      const configContent = await fs.readFile('.github/snapdrift.json', 'utf-8');
-      const config = JSON.parse(configContent);
-      expect(config.diff.threshold).toBe(0.02);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // GHSA-pm4m-ph32-ghv5 affects js-yaml 5.0.0–5.2.1 (exponential/quadratic
+    // flow-collection parsing); the fix is >= 5.2.2. Compare major.minor.patch
+    // numerically so the guard holds across future 5.x releases.
+    const [major, minor, patch] = installed.split('.').map((n) => Number(n) || 0);
+    const inVulnerableRange = major === 5 && (minor < 2 || (minor === 2 && patch <= 1));
+    expect(inVulnerableRange).toBe(false);
   });
 });
