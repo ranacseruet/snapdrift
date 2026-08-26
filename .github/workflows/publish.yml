@@ -58,23 +58,26 @@ jobs:
       # Publish workspace packages in dependency order before the root package.
       # This ensures npm can resolve workspace deps when publishing snapdrift.
       # Authentication uses npm trusted publishing (OIDC) — no token required.
-      # The `|| true` makes each publish idempotent: if the version already
-      # exists on npm, the step succeeds without error.
+      # Each publish is fail-closed: the step fails the release job on any error except the
+      # supported "version already exists" duplicate, which is skipped idempotently. A preflight
+      # registry check skips already-published versions; otherwise publish is attempted and its
+      # failure is narrowly classified so authentication, network, package-validation, and
+      # dependency errors fail the job rather than leaving a partial release green.
       - name: Publish @snapdrift/manifest
-        run: npm publish --provenance --access public || true
+        run: node ../../scripts/publish-package.mjs
         working-directory: packages/manifest
 
       - name: Publish @snapdrift/compare-core
-        run: npm publish --provenance --access public || true
+        run: node ../../scripts/publish-package.mjs
         working-directory: packages/compare-core
 
       - name: Publish @snapdrift/adapter-report-md
-        run: npm publish --provenance --access public || true
+        run: node ../../scripts/publish-package.mjs
         working-directory: packages/adapter-report-md
 
       - name: Publish @snapdrift/adapter-fs
-        run: npm publish --provenance --access public || true
+        run: node ../../scripts/publish-package.mjs
         working-directory: packages/adapter-fs
 
       - name: Publish snapdrift
-        run: npm publish --provenance --access public || true
+        run: node ../../scripts/publish-package.mjs
