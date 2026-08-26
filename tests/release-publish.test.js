@@ -183,7 +183,15 @@ function writeFakeNpm(dir) {
     npm,
     [
       '#!/usr/bin/env node',
-      '// Fake `npm publish` driven by MOCK_PUT_STATUS / MOCK_PUT_BODY for the shell test.',
+      '// Fake `npm publish` for the shell test. It requires the `publish` subcommand (so a missing',
+      '// subcommand such as "npm --provenance" is caught rather than ignored) and drives the exit',
+      '// code / stderr by MOCK_PUT_STATUS / MOCK_PUT_BODY to exercise the helper narrow classification offline.',
+      'const args = process.argv.slice(2);',
+      'if (args[0] !== "publish") {',
+      '  const missing = args.length > 0 ? args[0] : "(none)";',
+      '  process.stderr.write(`npm error Missing subcommand: expected "publish", got ${JSON.stringify(missing)}\\n`);',
+      '  process.exit(1);',
+      '}',
       'const status = Number(process.env.MOCK_PUT_STATUS ?? 201);',
       'const body = process.env.MOCK_PUT_BODY ?? \'\';',
       'if (status >= 200 && status < 300) { process.exit(0); }',
@@ -234,7 +242,7 @@ describe('readEnvOverrides', () => {
   it('uses the public registry and trusted-publishing args by default', () => {
     expect(readEnvOverrides({})).toEqual({
       registry: 'https://registry.npmjs.org',
-      publishArgs: ['--provenance', '--access', 'public']
+      publishArgs: ['publish', '--provenance', '--access', 'public']
     });
   });
 
@@ -243,14 +251,14 @@ describe('readEnvOverrides', () => {
       readEnvOverrides({ SNAPDRIFT_REGISTRY: 'http://localhost:5000', SNAPDRIFT_SKIP_PROVENANCE: '1' })
     ).toEqual({
       registry: 'http://localhost:5000',
-      publishArgs: ['--registry', 'http://localhost:5000']
+      publishArgs: ['publish', '--registry', 'http://localhost:5000']
     });
   });
 
   it('keeps trusted-publishing args for a custom registry when not skipping', () => {
     expect(readEnvOverrides({ SNAPDRIFT_REGISTRY: 'http://localhost:5000' })).toEqual({
       registry: 'http://localhost:5000',
-      publishArgs: ['--provenance', '--access', 'public']
+      publishArgs: ['publish', '--provenance', '--access', 'public']
     });
   });
 });

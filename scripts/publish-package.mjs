@@ -90,7 +90,7 @@ async function readPackageMeta(cwd) {
 export async function publishPackage({
   cwd = process.cwd(),
   registry = DEFAULT_REGISTRY,
-  publishArgs = ['--provenance', '--access', 'public'],
+  publishArgs = ['publish', '--provenance', '--access', 'public'],
   fetchImpl = globalThis.fetch,
   publishImpl = defaultPublish
 } = {}) {
@@ -137,9 +137,9 @@ export async function publishPackage({
 export function readEnvOverrides(env) {
   const registry = env.SNAPDRIFT_REGISTRY ?? DEFAULT_REGISTRY;
   if (env.SNAPDRIFT_SKIP_PROVENANCE === '1') {
-    return { registry, publishArgs: ['--registry', registry] };
+    return { registry, publishArgs: ['publish', '--registry', registry] };
   }
-  return { registry, publishArgs: ['--provenance', '--access', 'public'] };
+  return { registry, publishArgs: ['publish', '--provenance', '--access', 'public'] };
 }
 
 /**
