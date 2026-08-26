@@ -164,6 +164,10 @@ runs:
         {
           echo "results_file=$RESULTS_FILE"
           echo "manifest_file=$MANIFEST_FILE"
-          echo "run_dir=${GITHUB_WORKSPACE}/${DOWNLOAD_PATH}"
+          case "$DOWNLOAD_PATH" in
+            /*) RUN_DIR="$DOWNLOAD_PATH" ;;
+            *) RUN_DIR="${GITHUB_WORKSPACE}/${DOWNLOAD_PATH}" ;;
+          esac
+          echo "run_dir=$RUN_DIR"
           echo "screenshots_dir=$(dirname "$MANIFEST_FILE")/screenshots"
         } >> "$GITHUB_OUTPUT"
