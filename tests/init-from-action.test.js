@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { runInitFromAction } = await import('../lib/init-from-action.mjs');
 
@@ -222,5 +223,22 @@ describe('runInitFromAction', () => {
     } finally {
       process.chdir(originalCwd);
     }
+  });
+
+  it('keeps js-yaml outside the flow-collection-DoS vulnerable range (#128)', async () => {
+    // The lockfile is the authoritative record of installed versions (npm ci
+    // installs from it), so assert on its js-yaml entry rather than a transient
+    // process read. This directly guards against reintroducing the advisory:
+    // any downgrade back into 5.0.0–5.2.1 fails the test.
+    const lockPath = fileURLToPath(new URL('../package-lock.json', import.meta.url));
+    const installed = JSON.parse(await fs.readFile(lockPath, 'utf-8'))
+      .packages['node_modules/js-yaml'].version;
+
+    // GHSA-pm4m-ph32-ghv5 affects js-yaml 5.0.0–5.2.1 (exponential/quadratic
+    // flow-collection parsing); the fix is >= 5.2.2. Compare major.minor.patch
+    // numerically so the guard holds across future 5.x releases.
+    const [major, minor, patch] = installed.split('.').map((n) => Number(n) || 0);
+    const inVulnerableRange = major === 5 && (minor < 2 || (minor === 2 && patch <= 1));
+    expect(inVulnerableRange).toBe(false);
   });
 });
