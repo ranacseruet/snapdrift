@@ -116,6 +116,26 @@ describe('captureWithPolicy', () => {
       captureWithPolicy({ provider, providerName: 'snap', captureOptions: {} })
     ).rejects.toThrow(/unauthorized_visual_scope/);
   });
+
+  it('lets the wrapper reject a local capture fallback when baseline lookup failed', async () => {
+    const snapProvider = makeProvider({ captureError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+
+    await expect(
+      captureWithPolicy({
+        provider: snapProvider,
+        providerName: 'snap',
+        config: { baseUrl: 'https://example.com' },
+        captureOptions: { routeIds: ['home'] },
+        createLocalProvider: () => localProvider,
+        onFallback: () => {
+          throw new Error('Cannot fall back to a local capture because the GitHub baseline lookup failed.');
+        }
+      })
+    ).rejects.toThrow(/GitHub baseline lookup failed/);
+
+    expect(localProvider.capture).not.toHaveBeenCalled();
+  });
 });
 
 describe('diffWithPolicy', () => {
@@ -210,6 +230,28 @@ describe('diffWithPolicy', () => {
     expect(localProvider.capture).not.toHaveBeenCalled();
     expect(localProvider.diff).not.toHaveBeenCalled();
     expect(onBaselineUnavailable).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the wrapper fail a local fallback when baseline lookup failed', async () => {
+    const snapProvider = makeProvider({ diffError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+
+    await expect(
+      diffWithPolicy({
+        provider: snapProvider,
+        providerName: 'snap',
+        diffOptions: { ...diffOptions, baselineResultsPath: undefined },
+        captureOptions: { routeIds: ['home'] },
+        localScreenshots: false,
+        createLocalProvider: () => localProvider,
+        onBaselineUnavailable: () => {
+          throw new Error('Cannot fall back to a local diff because the GitHub baseline lookup failed.');
+        }
+      })
+    ).rejects.toThrow(/GitHub baseline lookup failed/);
+
+    expect(localProvider.capture).not.toHaveBeenCalled();
+    expect(localProvider.diff).not.toHaveBeenCalled();
   });
 
   it('fails loudly when a recapture is required but no captureOptions were supplied', async () => {

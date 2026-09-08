@@ -38,6 +38,9 @@ outputs:
   found:
     description: Whether a non-expired baseline was found.
     value: ${{ steps.resolve.outputs.found }}
+  resolution-status:
+    description: 'Baseline lookup status: found, missing, or error.'
+    value: ${{ steps.resolve.outputs.resolution_status }}
   artifact-name:
     description: Resolved artifact name.
     value: ${{ steps.resolve.outputs.artifact_name }}
@@ -87,6 +90,16 @@ runs:
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
 
+          const setLookupError = (error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            const message = `Unable to resolve the SnapDrift baseline artifact: ${detail}`;
+            core.setOutput('found', 'false');
+            core.setOutput('resolution_status', 'error');
+            core.setOutput('artifact_name', artifactName);
+            core.setOutput('message', message);
+            core.setFailed(message);
+          };
+
           try {
             const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
               owner,
@@ -97,22 +110,43 @@ runs:
               per_page: 20
             });
 
+            if (!Array.isArray(runs)) {
+              throw new Error('GitHub returned an invalid workflow run list.');
+            }
+
             let selectedRun = null;
             let selectedArtifact = null;
 
             for (const run of runs) {
+              if (!run || typeof run !== 'object' || !Number.isInteger(run.id) ||
+                  typeof run.status !== 'string' || typeof run.conclusion !== 'string' ||
+                  typeof run.head_sha !== 'string' || run.head_sha.length === 0) {
+                throw new Error('GitHub returned a malformed workflow run record.');
+              }
+
               if (run.status !== 'completed' || run.conclusion !== 'success') {
                 continue;
               }
 
-              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              const artifactsResponse = await github.rest.actions.listWorkflowRunArtifacts({
                 owner,
                 repo,
                 run_id: run.id,
                 per_page: 100
               });
+              const artifacts = artifactsResponse?.data?.artifacts;
+              if (!Array.isArray(artifacts)) {
+                throw new Error(`GitHub returned a malformed artifact list for workflow run ${run.id}.`);
+              }
 
-              const match = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
+              for (const artifact of artifacts) {
+                if (!artifact || typeof artifact !== 'object' || typeof artifact.name !== 'string' ||
+                    typeof artifact.expired !== 'boolean') {
+                  throw new Error(`GitHub returned a malformed artifact record for workflow run ${run.id}.`);
+                }
+              }
+
+              const match = artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
               if (match) {
                 selectedRun = run;
                 selectedArtifact = match;
@@ -122,20 +156,20 @@ runs:
 
             if (!selectedRun || !selectedArtifact) {
               core.setOutput('found', 'false');
+              core.setOutput('resolution_status', 'missing');
               core.setOutput('artifact_name', artifactName);
               core.setOutput('message', `No non-expired SnapDrift baseline artifact named ${artifactName} was found.`);
               return;
             }
 
             core.setOutput('found', 'true');
+            core.setOutput('resolution_status', 'found');
             core.setOutput('artifact_name', selectedArtifact.name);
             core.setOutput('head_sha', selectedRun.head_sha);
             core.setOutput('run_id', String(selectedRun.id));
             core.setOutput('message', '');
           } catch (error) {
-            core.setOutput('found', 'false');
-            core.setOutput('artifact_name', artifactName);
-            core.setOutput('message', `Unable to resolve the SnapDrift baseline artifact: ${error.message}`);
+            setLookupError(error);
           }
 
     - if: steps.resolve.outputs.found == 'true'

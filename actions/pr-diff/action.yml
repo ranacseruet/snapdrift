@@ -71,6 +71,9 @@ outputs:
   baseline-found:
     description: Whether a usable baseline was found.
     value: ${{ steps.finalize.outputs.baseline_found }}
+  baseline-resolution-status:
+    description: 'Baseline lookup status: found, missing, or error.'
+    value: ${{ steps.finalize.outputs.baseline_resolution_status }}
   status:
     description: Final SnapDrift status.
     value: ${{ steps.finalize.outputs.status }}
@@ -218,6 +221,15 @@ runs:
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
           const artifactName = config.baselineArtifactName;
 
+          const setLookupError = (error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            const message = `Unable to resolve the SnapDrift baseline artifact: ${detail}`;
+            core.setOutput('found', 'false');
+            core.setOutput('resolution_status', 'error');
+            core.setOutput('artifact_name', artifactName);
+            core.setOutput('message', message);
+          };
+
           try {
             const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
               owner,
@@ -228,22 +240,43 @@ runs:
               per_page: 20
             });
 
+            if (!Array.isArray(runs)) {
+              throw new Error('GitHub returned an invalid workflow run list.');
+            }
+
             let selectedRun = null;
             let selectedArtifact = null;
 
             for (const run of runs) {
+              if (!run || typeof run !== 'object' || !Number.isInteger(run.id) ||
+                  typeof run.status !== 'string' || typeof run.conclusion !== 'string' ||
+                  typeof run.head_sha !== 'string' || run.head_sha.length === 0) {
+                throw new Error('GitHub returned a malformed workflow run record.');
+              }
+
               if (run.status !== 'completed' || run.conclusion !== 'success') {
                 continue;
               }
 
-              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              const artifactsResponse = await github.rest.actions.listWorkflowRunArtifacts({
                 owner,
                 repo,
                 run_id: run.id,
                 per_page: 100
               });
+              const artifacts = artifactsResponse?.data?.artifacts;
+              if (!Array.isArray(artifacts)) {
+                throw new Error(`GitHub returned a malformed artifact list for workflow run ${run.id}.`);
+              }
 
-              const match = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
+              for (const artifact of artifacts) {
+                if (!artifact || typeof artifact !== 'object' || typeof artifact.name !== 'string' ||
+                    typeof artifact.expired !== 'boolean') {
+                  throw new Error(`GitHub returned a malformed artifact record for workflow run ${run.id}.`);
+                }
+              }
+
+              const match = artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
               if (match) {
                 selectedRun = run;
                 selectedArtifact = match;
@@ -253,20 +286,20 @@ runs:
 
             if (!selectedRun || !selectedArtifact) {
               core.setOutput('found', 'false');
+              core.setOutput('resolution_status', 'missing');
               core.setOutput('artifact_name', artifactName);
               core.setOutput('message', `No non-expired SnapDrift baseline artifact named ${artifactName} was found.`);
               return;
             }
 
             core.setOutput('found', 'true');
+            core.setOutput('resolution_status', 'found');
             core.setOutput('artifact_name', selectedArtifact.name);
             core.setOutput('head_sha', selectedRun.head_sha);
             core.setOutput('run_id', String(selectedRun.id));
             core.setOutput('message', '');
           } catch (error) {
-            core.setOutput('found', 'false');
-            core.setOutput('artifact_name', artifactName);
-            core.setOutput('message', `Unable to resolve the SnapDrift baseline artifact: ${error.message}`);
+            setLookupError(error);
           }
 
     - if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found == 'true'
@@ -320,6 +353,16 @@ runs:
         await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
         EOF
 
+    - id: baseline_resolution_guard
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.resolution_status == 'error' && steps.config.outputs.provider != 'snap'
+      shell: bash
+      env:
+        BASELINE_MESSAGE: ${{ steps.baseline.outputs.message }}
+      run: |
+        set -euo pipefail
+        printf 'SnapDrift baseline lookup failed. %s\n' "$BASELINE_MESSAGE" >&2
+        exit 1
+
     - name: Install Playwright Chromium
       if: steps.scope.outputs.should_run == 'true' && (steps.config.outputs.provider != 'snap' || steps.config.outputs.on_unavailable == 'fallback-local' || steps.config.outputs.snap_local_capture == 'true')
       shell: bash
@@ -332,6 +375,8 @@ runs:
       env:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
         ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
+        BASELINE_RESOLUTION_STATUS: ${{ steps.baseline.outputs.resolution_status }}
+        BASELINE_RESOLUTION_MESSAGE: ${{ steps.baseline.outputs.message }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -360,7 +405,14 @@ runs:
             routeIds
           },
           onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable — skipping visual regression (warn-and-skip).\n'),
-          onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable — falling back to local provider.\n')
+          onFallback: () => {
+            if (process.env.BASELINE_RESOLUTION_STATUS === 'error') {
+              throw new Error(
+                `Cannot fall back to a local capture because the GitHub baseline lookup failed. ${process.env.BASELINE_RESOLUTION_MESSAGE || ''}`.trim()
+              );
+            }
+            process.stderr.write('[SnapDrift] Snap unavailable — falling back to local provider.\n');
+          }
         });
 
         if (captured.outcome === 'skipped') {
@@ -414,6 +466,8 @@ runs:
         CAPTURE_PROVIDER: ${{ steps.capture.outputs.provider }}
         LOCAL_SCREENSHOTS: ${{ steps.capture.outputs.local_screenshots }}
         BASELINE_FOUND: ${{ steps.baseline.outputs.found }}
+        BASELINE_RESOLUTION_STATUS: ${{ steps.baseline.outputs.resolution_status }}
+        BASELINE_RESOLUTION_MESSAGE: ${{ steps.baseline.outputs.message }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -467,7 +521,14 @@ runs:
           onSkip: () => process.stderr.write('[SnapDrift] Snap unavailable during diff — skipping (warn-and-skip).\n'),
           onFallback: () => process.stderr.write('[SnapDrift] Snap unavailable during diff — falling back to local provider.\n'),
           onRecapture: () => process.stderr.write('[SnapDrift] The current capture was rendered by Snap, so it has no local screenshots — recapturing locally before diffing.\n'),
-          onBaselineUnavailable: () => process.stderr.write('[SnapDrift] No baseline artifact is available, so the local diff cannot run.\n')
+          onBaselineUnavailable: () => {
+            if (process.env.BASELINE_RESOLUTION_STATUS === 'error') {
+              throw new Error(
+                `Cannot fall back to a local diff because the GitHub baseline lookup failed. ${process.env.BASELINE_RESOLUTION_MESSAGE || ''}`.trim()
+              );
+            }
+            process.stderr.write('[SnapDrift] No baseline artifact is available, so the local diff cannot run.\n');
+          }
         });
 
         // Every non-throwing outcome writes a summary. A wrapper run that ends
@@ -543,7 +604,7 @@ runs:
         EOF
 
     - id: skipped_baseline
-      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.found != 'true' && steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
+      if: steps.scope.outputs.should_run == 'true' && steps.baseline.outputs.resolution_status == 'missing' && steps.capture.outputs.provider != 'snap' && steps.capture.outputs.provider != 'skipped'
       shell: bash
       env:
         MESSAGE: ${{ steps.baseline.outputs.message }}
@@ -638,6 +699,8 @@ runs:
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
         MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
         MAX_ERROR_ROWS: ${{ inputs.max-error-rows }}
+        BASELINE_RESOLUTION_STATUS: ${{ steps.baseline.outputs.resolution_status }}
+        BASELINE_RESOLUTION_MESSAGE: ${{ steps.baseline.outputs.message }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -659,7 +722,12 @@ runs:
 
           if (!summaryPath || !fs.existsSync(summaryPath)) {
             const runUrl = process.env.RUN_URL || '';
-            const body = `${PR_COMMENT_MARKER}\n<img src="${iconUrl}" alt="SnapDrift" width="20" height="20" />\n\n### ⚠️ SnapDrift Report — Capture Failed\n\nSnapDrift did not produce a summary. This usually means capture failed before the report could be assembled.\n\n[View run](${runUrl}) for details.\n\n<div align="right"><sub>Powered by <a href="${repoUrl}">SnapDrift</a></sub></div>`;
+            const lookupFailure = process.env.BASELINE_RESOLUTION_STATUS === 'error';
+            const heading = lookupFailure ? 'Baseline Lookup Failed' : 'Capture Failed';
+            const detail = lookupFailure
+              ? process.env.BASELINE_RESOLUTION_MESSAGE || 'The GitHub baseline lookup failed before comparison could run.'
+              : 'SnapDrift did not produce a summary. This usually means capture failed before the report could be assembled.';
+            const body = `${PR_COMMENT_MARKER}\n<img src="${iconUrl}" alt="SnapDrift" width="20" height="20" />\n\n### ⚠️ SnapDrift Report — ${heading}\n\n${detail}\n\n[View run](${runUrl}) for details.\n\n<div align="right"><sub>Powered by <a href="${repoUrl}">SnapDrift</a></sub></div>`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -761,6 +829,7 @@ runs:
         SCOPE_REASON: ${{ steps.scope.outputs.reason }}
         SELECTED_ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
         BASELINE_FOUND: ${{ steps.baseline.outputs.found || 'false' }}
+        BASELINE_RESOLUTION_STATUS: ${{ steps.baseline.outputs.resolution_status || '' }}
         STATUS: ${{ steps.compare.outputs.status || steps.capture.outputs.status || steps.skipped_baseline.outputs.status || steps.skipped_scope.outputs.status || '' }}
         SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.capture.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path || '' }}
         MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.capture.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path || '' }}
@@ -771,6 +840,7 @@ runs:
           echo "scope_reason=${SCOPE_REASON:-}"
           echo "selected_route_ids=${SELECTED_ROUTE_IDS:-}"
           echo "baseline_found=${BASELINE_FOUND:-false}"
+          echo "baseline_resolution_status=${BASELINE_RESOLUTION_STATUS:-}"
           echo "status=${STATUS:-}"
           echo "summary_path=${SUMMARY_PATH:-}"
           echo "markdown_path=${MARKDOWN_PATH:-}"

@@ -4,6 +4,11 @@
 
 ### Fixes
 
+- **Baseline lookup failures no longer masquerade as missing artifacts** (#147). The baseline
+  resolver now reports `found`, `missing`, or `error`, fails standalone resolution on API/network/
+  malformed responses, and keeps the PR wrapper's hosted Snap path available while failing local
+  comparisons and local fallbacks when GitHub cannot provide the baseline. The existing intentional
+  first-run skipped summary remains limited to a successful lookup with no non-expired artifact.
 - **Hosted Snap diffs now fail closed on incomplete results** (#146). Hosted comparison now validates `purpose: "diff"`, the persisted run metadata, and expected route/viewport identities, polls until the expected capture set is available, verifies the returned run id and paths, and rejects duplicate, missing, pending, malformed, or invalid captures as `incomplete`. A diffed capture is counted only when both image objects and a finite numeric `diffPct` are present; older results without expected capture identities must be recaptured instead of being treated as clean.
 
 ### Chore

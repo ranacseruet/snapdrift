@@ -205,7 +205,7 @@ jobs:
 | `max-changed-rows` | `20` | Max changed-route rows shown in the PR comment before truncation |
 | `max-error-rows` | `10` | Max error rows shown in the PR comment before truncation |
 
-The `pr-diff` action also exposes outputs you can use in subsequent steps: `should-run`, `scope-reason`, `selected-route-ids`, `baseline-found`, `status`, `summary-path`, `markdown-path`, `artifact-name`, `bundle-dir`. See the wrapper action's `outputs:` block for the canonical list.
+The `pr-diff` action also exposes outputs you can use in subsequent steps: `should-run`, `scope-reason`, `selected-route-ids`, `baseline-found`, `baseline-resolution-status`, `status`, `summary-path`, `markdown-path`, `artifact-name`, `bundle-dir`. `baseline-resolution-status` is `found`, `missing`, or `error`; `missing` is the intentional first-baseline case, while `error` means the GitHub lookup failed and causes local comparisons or local Snap fallbacks to fail. Healthy hosted Snap diffs can continue without the downloaded GitHub artifact. See the wrapper action's `outputs:` block for the canonical list.
 
 ## Hosted Snap provider
 
@@ -267,7 +267,8 @@ The `pr-diff` wrapper composes the following low-level steps. They're still avai
 - `actions/capture` — capture routes and emit `results.json` + `manifest.json`
 - `actions/compare` — diff current capture against a baseline
 - `actions/scope` — decide whether to run and which routes to select from changed files
-- `actions/resolve-baseline` — find and download the latest successful baseline artifact
+- `actions/resolve-baseline` — find and download the latest successful baseline artifact; its
+  `resolution-status` output distinguishes `found`, `missing`, and `error`
 - `actions/stage` — assemble the baseline or diff bundle for upload
 - `actions/enforce` — evaluate the summary against `diff.mode` and fail when required
 - `actions/comment` — upsert a PR comment from a summary (provider-aware)
@@ -312,6 +313,12 @@ Run this job after every successful default-branch build. Hosted publication is 
 
 **"No non-expired SnapDrift baseline artifact was found"**  
 The baseline workflow has not completed successfully on `main`, or the artifact expired. With the Snap provider, the equivalent situation is a 404 from `/v1/visual/projects/:id/baselines/latest`; `SnapProvider` swallows that 404 and proceeds without a baseline — `onUnavailable` is **not** consulted for this case (a 404 is the legitimate "no baseline yet" signal, not a Snap outage). If you want the PR pipeline to tolerate the first-run case, set `diff.mode: "report-only"`; `onUnavailable: "warn-and-skip"` will not help here.
+
+**"Unable to resolve the SnapDrift baseline artifact"**
+GitHub failed while listing workflow runs or artifacts. Check the job's `actions: read` permission,
+repository/workflow/branch inputs, and GitHub API availability. Snap hosted diffs can still use the
+hosted comparison path, but local comparisons and `fallback-local` require a successful GitHub
+artifact lookup.
 
 **403 when posting the PR report**  
 Grant `issues: write` and `pull-requests: write` to the job.

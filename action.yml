@@ -125,6 +125,9 @@ outputs:
   baseline-found:
     description: Whether a usable baseline was found.
     value: ${{ steps.pr-diff.outputs.baseline-found }}
+  baseline-resolution-status:
+    description: 'Baseline lookup status: found, missing, or error.'
+    value: ${{ steps.pr-diff.outputs.baseline-resolution-status }}
   status:
     description: Final SnapDrift status.
     value: ${{ steps.pr-diff.outputs.status }}
