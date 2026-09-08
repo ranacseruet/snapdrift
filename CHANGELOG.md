@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- **Hosted Snap diffs now fail closed on incomplete results** (#146). Hosted comparison now validates the persisted run metadata and expected route/viewport identities, polls until the expected capture set is available, verifies the returned run id and paths, and rejects duplicate, missing, pending, malformed, or invalid captures as `incomplete`. A diffed capture is counted only when both image objects and a finite `diffPct` are present; older results without expected capture identities must be recaptured instead of being treated as clean.
+- **Hosted Snap diffs now fail closed on incomplete results** (#146). Hosted comparison now validates `purpose: "diff"`, the persisted run metadata, and expected route/viewport identities, polls until the expected capture set is available, verifies the returned run id and paths, and rejects duplicate, missing, pending, malformed, or invalid captures as `incomplete`. A diffed capture is counted only when both image objects and a finite numeric `diffPct` are present; older results without expected capture identities must be recaptured instead of being treated as clean.
 
 ### Chore
 

@@ -1021,6 +1021,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.missing[0].viewport).toEqual({ width: 1440, height: 900 });
       expect(summary.status).toBe('incomplete');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
@@ -1063,6 +1064,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.missing[0].viewport).toEqual({ width: 1440, height: 900 });
       expect(summary.status).toBe('incomplete');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
@@ -1143,7 +1145,11 @@ describe('SnapProvider.diff() baseline mapping', () => {
     expect(summary.totalScreenshots).toBe(2);
     expect(summary.matchedScreenshots).toBe(1);
     expect(summary.missingInCurrent).toBe(1);
-    expect(summary.missing).toContainEqual(expect.objectContaining({ id: 'about', location: 'current' }));
+    expect(summary.missing).toContainEqual(expect.objectContaining({
+      id: 'about',
+      location: 'current',
+      viewport: { width: 390, height: 844 }
+    }));
     expect(summary.status).toBe('incomplete');
   });
 
@@ -1222,6 +1228,24 @@ describe('SnapProvider.diff() baseline mapping', () => {
     expect(shouldFailDriftCheck({ ...summary, diffMode: 'strict' })).toBe(true);
   });
 
+  it('reports an errored expected capture once without also calling it missing', async () => {
+    const { summary } = await runDiffWith([
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'error',
+        errorCode: 'render_failed',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ], diffRunMetadata({ runId: 'run_capture_error' }));
+
+    expect(summary.errors).toEqual([
+      expect.objectContaining({ id: 'home', message: 'render_failed' })
+    ]);
+    expect(summary.missingInCurrent).toBe(0);
+    expect(summary.status).toBe('incomplete');
+  });
+
   it('uses capture metrics instead of a server fail status when the comparison is within threshold', async () => {
     const { summary } = await runDiffWith([
       { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
@@ -1239,7 +1263,11 @@ describe('SnapProvider.diff() baseline mapping', () => {
 
     expect(summary.status).toBe('changes-detected');
     expect(summary.changedScreenshots).toBe(1);
-    expect(summary.changed[0]).toMatchObject({ id: 'home', mismatchRatio: 0.02 });
+    expect(summary.changed[0]).toMatchObject({
+      id: 'home',
+      mismatchRatio: 0.02,
+      viewport: { width: 1440, height: 900 }
+    });
   });
 
   it('keeps a comparison at the configured threshold clean', async () => {
@@ -1290,15 +1318,23 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'pending status',
       metadata: diffRunMetadata({ runId: 'run_pending' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'rendering', currentObjectKey: 'c/home.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        { routeId: 'home', routePath: '/', status: 'pending', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
       ],
-      message: /unknown status "rendering"/
+      message: /unknown status "pending"/
     },
     {
       name: 'invalid diff metric',
       metadata: diffRunMetadata({ runId: 'run_invalid_metric' }),
       captures: [
         { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 2, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /invalid diffPct/
+    },
+    {
+      name: 'string diff metric',
+      metadata: diffRunMetadata({ runId: 'run_string_metric' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: '0.02', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
       ],
       message: /invalid diffPct/
     },
@@ -1336,6 +1372,12 @@ describe('SnapProvider.diff() baseline mapping', () => {
     }
   });
 
+  it('distinguishes an unreadable source metadata path from malformed JSON', async () => {
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => okResponse({}) });
+    await expect(provider.diff({ currentResultsPath: '/tmp/snapdrift-missing-results.json' }))
+      .rejects.toThrow(/could not read capture results metadata/);
+  });
+
   it('rejects capture metadata for a different project before polling', async () => {
     await expect(runDiffWith([], diffRunMetadata({ projectId: 'other-project' })))
       .rejects.toThrow(/belong to project/);
@@ -1344,6 +1386,11 @@ describe('SnapProvider.diff() baseline mapping', () => {
   it('rejects an expected capture set that is inconsistent with selected routes', async () => {
     await expect(runDiffWith([], diffRunMetadata({ selectedRouteIds: ['about'] })))
       .rejects.toThrow(/invalid or not selected/);
+  });
+
+  it('rejects source metadata recorded for a baseline capture', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ purpose: 'baseline' })))
+      .rejects.toThrow(/purpose "baseline", not "diff"/);
   });
 
   it('rejects duplicate expected route identities before polling', async () => {
@@ -1361,6 +1408,11 @@ describe('SnapProvider.diff() baseline mapping', () => {
   it('rejects a response for a different run id', async () => {
     await expect(runDiffWith([], diffRunMetadata({ runId: 'run_requested' }), { id: 'run_other', status: 'error' }))
       .rejects.toThrow(/returned run "run_other" for requested run "run_requested"/);
+  });
+
+  it('rejects a response that omits the run id', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_missing_id' }), { id: undefined }))
+      .rejects.toThrow(/returned run "unknown" for requested run "run_missing_id"/);
   });
 
   it('rejects a malformed run response without treating it as an outage', async () => {
