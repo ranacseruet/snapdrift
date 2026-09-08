@@ -52,6 +52,9 @@ export interface VisualRegressionRouteConfig {
   navigationTimeout?: number;
 }
 
+export function sanitizeRouteId(id: string): string;
+export function assertUniqueRouteIdFilenames(routeIds: Iterable<string>, sourceLabel?: string): void;
+
 export interface VisualRegressionConfig {
   baselineArtifactName: string;
   workingDirectory: string;

@@ -500,6 +500,38 @@ describe('SnapProvider.capture()', () => {
     }
   });
 
+  it('rejects colliding route ids before creating a hosted capture run', async () => {
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url) => {
+        requests.push(url);
+        return okResponse({});
+      }
+    });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-collision-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [
+        { id: 'a/b', path: '/', viewport: 'desktop' },
+        { id: 'a_b', path: '/about', viewport: 'mobile' }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, routeIds: ['a/b'] }))
+        .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+      expect(requests).toEqual([]);
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
   it('rejects a complete hosted baseline without CI publication metadata', async () => {
     const restoreEnvironment = overrideEnvironment({
       GITHUB_ACTIONS: undefined,
@@ -2142,5 +2174,31 @@ describe('SnapProvider.exportBaselines()', () => {
     const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
     await expect(provider.exportBaselines())
       .rejects.toThrow(/predates manifest tracking/);
+  });
+
+  it('rejects colliding source route ids before importing exported screenshots', async () => {
+    const png = tinyPng(2, 3);
+    const baseline = makeBaseline({
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [
+          { routeId: 'a/b', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one.png' },
+          { routeId: 'a_b', routePath: '/about', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two.png' }
+        ]
+      },
+      objects: [
+        { sourceKey: 'visual/p/one.png', archivePath: 'bsl_export_1/images/one.png' },
+        { sourceKey: 'visual/p/two.png', archivePath: 'bsl_export_1/images/two.png' }
+      ]
+    });
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) },
+      { name: 'bsl_export_1/images/one.png', body: png },
+      { name: 'bsl_export_1/images/two.png', body: png }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+
+    await expect(provider.exportBaselines())
+      .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
   });
 });

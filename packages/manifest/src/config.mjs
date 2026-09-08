@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 
+import { assertUniqueRouteIdFilenames } from './route-filenames.mjs';
 import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
@@ -145,6 +146,12 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
           (!Number.isInteger(route.navigationTimeout) || /** @type {number} */ (route.navigationTimeout) <= 0)) {
         errors.push(`${routeLabel}.navigationTimeout must be a positive integer when provided.`);
       }
+    }
+
+    try {
+      assertUniqueRouteIdFilenames(routeIds, 'routes');
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
     }
   }
 

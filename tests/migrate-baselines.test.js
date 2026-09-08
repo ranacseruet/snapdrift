@@ -438,6 +438,49 @@ describe('runMigrateToLocal', () => {
     });
   });
 
+  it('rejects colliding exported route ids before creating the local destination', async () => {
+    const baselineDir = path.join(tempDir, 'collision-baseline');
+    const pngBuffer = await createPngBuffer();
+    const descriptor = JSON.stringify({ width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+    const baseline = {
+      id: 'bsl_collision',
+      projectId: 'test-project',
+      refBranch: 'main',
+      refSha: 'abc1234567890def',
+      status: 'accepted',
+      createdAt: '2026-07-01T00:00:00.000Z',
+      sourceManifest: {
+        schemaVersion: 1,
+        sourceRunId: 'run_collision',
+        routes: [
+          { routeId: 'a/b', routePath: '/', viewportDescriptorJson: descriptor, objectKey: 'visual/test-project/one.png' },
+          { routeId: 'a_b', routePath: '/about', viewportDescriptorJson: descriptor, objectKey: 'visual/test-project/two.png' }
+        ]
+      },
+      objects: [
+        { sourceKey: 'visual/test-project/one.png', archivePath: 'bsl_collision/images/one.png' },
+        { sourceKey: 'visual/test-project/two.png', archivePath: 'bsl_collision/images/two.png' }
+      ]
+    };
+    const tar = buildExportTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'test-project' }, baselines: [baseline] }) },
+      { name: 'bsl_collision/images/one.png', body: pngBuffer },
+      { name: 'bsl_collision/images/two.png', body: pngBuffer }
+    ]);
+    const response = {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => tar.buffer.slice(tar.byteOffset, tar.byteOffset + tar.byteLength),
+      text: async () => ''
+    };
+
+    await withMockedFetch(response, async () => {
+      await expect(runMigrateToLocal(makeConfig(), makeOpts(baselineDir)))
+        .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+    });
+    await expect(fs.access(baselineDir)).rejects.toThrow();
+  });
+
   it('throws if snap config is missing', async () => {
     const baselineDir = path.join(tempDir, 'baseline');
     const config = {

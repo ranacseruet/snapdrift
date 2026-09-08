@@ -7,6 +7,28 @@
 const CURRENT_SCHEMA_VERSION = 1;
 
 /**
+ * @param {Array<{ imagePath?: unknown, id?: unknown }>} screenshots
+ * @returns {void}
+ */
+function assertUniqueManifestImagePaths(screenshots) {
+  const imagePaths = new Map();
+  for (const screenshot of screenshots) {
+    if (typeof screenshot.imagePath !== 'string') {
+      continue;
+    }
+    const previousImagePathId = imagePaths.get(screenshot.imagePath);
+    if (previousImagePathId && previousImagePathId !== screenshot.id) {
+      throw new Error(
+        `Duplicate screenshot imagePath "${screenshot.imagePath}" is used by route ids ` +
+        `"${previousImagePathId}" and "${screenshot.id}". ` +
+        `Rename the route ids and recapture the affected baseline.`
+      );
+    }
+    imagePaths.set(screenshot.imagePath, screenshot.id);
+  }
+}
+
+/**
  * Validate and normalise a screenshot manifest object.
  * If `schemaVersion` is absent, it is set to CURRENT_SCHEMA_VERSION (1).
  *
@@ -77,6 +99,8 @@ export function validateManifest(value) {
     }
   }
 
+  assertUniqueManifestImagePaths(/** @type {Array<{ imagePath?: unknown, id?: unknown }>} */ (candidate.screenshots));
+
   return /** @type {ScreenshotManifest} */ (value);
 }
 
@@ -88,6 +112,8 @@ export function validateManifest(value) {
  * @returns {Map<string, ScreenshotManifestEntry>}
  */
 export function indexManifestEntries(manifest, selectedRouteIds) {
+  assertUniqueManifestImagePaths(manifest.screenshots || []);
+
   const selected = new Set(selectedRouteIds);
   const entries = new Map();
   for (const screenshot of manifest.screenshots || []) {

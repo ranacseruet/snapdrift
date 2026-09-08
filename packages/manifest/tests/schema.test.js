@@ -61,6 +61,18 @@ describe('@snapdrift/manifest — validateManifest', () => {
     expect(() => validateManifest(dup)).toThrow('Duplicate');
   });
 
+  test('rejects duplicate image paths during manifest validation', () => {
+    const dup = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], id: 'a', imagePath: 'screenshots/shared.png' },
+        { ...VALID_MANIFEST.screenshots[1], id: 'b', imagePath: 'screenshots/shared.png' }
+      ]
+    };
+
+    expect(() => validateManifest(dup)).toThrow(/Duplicate screenshot imagePath.*a.*b.*recapture/);
+  });
+
   test('rejects screenshot with missing id', () => {
     const bad = { ...VALID_MANIFEST, screenshots: [{ path: '/', width: 100, height: 100 }] };
     expect(() => validateManifest(bad)).toThrow('id');
@@ -126,6 +138,18 @@ describe('@snapdrift/manifest — indexManifestEntries', () => {
       ]
     };
     expect(() => indexManifestEntries(dup, ['a'])).toThrow('Duplicate');
+  });
+
+  test('rejects duplicate image paths before filtering selected routes', () => {
+    const dup = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], id: 'a', imagePath: 'screenshots/shared.png' },
+        { ...VALID_MANIFEST.screenshots[1], id: 'b', imagePath: 'screenshots/shared.png' }
+      ]
+    };
+
+    expect(() => indexManifestEntries(dup, ['a'])).toThrow(/Duplicate screenshot imagePath.*a.*b.*recapture/);
   });
 });
 

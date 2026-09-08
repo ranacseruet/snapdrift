@@ -13,7 +13,8 @@ import {
   resolveFromWorkingDirectory,
   VIEWPORT_PRESETS,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
-  SNAPDRIFT_SETTLE_DELAY_MS
+  SNAPDRIFT_SETTLE_DELAY_MS,
+  sanitizeRouteId
 } from '@snapdrift/manifest';
 
 const { PNG } = pngjs;
@@ -37,19 +38,6 @@ async function ensureParentDirectory(targetPath) {
  */
 async function ensureDirectory(targetPath) {
   await fs.mkdir(targetPath, { recursive: true });
-}
-
-/**
- * Strips characters that could cause path traversal or produce invalid filenames.
- * @param {string} id
- * @returns {string}
- */
-function sanitizeRouteId(id) {
-  return id
-    .replace(/\.\./g, '_')
-    .replace(/[/\\]/g, '_')
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x1f\x7f]/g, '');
 }
 
 /**

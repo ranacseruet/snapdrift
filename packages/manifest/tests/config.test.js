@@ -51,6 +51,24 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
     expect(() => validateSnapdriftConfig(copy)).toThrow('duplicates');
   });
 
+  test.each([
+    ['a/b', 'a_b'],
+    ['a\\b', 'a_b'],
+    ['a..b', 'a_b'],
+    ['a\u0000b', 'ab']
+  ])('rejects route ids that sanitize to one screenshot filename', (firstId, secondId) => {
+    const copy = { ...VALID_CONFIG, routes: [
+      { id: firstId, path: '/', viewport: 'desktop' },
+      { id: secondId, path: '/about', viewport: 'mobile' }
+    ]};
+    const validate = () => validateSnapdriftConfig(copy);
+
+    expect(validate).toThrow(firstId);
+    expect(validate).toThrow(secondId);
+    expect(validate).toThrow(firstId === 'a\u0000b' ? 'screenshots/ab.png' : 'screenshots/a_b.png');
+    expect(validate).toThrow(/Rename.*recapture/);
+  });
+
   test('rejects invalid diff mode', () => {
     const copy = { ...VALID_CONFIG, diff: { threshold: 0.01, mode: 'invalid' } };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.mode');
