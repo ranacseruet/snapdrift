@@ -46,6 +46,7 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline` (requires a Snap run id; no legacy bundle path)/`fetchLatestBaseline`/`buildCommentBody`) + migration methods (`exportBaselines`, `checkBaselineExists`; `migrateBaselineFromLocal` removed in 0.7.0 — Snap rejects that body) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
    - `migrate-baselines.mjs` — `migrate-baselines` command handlers (`runMigrateToSnap`, `runMigrateToLocal`)
    - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to `snapdrift.json`
+   - `resolve-baseline-artifact.mjs` — shared GitHub workflow/artifact lookup and response validation used by both baseline resolver actions
 
 3. **`actions/`** — GitHub composite actions. Two primary wrapper actions orchestrate the full pipeline:
    - `actions/baseline` — Reads config → installs deps → captures routes → publishes (via `provider.publishBaseline`) → stages bundle → uploads artifact
@@ -55,7 +56,8 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `actions/capture` — capture routes and emit `results.json` + `manifest.json`
    - `actions/compare` — diff current capture against a baseline
    - `actions/scope` — decide whether to run and which routes to select from changed files
-   - `actions/resolve-baseline` — find and download the latest successful baseline artifact
+   - `actions/resolve-baseline` — find and download the latest successful baseline artifact;
+     its `resolution-status` output is `found`, `missing`, or `error`, and lookup errors fail the action
    - `actions/stage` — assemble a baseline or diff bundle for upload
    - `actions/enforce` — evaluate the summary against `diff.mode` and fail when required
    - `actions/comment` — upsert a PR comment from a summary (provider-aware)

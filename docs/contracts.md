@@ -101,6 +101,21 @@ The published baseline bundle contains:
 | `manifest.json` | Screenshot manifest with ids, paths, and dimensions |
 | `screenshots/*.png` | Captured screenshot images |
 
+### Baseline resolution
+
+The `actions/resolve-baseline` action and the `actions/pr-diff` wrapper distinguish three lookup
+outcomes: `found` means a successful search selected a non-expired artifact, `missing` means a
+successful search found no usable artifact, and `error` means GitHub returned an API, network, or
+malformed-response failure. The boolean `found` output remains available for compatibility; use
+`resolution-status` on `resolve-baseline` or `baseline-resolution-status` on `pr-diff` when the
+reason matters. A missing baseline may produce the intentional first-run skipped summary. A lookup
+error fails local comparisons and local Snap fallbacks, so infrastructure failures cannot be
+reported as a clean or intentional missing-baseline result. Healthy hosted Snap diffs may continue
+using their hosted baseline path after a GitHub artifact lookup error.
+The standalone `actions/resolve-baseline` action fails its step for `error`; custom workflows
+should branch on `resolution-status` rather than treating `found: false` as proof that no baseline
+exists.
+
 ## Drift artifact
 
 The pull request drift bundle contains:
@@ -378,7 +393,7 @@ alike:
 | Phase | `warn-and-skip` | `fallback-local` |
 |:------|:----------------|:-----------------|
 | Capture | Write a skipped `summary.json`/`summary.md` with reason `snap_unavailable`, expose the summary outputs, stage the report, exit 0. | Capture with `LocalProvider` and report the **effective** provider (`local`) so the rest of the pipeline uses local artifacts and the local pixel engine. |
-| Diff | Same skipped summary, exit 0. | Diff with `LocalProvider`. A capture that Snap rendered server-side has no PNGs on the runner, so the routes are **recaptured locally first**; the recaptured paths replace the Snap ones in the staged bundle. If no baseline artifact was resolved, the run reports `missing_main_baseline_artifact` instead of crashing the local diff. |
+| Diff | Same skipped summary, exit 0. | Diff with `LocalProvider`. A capture that Snap rendered server-side has no PNGs on the runner, so the routes are **recaptured locally first**; the recaptured paths replace the Snap ones in the staged bundle. If baseline resolution succeeded but no artifact was found, the run reports `missing_main_baseline_artifact`; a lookup error fails instead of entering the missing-baseline path. |
 | Baseline publish | Skip the publish and exit 0 without an artifact. | Capture locally and stage/upload that bundle, so the run still leaves a usable baseline. |
 
 Enforcement of `diff.mode` never runs against a skipped summary — a skipped run

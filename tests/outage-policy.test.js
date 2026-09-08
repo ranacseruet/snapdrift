@@ -116,6 +116,45 @@ describe('captureWithPolicy', () => {
       captureWithPolicy({ provider, providerName: 'snap', captureOptions: {} })
     ).rejects.toThrow(/unauthorized_visual_scope/);
   });
+
+  it('rejects a local capture fallback when baseline lookup failed while preserving the outage callback', async () => {
+    const snapProvider = makeProvider({ captureError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+    const onFallback = jest.fn();
+
+    const fallback = captureWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      config: { baseUrl: 'https://example.com' },
+      captureOptions: { routeIds: ['home'] },
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'error',
+      baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
+      onFallback
+    });
+    await expect(fallback).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    await expect(fallback).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'Snap unreachable' }) });
+
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(localProvider.capture).not.toHaveBeenCalled();
+  });
+
+  it('allows a local capture fallback when the baseline is intentionally missing', async () => {
+    const snapProvider = makeProvider({ captureError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+
+    const result = await captureWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      config: { baseUrl: 'https://example.com' },
+      captureOptions: { routeIds: ['home'] },
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'missing'
+    });
+
+    expect(result).toMatchObject({ outcome: 'captured', providerName: 'local' });
+    expect(localProvider.capture).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('diffWithPolicy', () => {
@@ -210,6 +249,51 @@ describe('diffWithPolicy', () => {
     expect(localProvider.capture).not.toHaveBeenCalled();
     expect(localProvider.diff).not.toHaveBeenCalled();
     expect(onBaselineUnavailable).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a local diff fallback when baseline lookup failed after notifying the callback', async () => {
+    const snapProvider = makeProvider({ diffError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+    const onBaselineUnavailable = jest.fn();
+
+    const fallback = diffWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      diffOptions: { ...diffOptions, baselineResultsPath: undefined },
+      captureOptions: { routeIds: ['home'] },
+      localScreenshots: false,
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'error',
+      baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
+      onBaselineUnavailable
+    });
+    await expect(fallback).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    await expect(fallback).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'Snap unreachable' }) });
+
+    expect(onBaselineUnavailable).toHaveBeenCalledTimes(1);
+    expect(localProvider.capture).not.toHaveBeenCalled();
+    expect(localProvider.diff).not.toHaveBeenCalled();
+  });
+
+  it('allows a missing-baseline diff fallback to keep the intentional skip outcome', async () => {
+    const snapProvider = makeProvider({ diffError: new SnapFallbackError('Snap unreachable') });
+    const localProvider = makeProvider();
+    const onBaselineUnavailable = jest.fn();
+
+    const result = await diffWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      diffOptions: { ...diffOptions, baselineResultsPath: undefined },
+      captureOptions: { routeIds: ['home'] },
+      localScreenshots: false,
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'missing',
+      onBaselineUnavailable
+    });
+
+    expect(result.outcome).toBe('baseline-unavailable');
+    expect(onBaselineUnavailable).toHaveBeenCalledTimes(1);
+    expect(localProvider.capture).not.toHaveBeenCalled();
   });
 
   it('fails loudly when a recapture is required but no captureOptions were supplied', async () => {

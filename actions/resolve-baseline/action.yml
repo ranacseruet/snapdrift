@@ -38,6 +38,9 @@ outputs:
   found:
     description: Whether a non-expired baseline was found.
     value: ${{ steps.resolve.outputs.found }}
+  resolution-status:
+    description: 'Baseline lookup status: found, missing, or error.'
+    value: ${{ steps.resolve.outputs.resolution_status }}
   artifact-name:
     description: Resolved artifact name.
     value: ${{ steps.resolve.outputs.artifact_name }}
@@ -48,7 +51,7 @@ outputs:
     description: Workflow run id that produced the baseline.
     value: ${{ steps.resolve.outputs.run_id }}
   message:
-    description: Informational message when no artifact was found.
+    description: Resolution message for a missing or failed lookup.
     value: ${{ steps.resolve.outputs.message }}
   results-file:
     description: Path to the downloaded baseline results JSON.
@@ -81,61 +84,40 @@ runs:
           const { pathToFileURL } = require('url');
 
           const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
-          const [owner, repo] = repository.split('/');
           const modulePath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.GITHUB_ACTION_PATH, '..', '..', 'lib', 'snapdrift-config.mjs');
+          const resolverModulePath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.GITHUB_ACTION_PATH, '..', '..', 'lib', 'resolve-baseline-artifact.mjs');
           const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
-          const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-          const artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
+          const { resolveBaselineArtifact } = await import(pathToFileURL(resolverModulePath));
+          let artifactName = process.env.INPUT_ARTIFACT_NAME || '';
+
+          const setLookupError = (error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            const message = `Unable to resolve the SnapDrift baseline artifact: ${detail}`;
+            core.setOutput('found', 'false');
+            core.setOutput('resolution_status', 'error');
+            core.setOutput('artifact_name', artifactName);
+            core.setOutput('message', message);
+            core.setFailed(message);
+          };
 
           try {
-            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              owner,
-              repo,
-              workflow_id: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
+            const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
+            artifactName = process.env.INPUT_ARTIFACT_NAME || config.baselineArtifactName;
+            const result = await resolveBaselineArtifact({
+              github,
+              repository,
+              workflowId: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
               branch: process.env.INPUT_BRANCH || 'main',
-              event: 'push',
-              per_page: 20
+              artifactName
             });
-
-            let selectedRun = null;
-            let selectedArtifact = null;
-
-            for (const run of runs) {
-              if (run.status !== 'completed' || run.conclusion !== 'success') {
-                continue;
-              }
-
-              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner,
-                repo,
-                run_id: run.id,
-                per_page: 100
-              });
-
-              const match = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName && !artifact.expired);
-              if (match) {
-                selectedRun = run;
-                selectedArtifact = match;
-                break;
-              }
-            }
-
-            if (!selectedRun || !selectedArtifact) {
-              core.setOutput('found', 'false');
-              core.setOutput('artifact_name', artifactName);
-              core.setOutput('message', `No non-expired SnapDrift baseline artifact named ${artifactName} was found.`);
-              return;
-            }
-
-            core.setOutput('found', 'true');
-            core.setOutput('artifact_name', selectedArtifact.name);
-            core.setOutput('head_sha', selectedRun.head_sha);
-            core.setOutput('run_id', String(selectedRun.id));
-            core.setOutput('message', '');
+            core.setOutput('found', String(result.found));
+            core.setOutput('resolution_status', result.resolutionStatus);
+            core.setOutput('artifact_name', result.artifactName);
+            core.setOutput('head_sha', result.headSha || '');
+            core.setOutput('run_id', result.runId || '');
+            core.setOutput('message', result.message);
           } catch (error) {
-            core.setOutput('found', 'false');
-            core.setOutput('artifact_name', artifactName);
-            core.setOutput('message', `Unable to resolve the SnapDrift baseline artifact: ${error.message}`);
+            setLookupError(error);
           }
 
     - if: steps.resolve.outputs.found == 'true'

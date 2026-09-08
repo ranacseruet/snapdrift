@@ -82,7 +82,8 @@
     "./lib/snap-provider.mjs": "./lib/snap-provider.mjs",
      "./lib/migrate-baselines.mjs": "./lib/migrate-baselines.mjs",
      "./lib/init-from-action.mjs": "./lib/init-from-action.mjs",
-     "./lib/resolve-baseline-paths.mjs": "./lib/resolve-baseline-paths.mjs"
+     "./lib/resolve-baseline-paths.mjs": "./lib/resolve-baseline-paths.mjs",
+     "./lib/resolve-baseline-artifact.mjs": "./lib/resolve-baseline-artifact.mjs"
    },
   "files": [
     "action.yml",

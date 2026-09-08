@@ -1,10 +1,10 @@
 /** @jest-environment node */
 
 describe('buildReportCommentBody', () => {
-  let buildReportCommentBody, PR_COMMENT_MARKER, PR_COMMENT_MARKERS;
+  let buildReportCommentBody, escapeMarkdown, PR_COMMENT_MARKER, PR_COMMENT_MARKERS;
 
   beforeAll(async () => {
-    ({ buildReportCommentBody, PR_COMMENT_MARKER, PR_COMMENT_MARKERS } = await import('../src/pr-comment.mjs'));
+    ({ buildReportCommentBody, escapeMarkdown, PR_COMMENT_MARKER, PR_COMMENT_MARKERS } = await import('../src/pr-comment.mjs'));
   });
 
   const cleanSummary = {
@@ -23,6 +23,10 @@ describe('buildReportCommentBody', () => {
     const body = buildReportCommentBody(cleanSummary);
     expect(body.startsWith(PR_COMMENT_MARKER)).toBe(true);
     expect(PR_COMMENT_MARKERS).toEqual([PR_COMMENT_MARKER]);
+  });
+
+  it('escapes dynamic markdown and HTML delimiters', () => {
+    expect(escapeMarkdown('<b>`failure`</b> | [details] & more')).toBe('&lt;b&gt;\\`failure\\`&lt;/b&gt; \\| \\[details\\] &amp; more');
   });
 
   it('uses a concise high-signal metrics table', () => {

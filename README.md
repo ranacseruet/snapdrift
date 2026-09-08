@@ -71,6 +71,11 @@ That is the full integration. See the [Integration Guide](docs/integration-guide
 
 The root action dispatches on `mode`. The same pipelines are also published as standalone actions — `ranacseruet/snapdrift/actions/baseline` and `ranacseruet/snapdrift/actions/pr-diff` — along with the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions for custom orchestration.
 
+The lower-level `resolve-baseline` action reports `resolution-status` as `found`, `missing`, or
+`error`. A successful lookup with no non-expired artifact is `missing`; GitHub API, permission,
+network, or malformed-response failures are `error` and fail the standalone action so custom
+workflows do not mistake an unavailable baseline for a first-run skip.
+
 ## Local CLI
 
 SnapDrift ships a `snapdrift` CLI for running captures, diffs, migrations, and config initialization locally against a running app. Use it during development to validate UI changes before pushing. Canonical hosted baseline publication is the exception: `provider: "snap"` baselines require the project default branch plus explicit CI publication metadata; GitHub Actions provides that metadata automatically.

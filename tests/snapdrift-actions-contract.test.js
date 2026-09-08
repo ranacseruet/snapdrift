@@ -120,11 +120,37 @@ describe('SnapDrift action contracts', () => {
         );
 
         expect(baselineStep.env.INPUT_ARTIFACT_NAME).toBeUndefined();
-        expect(baselineStep.with.script).toContain('const artifactName = config.baselineArtifactName;');
+        expect(baselineStep.with.script).toContain('artifactName = config.baselineArtifactName;');
         expect(commentStep.with.script).toContain("const repoUrl = 'https://github.com/ranacseruet/snapdrift';");
         expect(commentStep.with.script).toContain('Powered by <a href="${repoUrl}">SnapDrift</a>');
         expect(commentStep.with.script).toContain('createProvider');
         expect(commentStep.with.script).toContain('buildCommentBody');
+        expect(commentStep.with.script).toContain('escapeMarkdown');
+    });
+
+    it('exposes baseline lookup status and fails local lookup errors before capture', async () => {
+        const root = await readAction('action.yml');
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+        const resolveBaseline = await readAction('actions/resolve-baseline/action.yml');
+        const baselineStep = prDiff.runs.steps.find((step) => step.id === 'baseline');
+        const guardStep = prDiff.runs.steps.find((step) => step.id === 'baseline_resolution_guard');
+        const capture = prDiff.runs.steps.find((step) => step.id === 'capture');
+        const compare = prDiff.runs.steps.find((step) => step.id === 'compare');
+        const skippedBaseline = prDiff.runs.steps.find((step) => step.id === 'skipped_baseline');
+
+        expect(resolveBaseline.outputs['resolution-status'].value).toContain('resolution_status');
+        expect(root.outputs['baseline-resolution-status'].value).toContain('baseline-resolution-status');
+        expect(prDiff.outputs['baseline-resolution-status'].value).toContain('baseline_resolution_status');
+        expect(baselineStep.with.script).toContain("resolution_status', 'error'");
+        expect(baselineStep.with.script).toContain('resolve-baseline-artifact.mjs');
+        expect(baselineStep.with.script).toContain('core.warning(message)');
+        expect(guardStep.if).toContain("steps.baseline.outputs.resolution_status == 'error'");
+        expect(guardStep.if).toContain("steps.config.outputs.provider != 'snap'");
+        expect(capture.run).toContain('BASELINE_RESOLUTION_STATUS');
+        expect(capture.run).toContain('baselineResolutionStatus');
+        expect(compare.run).toContain('baselineResolutionStatus');
+        expect(compare.run).toContain('baseline lookup failed');
+        expect(skippedBaseline.if).toContain("steps.baseline.outputs.resolution_status == 'missing'");
     });
 
     it('installs Playwright for Snap local-capture hybrid runs', async () => {
