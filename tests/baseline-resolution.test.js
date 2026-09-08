@@ -243,7 +243,13 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(github.calls[0]).toMatchObject({
       type: 'runs',
-      options: { owner: 'owner', repo: 'other-repo', workflow_id: 'visual.yml', branch: 'release' }
+      options: {
+        owner: 'owner',
+        repo: 'other-repo',
+        workflow_id: 'visual.yml',
+        branch: 'release',
+        per_page: 100
+      }
     });
     expect(github.calls.filter((call) => call.type === 'artifacts')).toEqual([{ type: 'artifacts', runId: 2 }]);
   });

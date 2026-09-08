@@ -122,18 +122,18 @@ describe('captureWithPolicy', () => {
     const localProvider = makeProvider();
     const onFallback = jest.fn();
 
-    await expect(
-      captureWithPolicy({
-        provider: snapProvider,
-        providerName: 'snap',
-        config: { baseUrl: 'https://example.com' },
-        captureOptions: { routeIds: ['home'] },
-        createLocalProvider: () => localProvider,
-        baselineResolutionStatus: 'error',
-        baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
-        onFallback
-      })
-    ).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    const fallback = captureWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      config: { baseUrl: 'https://example.com' },
+      captureOptions: { routeIds: ['home'] },
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'error',
+      baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
+      onFallback
+    });
+    await expect(fallback).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    await expect(fallback).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'Snap unreachable' }) });
 
     expect(onFallback).toHaveBeenCalledTimes(1);
     expect(localProvider.capture).not.toHaveBeenCalled();
@@ -256,19 +256,19 @@ describe('diffWithPolicy', () => {
     const localProvider = makeProvider();
     const onBaselineUnavailable = jest.fn();
 
-    await expect(
-      diffWithPolicy({
-        provider: snapProvider,
-        providerName: 'snap',
-        diffOptions: { ...diffOptions, baselineResultsPath: undefined },
-        captureOptions: { routeIds: ['home'] },
-        localScreenshots: false,
-        createLocalProvider: () => localProvider,
-        baselineResolutionStatus: 'error',
-        baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
-        onBaselineUnavailable
-      })
-    ).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    const fallback = diffWithPolicy({
+      provider: snapProvider,
+      providerName: 'snap',
+      diffOptions: { ...diffOptions, baselineResultsPath: undefined },
+      captureOptions: { routeIds: ['home'] },
+      localScreenshots: false,
+      createLocalProvider: () => localProvider,
+      baselineResolutionStatus: 'error',
+      baselineResolutionMessage: 'Unable to resolve the SnapDrift baseline artifact: Not Found',
+      onBaselineUnavailable
+    });
+    await expect(fallback).rejects.toThrow(/GitHub baseline lookup failed.*Not Found.*Snap unreachable/);
+    await expect(fallback).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'Snap unreachable' }) });
 
     expect(onBaselineUnavailable).toHaveBeenCalledTimes(1);
     expect(localProvider.capture).not.toHaveBeenCalled();
