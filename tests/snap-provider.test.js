@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError, isLocalBaseUrl } = await import('../lib/snap-provider.mjs');
+const { shouldFailDriftCheck } = await import('@snapdrift/manifest');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,6 +101,35 @@ function baselineRunMetadata(overrides = {}) {
 
 function twoRouteBaselineRunMetadata(overrides = {}) {
   return baselineRunMetadata({
+    configuredRouteIds: ['home', 'about'],
+    selectedRouteIds: ['home', 'about'],
+    expectedCaptures: [
+      { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+      { routeId: 'about', routePath: '/about', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+    ],
+    ...overrides
+  });
+}
+
+function diffRunMetadata(overrides = {}) {
+  return {
+    runId: 'run_diff',
+    projectId: 'test-project-42',
+    purpose: 'diff',
+    startedAt: '2026-08-24T00:00:00.000Z',
+    configuredRouteIds: ['home'],
+    selectedRouteIds: ['home'],
+    expectedCaptures: [{
+      routeId: 'home',
+      routePath: '/',
+      viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+    }],
+    ...overrides
+  };
+}
+
+function twoRouteDiffRunMetadata(overrides = {}) {
+  return diffRunMetadata({
     configuredRouteIds: ['home', 'about'],
     selectedRouteIds: ['home', 'about'],
     expectedCaptures: [
@@ -964,7 +994,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
           status: 'pass',
           captures: [
             // Rendered current but no baseline attached → server short-circuits to "diffed".
-            { routeId: 'home', routePath: '/', status: 'diffed', currentObjectKey: 'k/current.png' }
+            { routeId: 'home', routePath: '/', status: 'diffed', currentObjectKey: 'k/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
           ]
         });
       }
@@ -974,7 +1004,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-'));
     const resultsPath = path.join(dir, 'results.json');
-    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_x', projectId: 'test-project-42' }));
+    await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_x' })));
     const configPath = path.join(dir, 'config.json');
     await fs.writeFile(configPath, JSON.stringify({
       baselineArtifactName: 'test',
@@ -991,6 +1021,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.missing[0].viewport).toEqual({ width: 1440, height: 900 });
       expect(summary.status).toBe('incomplete');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
@@ -1006,7 +1037,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
           id: 'run_new',
           status: 'new',
           captures: [
-            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/current.png' }
+            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
           ]
         });
       }
@@ -1016,7 +1047,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-new-'));
     const resultsPath = path.join(dir, 'results.json');
-    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_new', projectId: 'test-project-42' }));
+    await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_new' })));
     const configPath = path.join(dir, 'config.json');
     await fs.writeFile(configPath, JSON.stringify({
       baselineArtifactName: 'test',
@@ -1033,6 +1064,7 @@ describe('SnapProvider.diff() baseline mapping', () => {
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
+      expect(summary.missing[0].viewport).toEqual({ width: 1440, height: 900 });
       expect(summary.status).toBe('incomplete');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
@@ -1042,17 +1074,24 @@ describe('SnapProvider.diff() baseline mapping', () => {
   // Issue #93: a stale/wrong captured page diffs at 0% against the baseline,
   // silently hiding real regressions. Warn when every compared route is an
   // exact pixel-identical match.
-  async function runDiffWith(captures) {
+  async function runDiffWith(
+    captures,
+    metadata = diffRunMetadata({ runId: 'run_zero' }),
+    runOverrides = {},
+    runPayload
+  ) {
     const mockFetch = async (url) => {
       if (url.includes('/visual/runs/')) {
-        return okResponse({ id: 'run_zero', status: 'pass', captures });
+        return okResponse(runPayload === undefined
+          ? { id: metadata.runId, status: 'pass', captures, ...runOverrides }
+          : runPayload);
       }
       return okResponse({});
     };
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-zero-'));
     const resultsPath = path.join(dir, 'results.json');
-    await fs.writeFile(resultsPath, JSON.stringify({ runId: 'run_zero', projectId: 'test-project-42' }));
+    await fs.writeFile(resultsPath, JSON.stringify(metadata));
     const configPath = path.join(dir, 'config.json');
     await fs.writeFile(configPath, JSON.stringify({
       baselineArtifactName: 'test',
@@ -1061,7 +1100,14 @@ describe('SnapProvider.diff() baseline mapping', () => {
       resultsFile: 'results.json',
       manifestFile: 'manifest.json',
       screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      routes: [...new Map(
+        (metadata.expectedCaptures || [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }])
+          .map((capture) => [capture.routeId, {
+            id: capture.routeId,
+            path: capture.routePath,
+            viewport: capture.routeId === 'about' ? 'mobile' : 'desktop'
+          }])
+      ).values()],
       diff: { threshold: 0.01, mode: 'report-only' }
     }));
     const writes = [];
@@ -1076,11 +1122,319 @@ describe('SnapProvider.diff() baseline mapping', () => {
     }
   }
 
+  it('fails closed when the hosted run errors before returning captures', async () => {
+    const { summary } = await runDiffWith([], diffRunMetadata({ runId: 'run_error' }), {
+      id: 'run_error',
+      status: 'error',
+      errorCode: 'render_failed'
+    });
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.totalScreenshots).toBe(1);
+    expect(summary.matchedScreenshots).toBe(0);
+    expect(summary.missingInCurrent).toBe(1);
+    expect(summary.errors.map((error) => error.message).join(' ')).toMatch(/render_failed/);
+    expect(shouldFailDriftCheck({ ...summary, diffMode: 'strict' })).toBe(true);
+  });
+
+  it('reports expected captures missing from a terminal hosted run', async () => {
+    const { summary } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ], twoRouteDiffRunMetadata({ runId: 'run_partial' }));
+
+    expect(summary.totalScreenshots).toBe(2);
+    expect(summary.matchedScreenshots).toBe(1);
+    expect(summary.missingInCurrent).toBe(1);
+    expect(summary.missing).toContainEqual(expect.objectContaining({
+      id: 'about',
+      location: 'current',
+      viewport: { width: 390, height: 844 }
+    }));
+    expect(summary.status).toBe('incomplete');
+  });
+
+  it('waits for a temporarily incomplete capture set before mapping the diff', async () => {
+    const metadata = twoRouteDiffRunMetadata({ runId: 'run_eventual' });
+    const homeCapture = {
+      routeId: 'home',
+      routePath: '/',
+      status: 'diffed',
+      baselineObjectKey: 'b/home.png',
+      currentObjectKey: 'c/home.png',
+      diffPct: 0,
+      viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+    };
+    const aboutCapture = {
+      routeId: 'about',
+      routePath: '/about',
+      status: 'diffed',
+      baselineObjectKey: 'b/about.png',
+      currentObjectKey: 'c/about.png',
+      diffPct: 0,
+      viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+    };
+    let pollCount = 0;
+    const mockFetch = async (url) => {
+      if (url.includes('/visual/runs/')) {
+        pollCount += 1;
+        return okResponse({
+          id: metadata.runId,
+          status: 'pass',
+          captures: pollCount === 1 ? [homeCapture] : [homeCapture, aboutCapture]
+        });
+      }
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-eventual-'));
+    const resultsPath = path.join(dir, 'results.json');
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(resultsPath, JSON.stringify(metadata));
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop' },
+        { id: 'about', path: '/about', viewport: 'mobile' }
+      ],
+      diff: { threshold: 0.01, mode: 'strict' }
+    }));
+    try {
+      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      expect(pollCount).toBe(2);
+      expect(summary.status).toBe('clean');
+      expect(summary.totalScreenshots).toBe(2);
+      expect(summary.matchedScreenshots).toBe(2);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not count a diffed capture without diffPct as matched', async () => {
+    const { summary } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ]);
+
+    expect(summary.matchedScreenshots).toBe(0);
+    expect(summary.changedScreenshots).toBe(0);
+    expect(summary.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'home', status: 'error' })
+    ]));
+    expect(summary.status).toBe('incomplete');
+    expect(shouldFailDriftCheck({ ...summary, diffMode: 'strict' })).toBe(true);
+  });
+
+  it('reports an errored expected capture once without also calling it missing', async () => {
+    const { summary } = await runDiffWith([
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'error',
+        errorCode: 'render_failed',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ], diffRunMetadata({ runId: 'run_capture_error' }));
+
+    expect(summary.errors).toEqual([
+      expect.objectContaining({ id: 'home', message: 'render_failed' })
+    ]);
+    expect(summary.missingInCurrent).toBe(0);
+    expect(summary.status).toBe('incomplete');
+  });
+
+  it('uses capture metrics instead of a server fail status when the comparison is within threshold', async () => {
+    const { summary } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ], diffRunMetadata({ runId: 'run_server_fail' }), { status: 'fail' });
+
+    expect(summary.status).toBe('clean');
+    expect(summary.matchedScreenshots).toBe(1);
+    expect(summary.changedScreenshots).toBe(0);
+  });
+
+  it('preserves a valid changed comparison above the configured threshold', async () => {
+    const { summary } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0.02, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ]);
+
+    expect(summary.status).toBe('changes-detected');
+    expect(summary.changedScreenshots).toBe(1);
+    expect(summary.changed[0]).toMatchObject({
+      id: 'home',
+      mismatchRatio: 0.02,
+      viewport: { width: 1440, height: 900 }
+    });
+  });
+
+  it('keeps a comparison at the configured threshold clean', async () => {
+    const { summary } = await runDiffWith([
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0.01, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ]);
+
+    expect(summary.status).toBe('clean');
+    expect(summary.matchedScreenshots).toBe(1);
+    expect(summary.changedScreenshots).toBe(0);
+  });
+
+  it.each([
+    {
+      name: 'duplicate identity',
+      metadata: twoRouteDiffRunMetadata({ runId: 'run_duplicate' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home-1.png', currentObjectKey: 'c/home-1.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home-2.png', currentObjectKey: 'c/home-2.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /duplicate route\/viewport/
+    },
+    {
+      name: 'unexpected identity',
+      metadata: diffRunMetadata({ runId: 'run_unexpected' }),
+      captures: [
+        { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+      ],
+      message: /unexpected route\/viewport/
+    },
+    {
+      name: 'path mismatch',
+      metadata: diffRunMetadata({ runId: 'run_path_mismatch' }),
+      captures: [
+        { routeId: 'home', routePath: '/changed', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /unexpected path/
+    },
+    {
+      name: 'viewport mismatch',
+      metadata: diffRunMetadata({ runId: 'run_viewport_mismatch' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+      ],
+      message: /unexpected route\/viewport/
+    },
+    {
+      name: 'pending status',
+      metadata: diffRunMetadata({ runId: 'run_pending' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'pending', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /unknown status "pending"/
+    },
+    {
+      name: 'invalid diff metric',
+      metadata: diffRunMetadata({ runId: 'run_invalid_metric' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 2, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /invalid diffPct/
+    },
+    {
+      name: 'string diff metric',
+      metadata: diffRunMetadata({ runId: 'run_string_metric' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: '0.02', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /invalid diffPct/
+    },
+    {
+      name: 'invalid baseline object key',
+      metadata: diffRunMetadata({ runId: 'run_invalid_baseline_key' }),
+      captures: [
+        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: {}, currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ],
+      message: /invalid baselineObjectKey/
+    }
+  ])('$name is incomplete and never clean', async ({ metadata, captures, message }) => {
+    const { summary } = await runDiffWith(captures, metadata);
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.matchedScreenshots).toBeLessThan(summary.totalScreenshots);
+    expect(summary.errors.map((error) => error.message).join(' ')).toMatch(message);
+  });
+
+  it('rejects legacy metadata without expected capture identities', async () => {
+    await expect(runDiffWith([], { runId: 'run_legacy', projectId: 'test-project-42' }))
+      .rejects.toThrow(/no expected capture identities.*recapture/i);
+  });
+
+  it('rejects malformed source metadata with a recapture instruction', async () => {
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => okResponse({}) });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-malformed-metadata-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, '{not-json');
+    try {
+      await expect(provider.diff({ currentResultsPath: resultsPath }))
+        .rejects.toThrow(/not valid JSON.*recapture/i);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('distinguishes an unreadable source metadata path from malformed JSON', async () => {
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => okResponse({}) });
+    await expect(provider.diff({ currentResultsPath: '/tmp/snapdrift-missing-results.json' }))
+      .rejects.toThrow(/could not read capture results metadata/);
+  });
+
+  it('rejects capture metadata for a different project before polling', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ projectId: 'other-project' })))
+      .rejects.toThrow(/belong to project/);
+  });
+
+  it('rejects an expected capture set that is inconsistent with selected routes', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ selectedRouteIds: ['about'] })))
+      .rejects.toThrow(/invalid or not selected/);
+  });
+
+  it('rejects source metadata recorded for a baseline capture', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ purpose: 'baseline' })))
+      .rejects.toThrow(/purpose "baseline", not "diff"/);
+  });
+
+  it('rejects duplicate expected route identities before polling', async () => {
+    const metadata = twoRouteDiffRunMetadata({
+      expectedCaptures: [
+        { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+        { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      ]
+    });
+
+    await expect(runDiffWith([], metadata))
+      .rejects.toThrow(/duplicate route "home"/);
+  });
+
+  it('rejects a response for a different run id', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_requested' }), { id: 'run_other', status: 'error' }))
+      .rejects.toThrow(/returned run "run_other" for requested run "run_requested"/);
+  });
+
+  it('rejects a response that omits the run id', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_missing_id' }), { id: undefined }))
+      .rejects.toThrow(/returned run "unknown" for requested run "run_missing_id"/);
+  });
+
+  it('rejects a malformed run response without treating it as an outage', async () => {
+    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_malformed_payload' }), {}, null))
+      .rejects.toThrow(/malformed run response/);
+  });
+
+  it('marks a malformed captures field incomplete instead of treating it as clean', async () => {
+    const { summary } = await runDiffWith([], diffRunMetadata({ runId: 'run_malformed' }), {
+      id: 'run_malformed',
+      captures: null
+    });
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.errors.map((error) => error.message).join(' ')).toMatch(/no valid captures array/);
+  });
+
   it('warns when every compared route is a pixel-identical 0% match (stale-capture guard)', async () => {
     const { summary, stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 },
-      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0 }
-    ]);
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+    ], twoRouteDiffRunMetadata({ runId: 'run_zero' }));
     expect(summary.matchedScreenshots).toBe(2);
     expect(stderr).toMatch(/pixel-identical/);
     expect(stderr).toMatch(/issue #93/);
@@ -1088,16 +1442,16 @@ describe('SnapProvider.diff() baseline mapping', () => {
 
   it('does not warn when at least one route shows non-zero drift', async () => {
     const { stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 },
-      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0.005 }
-    ]);
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
+      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0.005, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+    ], twoRouteDiffRunMetadata({ runId: 'run_zero' }));
     expect(stderr).not.toMatch(/pixel-identical/);
   });
 
   it('does not warn for a single pixel-identical route (indistinguishable from a clean diff)', async () => {
     const { stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0 }
-    ]);
+      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+    ], diffRunMetadata({ runId: 'run_zero' }));
     expect(stderr).not.toMatch(/pixel-identical/);
   });
 });
