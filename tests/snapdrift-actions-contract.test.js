@@ -120,11 +120,12 @@ describe('SnapDrift action contracts', () => {
         );
 
         expect(baselineStep.env.INPUT_ARTIFACT_NAME).toBeUndefined();
-        expect(baselineStep.with.script).toContain('const artifactName = config.baselineArtifactName;');
+        expect(baselineStep.with.script).toContain('artifactName = config.baselineArtifactName;');
         expect(commentStep.with.script).toContain("const repoUrl = 'https://github.com/ranacseruet/snapdrift';");
         expect(commentStep.with.script).toContain('Powered by <a href="${repoUrl}">SnapDrift</a>');
         expect(commentStep.with.script).toContain('createProvider');
         expect(commentStep.with.script).toContain('buildCommentBody');
+        expect(commentStep.with.script).toContain('escapeMarkdown');
     });
 
     it('exposes baseline lookup status and fails local lookup errors before capture', async () => {
@@ -141,12 +142,14 @@ describe('SnapDrift action contracts', () => {
         expect(root.outputs['baseline-resolution-status'].value).toContain('baseline-resolution-status');
         expect(prDiff.outputs['baseline-resolution-status'].value).toContain('baseline_resolution_status');
         expect(baselineStep.with.script).toContain("resolution_status', 'error'");
-        expect(baselineStep.with.script).toContain('GitHub returned a malformed workflow run record');
+        expect(baselineStep.with.script).toContain('resolve-baseline-artifact.mjs');
+        expect(baselineStep.with.script).toContain('core.warning(message)');
         expect(guardStep.if).toContain("steps.baseline.outputs.resolution_status == 'error'");
         expect(guardStep.if).toContain("steps.config.outputs.provider != 'snap'");
         expect(capture.run).toContain('BASELINE_RESOLUTION_STATUS');
-        expect(capture.run).toContain('Cannot fall back to a local capture');
-        expect(compare.run).toContain('Cannot fall back to a local diff');
+        expect(capture.run).toContain('baselineResolutionStatus');
+        expect(compare.run).toContain('baselineResolutionStatus');
+        expect(compare.run).toContain('baseline lookup failed');
         expect(skippedBaseline.if).toContain("steps.baseline.outputs.resolution_status == 'missing'");
     });
 

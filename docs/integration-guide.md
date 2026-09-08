@@ -268,7 +268,8 @@ The `pr-diff` wrapper composes the following low-level steps. They're still avai
 - `actions/compare` — diff current capture against a baseline
 - `actions/scope` — decide whether to run and which routes to select from changed files
 - `actions/resolve-baseline` — find and download the latest successful baseline artifact; its
-  `resolution-status` output distinguishes `found`, `missing`, and `error`
+  `resolution-status` output distinguishes `found`, `missing`, and `error`; the action fails for
+  `error`, while `missing` remains the intentional first-baseline result
 - `actions/stage` — assemble the baseline or diff bundle for upload
 - `actions/enforce` — evaluate the summary against `diff.mode` and fail when required
 - `actions/comment` — upsert a PR comment from a summary (provider-aware)

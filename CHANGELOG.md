@@ -11,6 +11,14 @@
   first-run skipped summary remains limited to a successful lookup with no non-expired artifact.
 - **Hosted Snap diffs now fail closed on incomplete results** (#146). Hosted comparison now validates `purpose: "diff"`, the persisted run metadata, and expected route/viewport identities, polls until the expected capture set is available, verifies the returned run id and paths, and rejects duplicate, missing, pending, malformed, or invalid captures as `incomplete`. A diffed capture is counted only when both image objects and a finite numeric `diffPct` are present; older results without expected capture identities must be recaptured instead of being treated as clean.
 
+### Changed
+
+- **Standalone baseline resolution now fails on lookup errors** (#147). Consumers orchestrating
+  `actions/resolve-baseline` should handle its `resolution-status` output: `missing` is the
+  intentional first-baseline case, while `error` means the GitHub lookup could not be trusted and
+  fails the action. The PR wrapper keeps hosted Snap comparisons available and reports the status
+  through `baseline-resolution-status`.
+
 ### Chore
 
 - **The release workflow now fails when the root dispatcher's immutable pin predates wrapper changes** (#133). The Marketplace `action.yml` pins its inner `baseline` / `pr-diff` refs to an immutable commit SHA, but nothing detected when that pin went stale: between releases every change to `actions/baseline` or `actions/pr-diff` stayed invisible to consumers of the root action, so a release could ship bumped wrapper code while the dispatcher still executed old wrapper code at the pinned SHA. `npm run check:pin-stale` (new `scripts/check-pin-stale.mjs`) fails when the pinned SHA is older than the newest commit touching `actions/`. It runs in `publish.yml` (gated on a published release) rather than on every PR, because the pin is expected to lag wrapper changes on feature branches. The currently-stale pin in `action.yml` (which predated the #136 hosted-baseline fix) has been bumped to the latest `main` commit.

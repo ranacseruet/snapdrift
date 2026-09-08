@@ -112,6 +112,9 @@ reason matters. A missing baseline may produce the intentional first-run skipped
 error fails local comparisons and local Snap fallbacks, so infrastructure failures cannot be
 reported as a clean or intentional missing-baseline result. Healthy hosted Snap diffs may continue
 using their hosted baseline path after a GitHub artifact lookup error.
+The standalone `actions/resolve-baseline` action fails its step for `error`; custom workflows
+should branch on `resolution-status` rather than treating `found: false` as proof that no baseline
+exists.
 
 ## Drift artifact
 

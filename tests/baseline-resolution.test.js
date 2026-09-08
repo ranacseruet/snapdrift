@@ -54,12 +54,16 @@ async function executeResolver(action, { github, configPath, inputs = {} }) {
 
   const outputs = {};
   const failures = [];
+  const warnings = [];
   const core = {
     setOutput(name, value) {
       outputs[name] = value;
     },
     setFailed(message) {
       failures.push(String(message));
+    },
+    warning(message) {
+      warnings.push(String(message));
     }
   };
   const context = { repo: { owner: 'example', repo: 'app' } };
@@ -79,25 +83,30 @@ async function executeResolver(action, { github, configPath, inputs = {} }) {
     }
   }
 
-  return { outputs, failures };
+  return { outputs, failures, warnings };
 }
 
 function makeGithub({ runs = [], artifactsByRun = {}, paginateError, artifactError, artifactResponse } = {}) {
   const calls = [];
+  const listWorkflowRuns = async () => ({ data: { workflow_runs: runs } });
+  const listWorkflowRunArtifacts = async () => ({ data: { artifacts: [] } });
   return {
     calls,
-    paginate: async (_method, options) => {
+    paginate: async (method, options) => {
+      if (method === listWorkflowRunArtifacts) {
+        calls.push({ type: 'artifacts', runId: options.run_id });
+        if (artifactError) throw artifactError;
+        if (artifactResponse !== undefined) return artifactResponse;
+        return artifactsByRun[options.run_id] || [];
+      }
       calls.push({ type: 'runs', options });
       if (paginateError) throw paginateError;
       return runs;
     },
     rest: {
       actions: {
-        listWorkflowRunArtifacts: async ({ run_id: runId }) => {
-          calls.push({ type: 'artifacts', runId });
-          if (artifactError) throw artifactError;
-          return artifactResponse || { data: { artifacts: artifactsByRun[runId] || [] } };
-        }
+        listWorkflowRuns,
+        listWorkflowRunArtifacts
       }
     }
   };
@@ -142,7 +151,10 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(result.outputs.message).toMatch(/Unable to resolve the SnapDrift baseline artifact/);
     if (action.standalone) expect(result.failures).toHaveLength(1);
-    else expect(result.failures).toHaveLength(0);
+    else {
+      expect(result.failures).toHaveLength(0);
+      expect(result.warnings).toHaveLength(1);
+    }
   });
 
   it.each(API_ERRORS)('classifies an artifact-list %s as an error', async (_label, error) => {
@@ -156,6 +168,7 @@ describe.each(ACTIONS)('$name', (action) => {
 
     expect(result.outputs.resolution_status).toBe('error');
     if (action.standalone) expect(result.failures).toHaveLength(1);
+    else expect(result.warnings).toHaveLength(1);
   });
 
   it('classifies malformed GitHub responses as errors', async () => {
@@ -165,6 +178,7 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(malformedRuns.outputs.resolution_status).toBe('error');
     if (action.standalone) expect(malformedRuns.failures).toHaveLength(1);
+    else expect(malformedRuns.warnings).toHaveLength(1);
 
     const malformedArtifacts = await executeResolver(action, {
       configPath,
@@ -175,6 +189,7 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(malformedArtifacts.outputs.resolution_status).toBe('error');
     if (action.standalone) expect(malformedArtifacts.failures).toHaveLength(1);
+    else expect(malformedArtifacts.warnings).toHaveLength(1);
   });
 
   it('distinguishes an intentional missing baseline from a found artifact', async () => {
@@ -232,27 +247,57 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(github.calls.filter((call) => call.type === 'artifacts')).toEqual([{ type: 'artifacts', runId: 2 }]);
   });
-});
 
-describe('malformed workflow run records', () => {
-  let tempDir;
-  let configPath;
-
-  beforeEach(async () => {
-    ({ tempDir, configPath } = await writeConfig());
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  it('does not treat a malformed run list as an intentional absence', async () => {
-    const result = await executeResolver(ACTIONS[0], {
+  it('ignores non-terminal runs with null conclusions before resolving a later baseline', async () => {
+    const result = await executeResolver(action, {
       configPath,
-      github: makeGithub({ runs: null })
+      github: makeGithub({
+        runs: [
+          { id: 99, status: 'in_progress', conclusion: null, head_sha: 'inflight' },
+          { id: 42, status: 'completed', conclusion: 'success', head_sha: 'abc123' }
+        ],
+        artifactsByRun: { 42: [{ name: 'snapdrift-baseline', expired: false }] }
+      })
     });
 
-    expect(result.outputs.resolution_status).toBe('error');
-    expect(result.failures).toHaveLength(1);
+    expect(result.outputs).toMatchObject({ found: 'true', resolution_status: 'found', run_id: '42' });
+    expect(result.failures).toHaveLength(0);
+  });
+
+  it('ignores malformed unrelated artifacts but rejects a malformed matching artifact', async () => {
+    const valid = await executeResolver(action, {
+      configPath,
+      github: makeGithub({
+        runs: [{ id: 42, status: 'completed', conclusion: 'success', head_sha: 'abc123' }],
+        artifactsByRun: {
+          42: [null, { name: 'coverage', expired: 'unknown' }, { name: 'snapdrift-baseline', expired: false }]
+        }
+      })
+    });
+    expect(valid.outputs).toMatchObject({ found: 'true', resolution_status: 'found' });
+
+    const malformed = await executeResolver(action, {
+      configPath,
+      github: makeGithub({
+        runs: [{ id: 42, status: 'completed', conclusion: 'success', head_sha: 'abc123' }],
+        artifactsByRun: { 42: [{ name: 'snapdrift-baseline', expired: null }] }
+      })
+    });
+    expect(malformed.outputs.resolution_status).toBe('error');
+    if (action.standalone) expect(malformed.failures).toHaveLength(1);
+    else expect(malformed.warnings).toHaveLength(1);
+  });
+
+  it('reports malformed baseline repository input as a lookup error', async () => {
+    const result = await executeResolver(action, {
+      configPath,
+      github: makeGithub(),
+      inputs: { repository: 'owner-only' }
+    });
+
+    expect(result.outputs).toMatchObject({ found: 'false', resolution_status: 'error' });
+    expect(result.outputs.message).toContain('Invalid baseline repository');
+    if (action.standalone) expect(result.failures).toHaveLength(1);
+    else expect(result.warnings).toHaveLength(1);
   });
 });
