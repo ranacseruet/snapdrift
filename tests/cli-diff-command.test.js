@@ -168,3 +168,35 @@ describe('runDiffCommand — onUnavailable: fallback-local', () => {
     );
   });
 });
+
+describe('runDiffCommand — hosted incomplete results', () => {
+  it('writes the incomplete summary and enforces strict mode', async () => {
+    const provider = makeProvider({
+      diffImpl: () => ({
+        summary: {
+          status: 'incomplete',
+          diffMode: 'strict',
+          totalScreenshots: 2,
+          matchedScreenshots: 1,
+          changedScreenshots: 0,
+          missingInBaseline: 0,
+          missingInCurrent: 1,
+          changed: [],
+          missing: [{ id: 'about', location: 'current', reason: 'capture missing from Snap run' }],
+          errors: [],
+          dimensionChanges: []
+        },
+        markdown: '# incomplete'
+      })
+    });
+    loadSnapdriftConfigMock.mockResolvedValue({ config: CONFIG });
+    createProviderMock.mockReturnValue(provider);
+
+    await expect(runDiffCommand(opts())).resolves.toBeUndefined();
+
+    const summary = JSON.parse(await fs.readFile(path.join(workDir, 'diff', 'summary.json'), 'utf8'));
+    expect(summary.status).toBe('incomplete');
+    expect(summary.missingInCurrent).toBe(1);
+    expect(process.exitCode).toBe(1);
+  });
+});
