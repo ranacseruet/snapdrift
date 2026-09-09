@@ -5,6 +5,7 @@ import path from 'node:path';
 import { assertUniqueRouteIdFilenames } from './route-filenames.mjs';
 import { VIEWPORT_PRESETS } from './viewport.mjs';
 
+/** @type {readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict']} */
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
 export const VALID_PROVIDER_VALUES = ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];
@@ -16,6 +17,7 @@ export const SNAPDRIFT_SETTLE_DELAY_MS = 300;
 /** @typedef {import('../types/index.d.ts').VisualRegressionRouteConfig} SnapdriftRouteConfig */
 
 const VALID_VIEWPORT_PRESETS = new Set(Object.keys(VIEWPORT_PRESETS));
+/** @type {Set<string>} */
 const VALID_DIFF_MODE_SET = new Set(VALID_DIFF_MODES);
 const VALID_PROVIDER_SET = new Set(VALID_PROVIDER_VALUES);
 const VALID_ON_UNAVAILABLE_SET = new Set(VALID_ON_UNAVAILABLE_MODES);

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { runtimeExportNames, installedPackageDirectory } from './package-type-helpers.mjs';
 import { spawnSync } from 'node:child_process';
 
 const root = resolve(import.meta.dirname, '..');
@@ -48,11 +49,7 @@ try {
     // Public indices are explicit re-export lists. Verify each runtime name is
     // present and typed in the consumer, without loading runtime dependencies.
     const index = readFileSync(join(packageDir, 'src/index.mjs'), 'utf8');
-    assert(!/export\s+\*/.test(index), `${name}: extend the export inventory for star exports`);
-    const exports = [...index.matchAll(/export\s*\{([^}]+)\}\s*from/g)].flatMap((match) =>
-      match[1].split(',').map((entry) => entry.trim().split(/\s+as\s+/).pop()).filter(Boolean)
-    );
-    assert(exports.length, `${name}: empty runtime export inventory`);
+    const exports = runtimeExportNames(index, name);
     packages.set(`@snapdrift/${name}`, { archive: join(packDir, pack.filename), exports });
   }
 
@@ -74,7 +71,7 @@ try {
       mkdirSync(destination, { recursive: true });
       run('tar', ['-xzf', packed.archive, '-C', destination, '--strip-components=1'], consumerDir);
       const manifest = readJson(join(destination, 'package.json'));
-      assert.deepEqual(Object.keys(manifest.exports['.']), ['types', 'default']);
+      assert.equal(Object.keys(manifest.exports['.'])[0], 'types', `${packageName}: types must be the first export condition`);
       assert.equal(manifest.exports['.'].types, './types/index.d.ts');
       assert.equal(manifest.exports['.'].default, './src/index.mjs');
       assert.equal(manifest.types, 'types/index.d.ts');
@@ -87,22 +84,24 @@ try {
 
     // These are explicit consumer dev dependencies, copied (not linked) from
     // the lockfile installation. No ancestor workspace resolution is available.
-    const copied = new Set();
-    /** @param {string} dependency */
-    function installFixtureTypes(dependency) {
-      if (copied.has(dependency)) return;
-      copied.add(dependency);
-      const source = join(root, 'node_modules', dependency);
-      const destination = join(modulesDir, dependency);
+    /** @param {string} dependency @param {string} importer @param {string} targetModules */
+    function installFixtureTypes(dependency, importer, targetModules) {
+      const source = installedPackageDirectory(dependency, importer);
+      const destination = join(targetModules, dependency);
       mkdirSync(resolve(destination, '..'), { recursive: true });
-      cpSync(source, destination, { recursive: true, dereference: true });
+      cpSync(source, destination, {
+        recursive: true, dereference: true,
+        filter: (sourcePath) => sourcePath !== join(source, 'node_modules')
+      });
       for (const child of Object.keys(readJson(join(source, 'package.json')).dependencies || {})) {
-        installFixtureTypes(child);
+        installFixtureTypes(child, source, join(destination, 'node_modules'));
       }
     }
-    installFixtureTypes('@types/node');
+    installFixtureTypes('@types/node', root, modulesDir);
     writeJson(join(consumerDir, 'package.json'), { private: true, type: 'module' });
-    cpSync(join(fixtureRoot, name, 'index.ts'), join(consumerDir, 'index.ts'));
+    const fixture = join(fixtureRoot, name, 'index.ts');
+    assert(existsSync(fixture), `${name}: consumer fixture missing at ${fixture}`);
+    cpSync(fixture, join(consumerDir, 'index.ts'));
     const names = packages.get(`@snapdrift/${name}`).exports;
     writeFileSync(join(consumerDir, 'exports.ts'), [
       `import * as api from '@snapdrift/${name}';`,

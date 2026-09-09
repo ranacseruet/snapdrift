@@ -40,6 +40,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Validate packed package TypeScript consumers
+        run: npm run check:package-types
+
       - name: Tests with coverage
         run: npm run test:coverage
 

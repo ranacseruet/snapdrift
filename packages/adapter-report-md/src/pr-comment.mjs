@@ -22,7 +22,7 @@ export function escapeMarkdown(value) {
 }
 
 /**
- * @param {Record<string, unknown>} summary
+ * @param {import('@snapdrift/manifest').VisualReportSummary} summary
  * @param {{ artifactName?: string, runUrl?: string, dashboardUrl?: string, maxChangedRows?: number, maxErrorRows?: number }} [meta]
  * @returns {string}
  */
@@ -32,8 +32,8 @@ export function buildReportCommentBody(summary, meta = {}) {
   const status = /** @type {string} */ (summary.status) || 'incomplete';
   const statusIcon = STATUS_ICONS[status] || '⚠️';
   const statusLabel = STATUS_LABELS[status] || status;
-  const dimensionChanges = /** @type {Array<Record<string, unknown>>} */ (summary.dimensionChanges) || [];
-  const errors = /** @type {Array<Record<string, unknown>>} */ (summary.errors) || [];
+  const dimensionChanges = summary.dimensionChanges || [];
+  const errors = summary.errors || [];
   const errorCount = (/** @type {unknown[]} */ (summary.errors) || []).length;
 
   const lines = [
@@ -73,7 +73,7 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('</details>');
   }
 
-  const changed = /** @type {Array<Record<string, unknown>>} */ (summary.changed) || [];
+  const changed = summary.changed || [];
   if (changed.length > 0) {
     lines.push('');
     lines.push('<details><summary>Drift signals</summary>');

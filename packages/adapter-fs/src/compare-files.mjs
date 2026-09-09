@@ -114,7 +114,7 @@ export async function resolveImagePath(runDir, relativeImagePath) {
  *
  * @param {string} baselinePath
  * @param {string} currentPath
- * @returns {Promise<{ width: number, height: number, differentPixels: number, totalPixels: number, mismatchRatio: number }>}
+ * @returns {Promise<import('@snapdrift/compare-core').CompareBuffersResult>}
  */
 export async function comparePngs(baselinePath, currentPath) {
   const [baselineBuffer, currentBuffer] = await Promise.all([

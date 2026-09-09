@@ -55,8 +55,11 @@ provider.buildCommentBody(summary, meta).toUpperCase();
 provider.buildCommentBody(skipped).toUpperCase();
 // @ts-expect-error invalid viewport preset
 api.viewportKey('tablet');
-// @ts-expect-error fixed preset keys do not include tablet
-api.VIEWPORT_PRESETS.tablet;
+const customPreset: string = 'tablet';
+api.VIEWPORT_PRESETS[customPreset]?.width.toFixed();
+// @ts-expect-error unknown preset lookups can be undefined
+api.VIEWPORT_PRESETS[customPreset].width.toFixed();
+config.diff.mode = api.VALID_DIFF_MODES[0];
 // @ts-expect-error descriptor dimensions must be numeric
 api.viewportHash({ width: '1440', height: 900 });
 // @ts-expect-error route IDs must be strings
@@ -67,3 +70,8 @@ const wrongFilename: number = api.sanitizeRouteId('home');
 provider.capture({ purpose: 'publish' });
 // @ts-expect-error diff threshold is numeric
 config.diff.threshold = '0.1';
+
+// @ts-expect-error typo is not a report summary
+provider.buildCommentBody({ totalScrenshots: 5 });
+// @ts-expect-error unrelated configs are not summaries
+provider.buildCommentBody(config);

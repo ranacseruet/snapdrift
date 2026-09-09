@@ -19,7 +19,7 @@ const DEFAULT_OUT_DIR = path.join('qa-artifacts', 'snapdrift', 'drift', 'current
  *   summaryPath?: string,
  *   markdownPath?: string
  * }} options
- * @returns {Promise<{ summaryPath: string, markdownPath: string, summary: Record<string, unknown>, markdown: string }>}
+ * @returns {Promise<{ summaryPath: string, markdownPath: string, summary: import('@snapdrift/manifest').VisualDriftStatusSummary, markdown: string }>}
  */
 export async function writeDriftSummary(options) {
   const resolvedOutDir = path.resolve(options.outDir || DEFAULT_OUT_DIR);

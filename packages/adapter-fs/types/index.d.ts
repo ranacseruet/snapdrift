@@ -7,7 +7,8 @@ import type { CompareBuffersResult } from '@snapdrift/compare-core';
 import type {
   VisualRegressionConfig,
   VisualRegressionRouteConfig,
-  VisualDiffSummary
+  VisualDiffSummary,
+  VisualDriftStatusSummary
 } from '@snapdrift/manifest';
 
 // --- config.mjs ---
@@ -107,7 +108,7 @@ export function writeDriftSummary(
 ): Promise<{
   summaryPath: string;
   markdownPath: string;
-  summary: Record<string, unknown>;
+  summary: VisualDriftStatusSummary;
   markdown: string;
 }>;
 

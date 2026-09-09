@@ -35,3 +35,7 @@ api.generateHtmlReport(summary, { imageReader: async () => 42 });
 api.buildReportCommentBody(summary, { maxChangedRows: 'all' });
 // @ts-expect-error markdown is text
 const wrongMarkdown: number = api.makeMarkdown(summary);
+
+// @ts-expect-error typo is not a report summary
+api.buildReportCommentBody({ totalScrenshots: 5 });
+api.buildReportCommentBody(api.buildDriftSummary({ status: 'incomplete', reason: 'capture_failed' }).summary);

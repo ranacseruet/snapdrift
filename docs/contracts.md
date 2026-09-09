@@ -582,3 +582,16 @@ bodies without skipping library checks.
 These guarantees cover the workspace package entrypoints. They do not add type
 entrypoints for the root `snapdrift` package's JavaScript subpaths. Package release
 publication is required before existing registry consumers receive these fixes.
+
+Comment renderers accept `VisualReportSummary`: a complete comparison summary or
+a `VisualDriftStatusSummary` with a required status and reason. `buildDriftSummary`
+and `writeDriftSummary` return the latter, preserving their supported non-skipped
+statuses as well as intentional skips. Unrelated object literals are rejected.
+Known viewport presets have complete descriptors; arbitrary string lookups may
+return `undefined` and must be checked by consumers.
+
+The packed type gate runs in PR CI and before release publication. It validates
+the candidate workspace tarballs together, not already-published registry
+versions. Release preparation must bump every changed published package and
+raise sibling dependency floors to the versions that contain these type fixes
+before publication; the gate alone does not validate that release-version step.

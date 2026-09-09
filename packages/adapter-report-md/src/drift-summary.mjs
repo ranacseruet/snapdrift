@@ -45,7 +45,7 @@ export function describeReason(reason) {
  *   currentResultsPath?: string,
  *   baselineAvailable?: boolean
  * }} options
- * @returns {{ summary: Record<string, unknown>, markdown: string }}
+ * @returns {{ summary: import('@snapdrift/manifest').VisualDriftStatusSummary, markdown: string }}
  */
 export function buildDriftSummary(options) {
   const description = describeReason(options.reason);
@@ -63,7 +63,7 @@ export function buildDriftSummary(options) {
     ? `\`${options.currentResultsPath}\``
     : 'n/a';
 
-  /** @type {Record<string, unknown>} */
+  /** @type {import('@snapdrift/manifest').VisualDriftStatusSummary} */
   const summary = {
     status,
     reason: options.reason,

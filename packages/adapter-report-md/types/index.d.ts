@@ -5,7 +5,8 @@
 import type {
   VisualDiffSummary,
   VisualViewport,
-  VisualDriftSkippedSummary
+  VisualReportSummary,
+  VisualDriftStatusSummary
 } from '@snapdrift/manifest';
 
 // --- constants.mjs ---
@@ -35,7 +36,7 @@ export function buildDriftSummary(options: {
   selectedRouteIds?: string[] | string;
   currentResultsPath?: string;
   baselineAvailable?: boolean;
-}): { summary: Record<string, unknown>; markdown: string };
+}): { summary: VisualDriftStatusSummary; markdown: string };
 
 // --- pr-comment.mjs ---
 
@@ -45,7 +46,7 @@ export const PR_COMMENT_MARKERS: string[];
 export function escapeMarkdown(value: unknown): string;
 
 export function buildReportCommentBody(
-  summary: VisualDiffSummary | VisualDriftSkippedSummary | Record<string, unknown>,
+  summary: VisualReportSummary,
   meta?: {
     artifactName?: string;
     runUrl?: string;
