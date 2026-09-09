@@ -47,8 +47,12 @@ Changed-file scoping treats a GitHub `renamed` record as both the current
 `filename` and its nonempty `previous_filename`. This keeps a route selected
 when a watched file moves out of its configured `changePaths`, and also detects
 renames into watched or shared paths. Duplicate paths are ignored; other change
-statuses use only their current filename. Explicit route selection and
-force-run behavior take precedence over this lookup.
+statuses use only their current filename. The `pr-diff` wrapper's explicit
+`route-ids` and `force-run` inputs take precedence over this lookup; the
+standalone `scope` action supports `force-run` and otherwise derives its
+selection from the changed files. If GitHub returns the maximum 3,000 file
+records, both actions run all configured routes with reason
+`changed_files_truncated` because the list may be incomplete.
 
 Route ids are sanitized before local captures and Snap baseline exports write
 `screenshots/<route-id>.png`: `..` becomes `_`, path separators become `_`, and

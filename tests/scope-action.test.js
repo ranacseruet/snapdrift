@@ -3,11 +3,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-import * as yaml from 'js-yaml';
+import { executeActionScript } from './action-script-runner.mjs';
 
-const require = createRequire(import.meta.url);
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const REPO_ROOT = path.resolve('.');
 
 const ACTIONS = [
@@ -49,40 +46,16 @@ async function executeScopeAction(action, {
   const configPath = path.join(tempDir, 'snapdrift.json');
   await fs.writeFile(configPath, JSON.stringify(config));
 
-  const metadata = yaml.load(await fs.readFile(path.join(REPO_ROOT, action.path), 'utf8'));
-  const step = metadata.runs.steps.find((candidate) => candidate.id === 'scope');
-  if (!step) throw new Error(`Could not find scope step in ${action.path}`);
-
-  const environment = {
-    ACTION_ROOT: REPO_ROOT,
-    REPO_CONFIG_PATH: configPath,
-    ROUTE_IDS: routeIds,
-    FORCE_RUN: forceRun,
-    FORCE_RUN_REASON: forceRunReason,
-    INPUT_PR_NUMBER: prNumber
-  };
-  const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, environment);
-
-  const outputs = {};
-  const warnings = [];
   const paginateCalls = [];
+  const paginateMethods = [];
   const listFiles = async () => ({ data: [] });
   const github = {
     rest: { pulls: { listFiles } },
     paginate: async (method, options) => {
-      expect(method).toBe(listFiles);
+      paginateMethods.push(method);
       paginateCalls.push(options);
       if (paginateError) throw paginateError;
       return files;
-    }
-  };
-  const core = {
-    setOutput(name, value) {
-      outputs[name] = value;
-    },
-    warning(message) {
-      warnings.push(String(message));
     }
   };
   const context = {
@@ -91,22 +64,25 @@ async function executeScopeAction(action, {
   };
 
   try {
-    await new AsyncFunction('github', 'core', 'context', 'process', 'require', step.with.script)(
+    const result = await executeActionScript({
+      actionPath: path.join(REPO_ROOT, action.path),
+      stepId: 'scope',
+      actionRoot: REPO_ROOT,
+      env: {
+        REPO_CONFIG_PATH: configPath,
+        ROUTE_IDS: routeIds,
+        FORCE_RUN: forceRun,
+        FORCE_RUN_REASON: forceRunReason,
+        INPUT_PR_NUMBER: prNumber
+      },
       github,
-      core,
-      context,
-      process,
-      require
-    );
+      context
+    });
+    for (const method of paginateMethods) expect(method).toBe(listFiles);
+    return { ...result, paginateCalls };
   } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     await fs.rm(tempDir, { recursive: true, force: true });
   }
-
-  return { outputs, warnings, paginateCalls };
 }
 
 describe.each(ACTIONS)('$name', (action) => {
@@ -168,6 +144,36 @@ describe.each(ACTIONS)('$name', (action) => {
     });
   });
 
+  it('runs all routes when GitHub may have truncated the changed-file list', async () => {
+    const result = await executeScopeAction(action, {
+      files: Array.from({ length: 3000 }, (_value, index) => ({
+        status: 'modified',
+        filename: `docs/file-${index}.md`
+      }))
+    });
+
+    expect(result.outputs).toEqual({
+      should_run: 'true',
+      reason: 'changed_files_truncated',
+      selected_route_ids: 'home,about'
+    });
+    expect(result.warnings[0]).toContain('maximum 3000 changed-file records');
+  });
+
+  it('runs all routes with a diagnostic when GitHub returns a malformed file record', async () => {
+    const result = await executeScopeAction(action, {
+      files: [{ status: 'modified', filename: null }]
+    });
+
+    expect(result.outputs).toEqual({
+      should_run: 'true',
+      reason: 'snapdrift_scope_check_failed',
+      selected_route_ids: 'home,about'
+    });
+    expect(result.warnings[0]).toContain('Malformed GitHub changed-file response');
+    expect(result.failures).toHaveLength(0);
+  });
+
   it('deduplicates repeated current and previous paths', async () => {
     const result = await executeScopeAction(action, {
       files: [
@@ -201,30 +207,46 @@ describe.each(ACTIONS)('$name', (action) => {
   it.each([
     ['added', 'src/pages/home/new.js'],
     ['modified', 'src/pages/about/team.js'],
-    ['deleted', 'src/pages/home/old.js']
-  ])('continues to select the current path for %s files', async (_status, filename) => {
+    ['removed', 'src/pages/home/old.js']
+  ])('continues to select the current path for %s files', async (status, filename) => {
     const result = await executeScopeAction(action, {
-      files: [{ status: _status, filename }]
+      files: [{ status, filename }]
     });
 
     expect(result.outputs.should_run).toBe('true');
     expect(result.outputs.reason).toBe('scoped_snapdrift_change');
   });
 
-  it('preserves explicit route selection without looking up changed files', async () => {
-    if (!action.path.includes('pr-diff')) return;
-
+  it('preserves explicit route selection and standalone lookup behavior', async () => {
     const result = await executeScopeAction(action, {
       routeIds: 'about',
       files: [{ status: 'renamed', filename: 'archive/home.js', previous_filename: 'src/pages/home/index.js' }]
     });
 
-    expect(result.outputs).toEqual({
-      should_run: 'true',
-      reason: 'explicit_route_ids',
-      selected_route_ids: 'about'
+    if (action.path.includes('pr-diff')) {
+      expect(result.outputs).toEqual({
+        should_run: 'true',
+        reason: 'explicit_route_ids',
+        selected_route_ids: 'about'
+      });
+      expect(result.paginateCalls).toHaveLength(0);
+    } else {
+      expect(result.outputs).toEqual({
+        should_run: 'true',
+        reason: 'scoped_snapdrift_change',
+        selected_route_ids: 'home'
+      });
+      expect(result.paginateCalls).toHaveLength(1);
+    }
+  });
+
+  it('ignores a previous filename on copied records', async () => {
+    const result = await executeScopeAction(action, {
+      files: [{ status: 'copied', filename: 'src/pages/about/team.js', previous_filename: 'src/pages/home/old.js' }]
     });
-    expect(result.paginateCalls).toHaveLength(0);
+
+    expect(result.outputs.selected_route_ids).toBe('about');
+    expect(result.outputs.reason).toBe('scoped_snapdrift_change');
   });
 
   it('preserves force-run and missing-PR fallbacks', async () => {
@@ -265,5 +287,16 @@ describe.each(ACTIONS)('$name', (action) => {
     });
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain('rate limit exceeded');
+  });
+
+  it('reports no_changed_files for a valid PR with an empty file list', async () => {
+    const result = await executeScopeAction(action, { files: [] });
+
+    expect(result.outputs).toEqual({
+      should_run: 'false',
+      reason: 'no_changed_files',
+      selected_route_ids: ''
+    });
+    expect(result.paginateCalls).toHaveLength(1);
   });
 });

@@ -3,11 +3,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-import * as yaml from 'js-yaml';
-
-const require = createRequire(import.meta.url);
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+import { executeActionScript } from './action-script-runner.mjs';
 const REPO_ROOT = path.resolve('.');
 
 const VALID_CONFIG = {
@@ -37,53 +33,22 @@ const ACTIONS = [
 ];
 
 async function executeResolver(action, { github, configPath, inputs = {} }) {
-  const metadata = yaml.load(await fs.readFile(path.join(REPO_ROOT, action.path), 'utf8'));
-  const step = metadata.runs.steps.find((candidate) => candidate.id === action.stepId);
-  const environment = {
-    ACTION_ROOT: REPO_ROOT,
-    GITHUB_ACTION_PATH: path.join(REPO_ROOT, 'actions', 'resolve-baseline'),
-    GITHUB_WORKSPACE: REPO_ROOT,
-    REPO_CONFIG_PATH: configPath,
-    INPUT_ARTIFACT_NAME: inputs.artifactName || '',
-    INPUT_REPOSITORY: inputs.repository || '',
-    INPUT_WORKFLOW_ID: inputs.workflowId || 'ci.yml',
-    INPUT_BRANCH: inputs.branch || 'main'
-  };
-  const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, environment);
-
-  const outputs = {};
-  const failures = [];
-  const warnings = [];
-  const core = {
-    setOutput(name, value) {
-      outputs[name] = value;
+  return executeActionScript({
+    actionPath: path.join(REPO_ROOT, action.path),
+    stepId: action.stepId,
+    actionRoot: REPO_ROOT,
+    githubActionPath: path.join(REPO_ROOT, 'actions', 'resolve-baseline'),
+    githubWorkspace: REPO_ROOT,
+    env: {
+      REPO_CONFIG_PATH: configPath,
+      INPUT_ARTIFACT_NAME: inputs.artifactName || '',
+      INPUT_REPOSITORY: inputs.repository || '',
+      INPUT_WORKFLOW_ID: inputs.workflowId || 'ci.yml',
+      INPUT_BRANCH: inputs.branch || 'main'
     },
-    setFailed(message) {
-      failures.push(String(message));
-    },
-    warning(message) {
-      warnings.push(String(message));
-    }
-  };
-  const context = { repo: { owner: 'example', repo: 'app' } };
-
-  try {
-    await new AsyncFunction('github', 'core', 'context', 'process', 'require', step.with.script)(
-      github,
-      core,
-      context,
-      process,
-      require
-    );
-  } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
-
-  return { outputs, failures, warnings };
+    github,
+    context: { repo: { owner: 'example', repo: 'app' } }
+  });
 }
 
 function makeGithub({ runs = [], artifactsByRun = {}, paginateError, artifactError, artifactResponse } = {}) {

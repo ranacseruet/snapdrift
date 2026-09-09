@@ -185,6 +185,23 @@ runs:
               per_page: 100
             });
 
+            if (!Array.isArray(files)) {
+              throw new Error('Malformed GitHub changed-file response: expected an array of file records.');
+            }
+            for (const [index, file] of files.entries()) {
+              if (!file || typeof file !== 'object' || typeof file.filename !== 'string' || file.filename.length === 0) {
+                throw new Error(`Malformed GitHub changed-file response: file record ${index} must include a non-empty string filename.`);
+              }
+            }
+            if (files.length >= 3000) {
+              core.warning('GitHub returned the maximum 3000 changed-file records; the list may be truncated, so running all configured captures.');
+              setOutputs({
+                shouldRun: true,
+                reason: 'changed_files_truncated',
+                selectedRouteIds: allRouteIds
+              });
+              return;
+            }
             const changedFiles = [...new Set(files.flatMap((file) => [
               file.filename,
               ...(file.status === 'renamed' && typeof file.previous_filename === 'string' && file.previous_filename
