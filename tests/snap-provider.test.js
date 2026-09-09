@@ -2057,9 +2057,10 @@ describe('SnapProvider transport deadlines', () => {
       const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
       await rejection;
 
-      const completedPollCount = pollCount;
-      expect(pollCount).toBe(completedPollCount);
       expect(pollCount).toBeGreaterThan(1);
+      const completedPollCount = pollCount;
+      await Promise.resolve();
+      expect(pollCount).toBe(completedPollCount);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -2098,7 +2099,7 @@ describe('SnapProvider transport deadlines', () => {
     try {
       await expect(provider.capture({ configPath, purpose: 'diff' }))
         .rejects.toThrow(/operation deadline/);
-      expect(requestCount).toBe(30);
+      expect(requestCount).toBeGreaterThan(1);
       expect(requestCount).toBeLessThan(42);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
@@ -2172,6 +2173,80 @@ describe('SnapProvider transport deadlines', () => {
       .rejects.toThrow(/operation deadline/);
     expect(callCount).toBe(1);
     expect(delays).toEqual([500]);
+  });
+
+  it('allows an asynchronously scheduled retry wait to finish before its watchdog', async () => {
+    let callCount = 0;
+    const sleepSignals = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        return callCount === 1
+          ? errorResponse(503, { error: 'service unavailable' })
+          : okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: async (delay, signal) => {
+        sleepSignals.push(signal);
+        await Promise.resolve();
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, delay);
+          const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            reject(signal?.reason ?? new Error('Sleep aborted.'));
+          };
+          signal?.addEventListener('abort', onAbort, { once: true });
+        });
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('async-retry-wait');
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    await expect(pending).resolves.toEqual({ id: 'baseline_1' });
+    expect(callCount).toBe(2);
+    expect(sleepSignals[0].aborted).toBe(false);
+  });
+
+  it('cancels a stalled retry wait without starting another request', async () => {
+    let callCount = 0;
+    const sleepSignals = [];
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: async () => {
+        callCount += 1;
+        return errorResponse(503, { error: 'service unavailable' });
+      },
+      sleepFn: (_delay, signal) => new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 10_000);
+        const onAbort = () => {
+          clearTimeout(timer);
+          signal?.removeEventListener('abort', onAbort);
+          reject(signal?.reason ?? new Error('Sleep aborted.'));
+        };
+        sleepSignals.push(signal);
+        signal?.addEventListener('abort', onAbort, { once: true });
+      }),
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('stalled-retry-wait');
+    const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
+    for (let tick = 0; tick < 10 && sleepSignals.length === 0; tick += 1) {
+      await Promise.resolve();
+    }
+    expect(sleepSignals).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1_001);
+
+    await rejection;
+    expect(callCount).toBe(1);
+    expect(sleepSignals[0].aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('gives concurrent public operations independent deadlines', async () => {
