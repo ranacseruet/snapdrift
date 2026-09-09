@@ -43,6 +43,17 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 
+Changed-file scoping treats a GitHub `renamed` record as both the current
+`filename` and its nonempty `previous_filename`. This keeps a route selected
+when a watched file moves out of its configured `changePaths`, and also detects
+renames into watched or shared paths. Duplicate paths are ignored; other change
+statuses use only their current filename. The `pr-diff` wrapper's explicit
+`route-ids` and `force-run` inputs take precedence over this lookup; the
+standalone `scope` action supports `force-run` and otherwise derives its
+selection from the changed files. If GitHub returns the maximum 3,000 file
+records, both actions run all configured routes with reason
+`changed_files_truncated` because the list may be incomplete.
+
 Route ids are sanitized before local captures and Snap baseline exports write
 `screenshots/<route-id>.png`: `..` becomes `_`, path separators become `_`, and
 control characters are removed. Distinct route ids that produce the same

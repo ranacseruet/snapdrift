@@ -188,6 +188,15 @@ jobs:
 - Upserts the PR report
 - Enforces `diff.mode` after publication completes
 
+When the wrapper scopes a pull request from GitHub's changed-file list, a
+renamed file contributes both its new and previous paths. A move out of a
+watched directory therefore still selects the route that owned the old path,
+while a move into a watched or shared path selects the new scope as well.
+Repeated paths are deduplicated, and `route-ids` or `force-run` keep their
+existing precedence. GitHub caps this file listing at 3,000 records; if that
+limit is reached, the actions run all configured routes with scope reason
+`changed_files_truncated` instead of trusting a potentially incomplete list.
+
 ## Useful overrides
 
 | Input | Default | Purpose |

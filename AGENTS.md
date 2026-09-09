@@ -109,6 +109,7 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 | `tests/pr-comment.test.js` | PR comment body construction (local and snap link variants) |
 | `tests/provider.test.js` | `createProvider` factory and `LocalProvider` |
 | `tests/snap-provider.test.js` | `SnapProvider` capture/diff/publish paths, local-capture hybrid, retry, error classification |
+| `tests/scope-action.test.js` | Executable `scope` and `pr-diff` changed-file selection, rename paths, truncation, malformed responses, and scope fallbacks |
 | `tests/snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract, provider wiring |
 | `tests/snapdrift-config.test.js` | `snapdrift-config` shim exports |
 | `tests/report.test.js` | HTML report image embedding |
