@@ -220,6 +220,19 @@ describe('runBaselineCapture', () => {
         expect(screenshotPath.startsWith(result.screenshotsRoot)).toBe(true);
     });
 
+    it('rejects colliding sanitized route ids before launching the browser or creating output', async () => {
+        const routes = [
+            { id: 'a/b', path: '/', viewport: 'desktop' },
+            { id: 'a_b', path: '/about', viewport: 'mobile' }
+        ];
+        const configPath = await writeConfig(tempDir, routes);
+
+        await expect(runBaselineCapture({ configPath, routeIds: ['a/b'] }))
+            .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+        expect(launchMock).not.toHaveBeenCalled();
+        await expect(fs.access(path.join(tempDir, 'qa-artifacts'))).rejects.toThrow();
+    });
+
     it('uses SNAPDRIFT_ROUTE_IDS when explicit routeIds are omitted', async () => {
         const routes = [
             { id: 'home-desktop', path: '/', viewport: 'desktop' },

@@ -51,6 +51,44 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
     expect(() => validateSnapdriftConfig(copy)).toThrow('duplicates');
   });
 
+  test.each([
+    ['separator', 'a/b', 'a_b', 'screenshots/a_b.png'],
+    ['backslash', 'a\\b', 'a_b', 'screenshots/a_b.png'],
+    ['traversal token', 'a..b', 'a_b', 'screenshots/a_b.png'],
+    ['control character', 'a\u0000b', 'ab', 'screenshots/ab.png']
+  ])('rejects %s route ids that sanitize to one screenshot filename', (_caseLabel, firstId, secondId, expectedFilename) => {
+    const copy = { ...VALID_CONFIG, routes: [
+      { id: firstId, path: '/', viewport: 'desktop' },
+      { id: secondId, path: '/about', viewport: 'mobile' }
+    ]};
+    const validate = () => validateSnapdriftConfig(copy);
+
+    expect(validate).toThrow(firstId);
+    expect(validate).toThrow(secondId);
+    expect(validate).toThrow(expectedFilename);
+    expect(validate).toThrow(/Rename.*recapture/);
+  });
+
+  test('reports every route filename collision in one validation error', () => {
+    const copy = { ...VALID_CONFIG, routes: [
+      { id: 'a/b', path: '/', viewport: 'desktop' },
+      { id: 'a_b', path: '/a', viewport: 'desktop' },
+      { id: 'c/d', path: '/c', viewport: 'desktop' },
+      { id: 'c_d', path: '/c-d', viewport: 'desktop' }
+    ] };
+
+    let error;
+    try {
+      validateSnapdriftConfig(copy);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/a\/b.*a_b.*screenshots\/a_b\.png/);
+    expect(error.message).toMatch(/c\/d.*c_d.*screenshots\/c_d\.png/);
+  });
+
   test('rejects invalid diff mode', () => {
     const copy = { ...VALID_CONFIG, diff: { threshold: 0.01, mode: 'invalid' } };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.mode');

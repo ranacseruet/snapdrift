@@ -594,7 +594,8 @@ describe('generateDriftReport', () => {
         // The other entry must be silently skipped (covers the !selected.has branch).
         const selectedId = 'root-index-desktop';
         const extraId = 'root-index-mobile';
-        const imagePath = 'screenshots/r.png';
+        const selectedImagePath = 'screenshots/r-desktop.png';
+        const extraImagePath = 'screenshots/r-mobile.png';
 
         const opts = await setupFixtures(tempDir, {
             routes: [
@@ -602,15 +603,21 @@ describe('generateDriftReport', () => {
                 { id: extraId, path: '/', viewport: 'mobile' }
             ],
             baselineEntries: [
-                makeManifestEntry(selectedId, 'desktop', imagePath, 10, 10),
-                makeManifestEntry(extraId, 'mobile', imagePath, 10, 10)
+                makeManifestEntry(selectedId, 'desktop', selectedImagePath, 10, 10),
+                makeManifestEntry(extraId, 'mobile', extraImagePath, 10, 10)
             ],
             currentEntries: [
-                makeManifestEntry(selectedId, 'desktop', imagePath, 10, 10),
-                makeManifestEntry(extraId, 'mobile', imagePath, 10, 10)
+                makeManifestEntry(selectedId, 'desktop', selectedImagePath, 10, 10),
+                makeManifestEntry(extraId, 'mobile', extraImagePath, 10, 10)
             ],
-            baselinePngs: [{ relPath: imagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }],
-            currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }]
+            baselinePngs: [
+                { relPath: selectedImagePath, width: 10, height: 10, r: 50, g: 50, b: 50 },
+                { relPath: extraImagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }
+            ],
+            currentPngs: [
+                { relPath: selectedImagePath, width: 10, height: 10, r: 50, g: 50, b: 50 },
+                { relPath: extraImagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }
+            ]
         });
 
         // Only request the selected route — the extra entry should be ignored.
@@ -720,6 +727,26 @@ describe('generateDriftReport', () => {
         await expect(
             generateDriftReport({ ...opts, routeIds: [routeId] })
         ).rejects.toThrow(/Duplicate screenshot id/);
+    });
+
+    it('rejects duplicate staged filenames before filtering selected routes', async () => {
+        const opts = await setupFixtures(tempDir, {
+            routes: [
+                { id: 'route-a', path: '/', viewport: 'desktop' },
+                { id: 'route-b', path: '/b', viewport: 'mobile' }
+            ],
+            baselineEntries: [
+                makeManifestEntry('route-a', 'desktop', 'screenshots/a/shared.png', 10, 10),
+                makeManifestEntry('route-b', 'mobile', 'screenshots/b/shared.png', 10, 10)
+            ],
+            currentEntries: [
+                makeManifestEntry('route-a', 'desktop', 'screenshots/a.png', 10, 10),
+                makeManifestEntry('route-b', 'mobile', 'screenshots/b.png', 10, 10)
+            ]
+        });
+
+        await expect(generateDriftReport({ ...opts, routeIds: ['route-a'] }))
+            .rejects.toThrow(/Duplicate screenshot imagePath filename.*baseline screenshot manifest/);
     });
 
     describe('generated markdown', () => {

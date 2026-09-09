@@ -22,7 +22,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 
 | Field | Type | Description |
 |:------|:-----|:------------|
-| `id` | `string` | Unique route identifier across runs |
+| `id` | `string` | Unique route identifier across runs. Its sanitized screenshot filename must also be unique across the full configured route set. |
 | `path` | `string` | URL path appended to `baseUrl` |
 | `viewport` | `string` or `object` | Preset name (`"desktop"`, `"mobile"`) or a custom object `{ "width": number, "height": number }` |
 | `changePaths` | `string[]` | Optional prefixes used for changed-file scoping |
@@ -42,6 +42,13 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
+
+Route ids are sanitized before local captures and Snap baseline exports write
+`screenshots/<route-id>.png`: `..` becomes `_`, path separators become `_`, and
+control characters are removed. Distinct route ids that produce the same
+sanitized filename are rejected before capture starts. Rename one of the route
+ids and recapture the affected baseline; existing screenshot filenames remain
+unchanged for noncolliding ids.
 
 ### Example (local provider)
 
@@ -100,6 +107,12 @@ The published baseline bundle contains:
 | `results.json` | Capture results with per-route status and timing |
 | `manifest.json` | Screenshot manifest with ids, paths, and dimensions |
 | `screenshots/*.png` | Captured screenshot images |
+
+Every manifest entry must use a unique staged screenshot filename (the basename
+of `imagePath`). Duplicate paths or paths that flatten to the same filename are
+rejected before comparison, even when the run selects only one of the affected
+route ids, because they can point two logical screenshots at the same pixels.
+Rename the conflicting route ids and recapture the baseline and current bundle.
 
 ### Baseline resolution
 
