@@ -398,8 +398,20 @@ The Snap HTTP client classifies responses and applies the following rules:
 
 - **2xx** — success, return the parsed body.
 - **4xx** — non-retryable. The client throws `SnapApiError(status, message, path)` immediately. `onUnavailable` is **not** consulted for 4xx — a 404 from `/baselines/latest` is a "no baseline yet" signal, but a 4xx from `/runs` is a configuration error that retrying won't fix.
-- **5xx** — retryable up to 3 attempts with exponential backoff (`1 s` → `2 s` → `4 s`, capped at `30 s` total). If the final attempt still returns 5xx, the client falls through to the `onUnavailable` handler.
-- **Network errors** — same retry/backoff behavior as 5xx. After exhaustion, falls through to the `onUnavailable` handler.
+- **5xx** — retryable up to 3 attempts with exponential backoff (`1 s` → `2 s` → `4 s`, with each delay capped at `30 s`). If the final attempt still returns 5xx, the client falls through to the `onUnavailable` handler.
+- **Network errors and transport timeouts** — same retry/backoff behavior as 5xx. After exhaustion, falls through to the `onUnavailable` handler.
+
+Every JSON request attempt has a 30-second limit; binary export attempts have a
+120-second limit. Headers and response bodies share the applicable attempt
+limit, and each public Snap operation has one 10-minute deadline covering all
+of its requests, retries, backoff, and polling. The client passes an
+`AbortSignal` to fetch and aborts/cancels stalled bodies; injected transports
+that ignore cancellation are still released by the client-side deadline.
+Retry and poll waits are clipped to the remaining operation time, so no new
+request starts after the operation deadline. Deadline exhaustion is treated as
+Snap unavailability and follows `onUnavailable`; received 4xx responses keep
+their immediate non-retryable behavior, and a stalled 4xx diagnostic body
+retains its HTTP status with a timeout diagnostic.
 
 `onUnavailable` is consulted once retries are exhausted:
 

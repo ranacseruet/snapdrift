@@ -4,6 +4,12 @@
 
 ### Fixes
 
+- **Snap transport now has enforceable request and operation deadlines** (#150). JSON requests
+  settle stalled headers or bodies within 30 seconds, binary exports within 120 seconds, and each
+  Snap operation shares a 10-minute budget across requests, retries, backoff, and polling. Aborted
+  or otherwise exhausted transport operations now reach the configured `onUnavailable` policy;
+  received 4xx responses remain immediate and non-retryable, while stalled 4xx diagnostics retain
+  their HTTP status with a timeout diagnostic.
 - **Renamed files now retain both paths during route scoping** (#149). The
   `scope` and `pr-diff` actions include a nonempty `previous_filename` for
   GitHub rename records, deduplicate the combined paths, and preserve the
