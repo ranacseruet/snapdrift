@@ -4,6 +4,12 @@
 
 ### Fixes
 
+- **Workspace packages now declare their runtime dependency boundaries** (#148).
+  `@snapdrift/adapter-fs` declares `@snapdrift/adapter-report-md`, and an isolated
+  packed-consumer gate imports every workspace package with only its declared
+  local dependency closure. Repository workspaces can no longer mask a missing
+  runtime dependency.
+
 - **Published workspace TypeScript contracts resolve under modern module resolution** (#135, #129). All four `@snapdrift/*` packages expose declarations through their export maps, include signatures for every public runtime export, and correct stale declaration references. Strict declaration checks and isolated packed-package consumer fixtures now run in CI.
 
 - **Snap transport now has enforceable request and operation deadlines** (#150). JSON requests

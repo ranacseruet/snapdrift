@@ -595,3 +595,12 @@ the candidate workspace tarballs together, not already-published registry
 versions. Release preparation must bump every changed published package and
 raise sibling dependency floors to the versions that contain these type fixes
 before publication; the gate alone does not validate that release-version step.
+
+Each workspace package also declares every runtime package it imports. In
+particular, `@snapdrift/adapter-fs` declares `@snapdrift/adapter-report-md`, so
+it can be installed and imported without the SnapDrift repository or a sibling
+workspace masking a missing dependency. `npm run check:package-runtime` packs
+each workspace package, installs it in an isolated temporary consumer together
+with only its declared local workspace dependency closure, and imports its
+public entrypoint. The gate runs in pull-request and release workflows; publish
+the updated package before registry consumers can receive a dependency fix.

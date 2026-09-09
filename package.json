@@ -26,13 +26,14 @@
     "lint": "eslint .",
     "typecheck": "tsc --project tsconfig.json",
     "check:package-types": "node scripts/check-package-types.mjs",
+    "check:package-runtime": "node scripts/check-package-runtime.mjs",
     "validate:actions": "node scripts/validate-actions.mjs",
     "validate:release": "node scripts/validate-release.mjs",
     "check:pin-stale": "node scripts/check-pin-stale.mjs",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage --runInBand",
     "pack:check": "npm pack --dry-run --cache .npm-cache",
-    "ci": "npm run lint && npm run typecheck && npm run check:package-types && npm run validate:actions && npm run test:coverage && npm run pack:check"
+    "ci": "npm run lint && npm run typecheck && npm run check:package-types && npm run check:package-runtime && npm run validate:actions && npm run test:coverage && npm run pack:check"
   },
   "engines": {
     "node": ">=22"
