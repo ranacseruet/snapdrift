@@ -19,30 +19,42 @@ export function sanitizeRouteId(id) {
  * Validate that distinct route ids produce distinct screenshot filenames.
  * Existing safe route ids keep their current `<sanitized-id>.png` names.
  *
- * @param {Iterable<string>} routeIds
+ * @param {Iterable<unknown>} routeIds
  * @param {string} [sourceLabel]
+ * @param {string} [extension]
  * @returns {void}
  * @throws {Error} when two distinct ids map to the same filename
  */
-export function assertUniqueRouteIdFilenames(routeIds, sourceLabel = 'route ids') {
-  /** @type {Map<string, string>} */
+export function assertUniqueRouteIdFilenames(routeIds, sourceLabel = 'route ids', extension = '.png') {
+  /** @type {Map<string, unknown>} */
   const routeIdByFilename = new Map();
+  /** @type {string[]} */
+  const errors = [];
 
   for (const routeId of routeIds) {
-    if (typeof routeId !== 'string') {
-      continue;
+    if (typeof routeId !== 'string' || routeId.length === 0) {
+      throw new Error(
+        `Route id in ${sourceLabel} must be a non-empty string; received ${String(routeId)}. ` +
+        `Rename the invalid route id and recapture the affected baseline.`
+      );
     }
 
-    const filename = `${sanitizeRouteId(routeId)}.png`;
-    const previousRouteId = routeIdByFilename.get(filename);
-    if (previousRouteId && previousRouteId !== routeId) {
-      throw new Error(
+    const filename = `${sanitizeRouteId(routeId)}${extension}`;
+    if (routeIdByFilename.has(filename)) {
+      const previousRouteId = routeIdByFilename.get(filename);
+      errors.push(
         `Route ids "${previousRouteId}" and "${routeId}" in ${sourceLabel} ` +
         `map to the same screenshot filename "screenshots/${filename}". ` +
         `Rename one of the route ids and recapture the affected baseline.`
       );
     }
 
-    routeIdByFilename.set(filename, routeId);
+    if (!routeIdByFilename.has(filename)) {
+      routeIdByFilename.set(filename, routeId);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join('\n'));
   }
 }

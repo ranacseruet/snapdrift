@@ -7,24 +7,47 @@
 const CURRENT_SCHEMA_VERSION = 1;
 
 /**
- * @param {Array<{ imagePath?: unknown, id?: unknown }>} screenshots
+ * @param {string} imagePath
+ * @returns {string}
+ */
+function manifestImageFilename(imagePath) {
+  const normalizedPath = imagePath.replace(/\\/g, '/');
+  return normalizedPath.split('/').pop() || normalizedPath;
+}
+
+/**
+ * @param {Map<string, { id?: unknown, imagePath: string }>} imagePaths
+ * @param {{ imagePath?: unknown, id?: unknown }} screenshot
+ * @param {string} sourceLabel
  * @returns {void}
  */
-function assertUniqueManifestImagePaths(screenshots) {
+function registerManifestImagePath(imagePaths, screenshot, sourceLabel) {
+  if (typeof screenshot.imagePath !== 'string') {
+    return;
+  }
+
+  const filename = manifestImageFilename(screenshot.imagePath);
+  const previous = imagePaths.get(filename);
+  if (imagePaths.has(filename)) {
+    throw new Error(
+      `Duplicate screenshot imagePath filename "${filename}" in ${sourceLabel} is used by route ids ` +
+      `"${String(previous?.id)}" and "${String(screenshot.id)}" ` +
+      `(paths "${previous?.imagePath}" and "${screenshot.imagePath}"). ` +
+      `Rename the route ids and recapture the affected baseline.`
+    );
+  }
+  imagePaths.set(filename, { id: screenshot.id, imagePath: screenshot.imagePath });
+}
+
+/**
+ * @param {Array<{ imagePath?: unknown, id?: unknown }>} screenshots
+ * @param {string} sourceLabel
+ * @returns {void}
+ */
+function assertUniqueManifestImagePaths(screenshots, sourceLabel) {
   const imagePaths = new Map();
   for (const screenshot of screenshots) {
-    if (typeof screenshot.imagePath !== 'string') {
-      continue;
-    }
-    const previousImagePathId = imagePaths.get(screenshot.imagePath);
-    if (previousImagePathId && previousImagePathId !== screenshot.id) {
-      throw new Error(
-        `Duplicate screenshot imagePath "${screenshot.imagePath}" is used by route ids ` +
-        `"${previousImagePathId}" and "${screenshot.id}". ` +
-        `Rename the route ids and recapture the affected baseline.`
-      );
-    }
-    imagePaths.set(screenshot.imagePath, screenshot.id);
+    registerManifestImagePath(imagePaths, screenshot, sourceLabel);
   }
 }
 
@@ -33,9 +56,10 @@ function assertUniqueManifestImagePaths(screenshots) {
  * If `schemaVersion` is absent, it is set to CURRENT_SCHEMA_VERSION (1).
  *
  * @param {unknown} value
+ * @param {string} [sourceLabel]
  * @returns {ScreenshotManifest}
  */
-export function validateManifest(value) {
+export function validateManifest(value, sourceLabel = 'screenshot manifest') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Manifest must be a non-null object.');
   }
@@ -63,6 +87,7 @@ export function validateManifest(value) {
   }
 
   const ids = new Set();
+  const imagePaths = new Map();
   for (const [index, entry] of candidate.screenshots.entries()) {
     if (!entry || typeof entry !== 'object') {
       throw new Error(`manifest.screenshots[${index}] must be an object.`);
@@ -81,6 +106,7 @@ export function validateManifest(value) {
     if (typeof e.imagePath !== 'string' || !e.imagePath) {
       throw new Error(`manifest.screenshots[${index}].imagePath must be a non-empty string.`);
     }
+    registerManifestImagePath(imagePaths, e, sourceLabel);
     if (e.viewport !== undefined && e.viewport !== null) {
       const vp = e.viewport;
       const isPreset = typeof vp === 'string';
@@ -99,8 +125,6 @@ export function validateManifest(value) {
     }
   }
 
-  assertUniqueManifestImagePaths(/** @type {Array<{ imagePath?: unknown, id?: unknown }>} */ (candidate.screenshots));
-
   return /** @type {ScreenshotManifest} */ (value);
 }
 
@@ -109,10 +133,11 @@ export function validateManifest(value) {
  *
  * @param {ScreenshotManifest} manifest
  * @param {string[]} selectedRouteIds
+ * @param {string} [sourceLabel]
  * @returns {Map<string, ScreenshotManifestEntry>}
  */
-export function indexManifestEntries(manifest, selectedRouteIds) {
-  assertUniqueManifestImagePaths(manifest.screenshots || []);
+export function indexManifestEntries(manifest, selectedRouteIds, sourceLabel = 'screenshot manifest') {
+  assertUniqueManifestImagePaths(manifest.screenshots || [], sourceLabel);
 
   const selected = new Set(selectedRouteIds);
   const entries = new Map();

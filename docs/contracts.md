@@ -108,7 +108,8 @@ The published baseline bundle contains:
 | `manifest.json` | Screenshot manifest with ids, paths, and dimensions |
 | `screenshots/*.png` | Captured screenshot images |
 
-Every manifest entry must use a unique `imagePath`. Duplicate paths are
+Every manifest entry must use a unique staged screenshot filename (the basename
+of `imagePath`). Duplicate paths or paths that flatten to the same filename are
 rejected before comparison, even when the run selects only one of the affected
 route ids, because they can point two logical screenshots at the same pixels.
 Rename the conflicting route ids and recapture the baseline and current bundle.

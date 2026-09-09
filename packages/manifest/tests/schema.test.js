@@ -73,6 +73,18 @@ describe('@snapdrift/manifest — validateManifest', () => {
     expect(() => validateManifest(dup)).toThrow(/Duplicate screenshot imagePath.*a.*b.*recapture/);
   });
 
+  test('rejects duplicate staged filenames during manifest validation', () => {
+    const dup = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], id: 'a', imagePath: 'screenshots/a/shared.png' },
+        { ...VALID_MANIFEST.screenshots[1], id: 'b', imagePath: 'screenshots/b/shared.png' }
+      ]
+    };
+
+    expect(() => validateManifest(dup)).toThrow(/Duplicate screenshot imagePath filename.*shared\.png.*a.*b.*recapture/);
+  });
+
   test('rejects screenshot with missing id', () => {
     const bad = { ...VALID_MANIFEST, screenshots: [{ path: '/', width: 100, height: 100 }] };
     expect(() => validateManifest(bad)).toThrow('id');
@@ -150,6 +162,31 @@ describe('@snapdrift/manifest — indexManifestEntries', () => {
     };
 
     expect(() => indexManifestEntries(dup, ['a'])).toThrow(/Duplicate screenshot imagePath.*a.*b.*recapture/);
+  });
+
+  test('rejects duplicate image paths when the first route id is falsy', () => {
+    const dup = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], id: '', imagePath: 'screenshots/shared.png' },
+        { ...VALID_MANIFEST.screenshots[1], id: 'b', imagePath: 'screenshots/shared.png' }
+      ]
+    };
+
+    expect(() => indexManifestEntries(dup, ['b'])).toThrow(/Duplicate screenshot imagePath.*shared\.png.*b.*recapture/);
+  });
+
+  test('includes the manifest source in duplicate image path errors', () => {
+    const dup = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], id: 'a', imagePath: 'screenshots/shared.png' },
+        { ...VALID_MANIFEST.screenshots[1], id: 'b', imagePath: 'screenshots/shared.png' }
+      ]
+    };
+
+    expect(() => indexManifestEntries(dup, ['a'], 'baseline screenshot manifest'))
+      .toThrow(/baseline screenshot manifest/);
   });
 });
 

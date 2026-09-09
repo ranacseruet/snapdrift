@@ -304,6 +304,35 @@ describe('SnapProvider.capture()', () => {
     }
   });
 
+  it('sanitizes hosted manifest image paths with the shared route filename helper', async () => {
+    const mockFetch = async (url) => {
+      if (url.includes('/runs/') && url.includes('/captures')) {
+        return okResponse({ id: 'cap_1', status: 'pending' });
+      }
+      return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-sanitized-manifest-config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'a/b', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      const result = await provider.capture({ configPath, routeIds: ['a/b'] });
+      const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf-8'));
+      expect(manifest.screenshots[0].imagePath).toBe('screenshots/a_b.png');
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
   it('attaches the latest accepted baseline id and branch to the run', async () => {
     const requests = [];
     const mockFetch = async (url, opts) => {
@@ -2200,5 +2229,66 @@ describe('SnapProvider.exportBaselines()', () => {
 
     await expect(provider.exportBaselines())
       .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+  });
+
+  it('uses each exported archive extension when checking route filename collisions', async () => {
+    const png = tinyPng(2, 3);
+    const baseline = makeBaseline({
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [
+          { routeId: 'a/b', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' },
+          { routeId: 'a_b', routePath: '/about', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two' }
+        ]
+      },
+      objects: [
+        { sourceKey: 'visual/p/one', archivePath: 'bsl_export_1/images/one.jpg' },
+        { sourceKey: 'visual/p/two', archivePath: 'bsl_export_1/images/two.png' }
+      ]
+    });
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) },
+      { name: 'bsl_export_1/images/one.jpg', body: png },
+      { name: 'bsl_export_1/images/two.png', body: png }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+
+    const exported = await provider.exportBaselines();
+    expect(exported.screenshots.map(({ filename }) => filename)).toEqual(['a_b.jpg', 'a_b.png']);
+  });
+
+  it('rejects duplicate and malformed route ids in an exported source manifest', async () => {
+    const baseline = makeBaseline({
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [
+          { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' },
+          { routeId: 'home', routePath: '/duplicate', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two' }
+        ]
+      },
+      objects: []
+    });
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+
+    await expect(provider.exportBaselines()).rejects.toThrow(/source manifest.*screenshots\/home\.png.*Rename.*recapture/);
+  });
+
+  it('rejects non-string route ids in an exported source manifest with context', async () => {
+    const baseline = makeBaseline({
+      sourceManifest: {
+        schemaVersion: 1,
+        routes: [{ routeId: null, routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' }]
+      },
+      objects: []
+    });
+    const tar = buildTar([
+      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+
+    await expect(provider.exportBaselines()).rejects.toThrow(/source manifest.*non-empty string/);
   });
 });

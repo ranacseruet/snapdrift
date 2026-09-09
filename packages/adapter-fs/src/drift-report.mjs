@@ -10,6 +10,7 @@ import {
   selectConfiguredRoutes,
   splitCommaList,
   resolveFromWorkingDirectory,
+  validateManifest,
   indexManifestEntries,
   indexRouteResults,
   determineDriftStatus,
@@ -73,10 +74,12 @@ export async function generateDriftReport(options = {}) {
     loadJson(resolvedCurrentManifestPath, 'current screenshot manifest')
   ]);
 
+  const validatedBaselineManifest = validateManifest(baselineManifest, 'baseline screenshot manifest');
+  const validatedCurrentManifest = validateManifest(currentManifest, 'current screenshot manifest');
   const baselineRouteResults = indexRouteResults(/** @type {BaselineResults} */ (baselineResults));
   const currentRouteResults = indexRouteResults(/** @type {BaselineResults} */ (currentResults));
-  const baselineEntries = indexManifestEntries(/** @type {ScreenshotManifest} */ (baselineManifest), selectedRouteIds);
-  const currentEntries = indexManifestEntries(/** @type {ScreenshotManifest} */ (currentManifest), selectedRouteIds);
+  const baselineEntries = indexManifestEntries(validatedBaselineManifest, selectedRouteIds, 'baseline screenshot manifest');
+  const currentEntries = indexManifestEntries(validatedCurrentManifest, selectedRouteIds, 'current screenshot manifest');
 
   const envBaselineArtifactName = readFirstDefinedEnv(['SNAPDRIFT_BASELINE_ARTIFACT_NAME']) || '';
   const envBaselineSourceSha = readFirstDefinedEnv(['SNAPDRIFT_BASELINE_SOURCE_SHA']) || '';

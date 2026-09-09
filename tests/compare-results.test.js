@@ -729,6 +729,26 @@ describe('generateDriftReport', () => {
         ).rejects.toThrow(/Duplicate screenshot id/);
     });
 
+    it('rejects duplicate staged filenames before filtering selected routes', async () => {
+        const opts = await setupFixtures(tempDir, {
+            routes: [
+                { id: 'route-a', path: '/', viewport: 'desktop' },
+                { id: 'route-b', path: '/b', viewport: 'mobile' }
+            ],
+            baselineEntries: [
+                makeManifestEntry('route-a', 'desktop', 'screenshots/a/shared.png', 10, 10),
+                makeManifestEntry('route-b', 'mobile', 'screenshots/b/shared.png', 10, 10)
+            ],
+            currentEntries: [
+                makeManifestEntry('route-a', 'desktop', 'screenshots/a.png', 10, 10),
+                makeManifestEntry('route-b', 'mobile', 'screenshots/b.png', 10, 10)
+            ]
+        });
+
+        await expect(generateDriftReport({ ...opts, routeIds: ['route-a'] }))
+            .rejects.toThrow(/Duplicate screenshot imagePath filename.*baseline screenshot manifest/);
+    });
+
     describe('generated markdown', () => {
         it('contains all expected sections', async () => {
             const routeId = 'root-index-desktop';
