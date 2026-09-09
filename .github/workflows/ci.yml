@@ -33,6 +33,8 @@ jobs:
         run: npm run lint
       - name: Typecheck JSDoc contracts
         run: npm run typecheck
+      - name: Validate packed package TypeScript consumers
+        run: npm run check:package-types
       - name: Run unit tests with coverage enforcement
         run: npm run test:coverage
       - name: Validate published package shape

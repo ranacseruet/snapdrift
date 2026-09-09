@@ -305,7 +305,7 @@ export interface VisualProvider {
   diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
   publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
   fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
-  buildCommentBody(summary: VisualDiffSummary, meta?: ProviderCommentMeta): string;
+  buildCommentBody(summary: VisualDiffSummary | VisualDriftSkippedSummary | Record<string, unknown>, meta?: ProviderCommentMeta): string;
 }
 
 // --- Config validation and route selection ---
@@ -321,3 +321,13 @@ export function validateSnapdriftConfig(value: unknown, sourceLabel?: string): V
 export function resolveFromWorkingDirectory(config: VisualRegressionConfig, relativePath: string): string;
 export function selectConfiguredRoutes(config: VisualRegressionConfig, requestedRouteIds: Iterable<string>): { routes: VisualRegressionRouteConfig[]; selectedRouteIds: string[] };
 export function selectRoutesForChangedFiles(config: VisualRegressionConfig, changedFiles: string[]): { shouldRun: boolean; reason: string; selectedRouteIds: string[] };
+
+// --- Manifest schema and viewport helpers ---
+
+export const CURRENT_SCHEMA_VERSION: number;
+export function validateManifest(value: unknown, sourceLabel?: string): VisualScreenshotManifest;
+export function indexManifestEntries(manifest: VisualScreenshotManifest, selectedRouteIds: string[], sourceLabel?: string): Map<string, VisualScreenshotManifestEntry>;
+export function indexRouteResults(results: VisualBaselineResults): Map<string, VisualBaselineRouteResult>;
+export const VIEWPORT_PRESETS: Record<VisualViewportPreset, Required<ViewportDescriptor>>;
+export function viewportKey(viewport: VisualViewport): string;
+export function viewportHash(descriptor: ViewportDescriptor): string;

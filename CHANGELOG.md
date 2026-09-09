@@ -4,6 +4,8 @@
 
 ### Fixes
 
+- **Published workspace TypeScript contracts resolve under modern module resolution** (#135, #129). All four `@snapdrift/*` packages expose declarations through their export maps, include signatures for every public runtime export, and correct stale declaration references. Strict declaration checks and isolated packed-package consumer fixtures now run in CI.
+
 - **Snap transport now has enforceable request and operation deadlines** (#150). JSON requests
   settle stalled headers or bodies within 30 seconds, binary exports within 120 seconds, and each
   Snap operation shares a 10-minute budget across requests, retries, backoff, and polling. Aborted

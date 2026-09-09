@@ -5,7 +5,7 @@
 import type {
   VisualDiffSummary,
   VisualViewport,
-  VisualDiffSummary as DriftSummary
+  VisualDriftSkippedSummary
 } from '@snapdrift/manifest';
 
 // --- constants.mjs ---
@@ -20,7 +20,7 @@ export const STATUS_LABELS: Readonly<Record<string, string>>;
 export function formatViewport(viewport: VisualViewport | undefined): string;
 export function makeMarkdown(summaryData: VisualDiffSummary): string;
 export function formatDriftFailureMessage(
-  diffMode: VisualDiffSummary['diff']['mode'],
+  diffMode: VisualDiffSummary['diffMode'],
   summary: { changedScreenshots?: number }
 ): string;
 
@@ -45,7 +45,7 @@ export const PR_COMMENT_MARKERS: string[];
 export function escapeMarkdown(value: unknown): string;
 
 export function buildReportCommentBody(
-  summary: Record<string, unknown>,
+  summary: VisualDiffSummary | VisualDriftSkippedSummary | Record<string, unknown>,
   meta?: {
     artifactName?: string;
     runUrl?: string;

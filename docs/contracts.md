@@ -562,3 +562,23 @@ The `VisualProvider` interface requires `buildCommentBody(summary, meta?)`:
 
 - **`LocalProvider`** — delegates to `buildReportCommentBody` without a `dashboardUrl`.
 - **`SnapProvider`** — constructs `dashboardUrl` from `{apiUrl}/projects/{projectId}/runs/{lastRunId}` and passes it through.
+
+
+## Workspace TypeScript contracts
+
+The four `@snapdrift/*` workspace packages expose their declarations through a
+`types` export condition before the existing JavaScript entrypoint. ESM consumers
+can use Bundler, Node16, or NodeNext module resolution with `strict: true` and
+`skipLibCheck: false`; Node16/NodeNext consumers should use an ESM package or an
+`.mts` entrypoint. The top-level `types` field remains for older tooling.
+
+Install `typescript` and `@types/node` in the consuming development environment
+for APIs that use Node buffers. Cross-package declaration dependencies are
+declared by the package that needs them. `npm run check:package-types` packs the
+workspace packages and checks isolated consumers in all three resolution modes,
+including rejected invalid calls. `npm run typecheck` also checks declaration
+bodies without skipping library checks.
+
+These guarantees cover the workspace package entrypoints. They do not add type
+entrypoints for the root `snapdrift` package's JavaScript subpaths. Package release
+publication is required before existing registry consumers receive these fixes.

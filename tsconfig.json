@@ -8,7 +8,7 @@
     "noEmit": true,
     "strict": false,
     "types": ["node", "jest"],
-    "skipLibCheck": true
+    "skipLibCheck": false
   },
   "include": [
     "lib/**/*.mjs",
