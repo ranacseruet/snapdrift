@@ -1,6 +1,8 @@
 /** @jest-environment node */
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import * as yaml from 'js-yaml';
 
 import { validateReleaseContract } from '../scripts/validate-release.mjs';
 
@@ -46,5 +48,22 @@ describe('release contract', () => {
     expect(workflow).toMatch(/run: npm run validate:release/);
     expect(contributing).toMatch(/npm run validate:release/);
     expect(contributing).toMatch(/immutable implementation commit SHA/);
+  });
+
+  it('points every publish step at a helper that resolves from its working directory', async () => {
+    // Regression guard: the root "Publish snapdrift" step once ran
+    // `node ../../scripts/publish-package.mjs` with no `working-directory`, so the
+    // helper resolved outside the checkout and the v0.9.0 release published every
+    // workspace package but not the root package.
+    const source = await fs.readFile('.github/workflows/publish.yml', 'utf8');
+    const steps = yaml.load(source).jobs.publish.steps;
+    const publishSteps = steps.filter((step) => /publish-package\.mjs/.test(step.run ?? ''));
+
+    expect(publishSteps).toHaveLength(5);
+    for (const step of publishSteps) {
+      const helper = step.run.match(/(\S*publish-package\.mjs)/)[1];
+      const resolved = path.posix.join(step['working-directory'] ?? '.', helper);
+      await expect(fs.access(resolved)).resolves.toBeUndefined();
+    }
   });
 });

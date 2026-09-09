@@ -86,4 +86,4 @@ jobs:
         working-directory: packages/adapter-fs
 
       - name: Publish snapdrift
-        run: node ../../scripts/publish-package.mjs
+        run: node scripts/publish-package.mjs
