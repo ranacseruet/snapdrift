@@ -4,6 +4,11 @@
 
 ### Fixes
 
+- **Renamed files now retain both paths during route scoping** (#149). The
+  `scope` and `pr-diff` actions include a nonempty `previous_filename` for
+  GitHub rename records, deduplicate the combined paths, and preserve the
+  existing explicit-route, force-run, and lookup-fallback behavior. A file
+  moved out of a watched directory can no longer silently skip its route.
 - **Sanitized route-id collisions are rejected before writing screenshots** (#126). Local capture now fails before browser work, while Snap baseline export validates every source route after downloading the archive and before returning or writing screenshot files. Both paths share the same route-id sanitizer when distinct ids would map to one filename. Existing manifests with duplicate or flattening `imagePath` values also fail closed, including scoped comparisons; rename the conflicting ids and recapture the affected baseline. The published package floors move `@snapdrift/manifest` to 1.3.0 and `@snapdrift/adapter-fs` to 1.1.0 so consumers receive the shared helper.
 - **Baseline lookup failures no longer masquerade as missing artifacts** (#147). The baseline
   resolver now reports `found`, `missing`, or `error`, fails standalone resolution on API/network/

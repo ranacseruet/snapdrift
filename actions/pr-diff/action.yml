@@ -185,10 +185,16 @@ runs:
               per_page: 100
             });
 
+            const changedFiles = [...new Set(files.flatMap((file) => [
+              file.filename,
+              ...(file.status === 'renamed' && typeof file.previous_filename === 'string' && file.previous_filename
+                ? [file.previous_filename]
+                : [])
+            ]))];
             setOutputs(
               selectRoutesForChangedFiles(
                 config,
-                files.map((file) => file.filename)
+                changedFiles
               )
             );
           } catch (error) {
