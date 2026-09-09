@@ -43,6 +43,9 @@ jobs:
       - name: Validate packed package TypeScript consumers
         run: npm run check:package-types
 
+      - name: Validate isolated package runtime consumers
+        run: npm run check:package-runtime
+
       - name: Tests with coverage
         run: npm run test:coverage
 

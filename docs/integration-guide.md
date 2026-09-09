@@ -358,3 +358,11 @@ No TypeScript path aliases or imports into workspace source directories are
 needed. Root `snapdrift/lib/*` subpath typing is separate from these workspace
 contracts. The fixes become available to registry consumers after the packages
 are released and their installed versions are updated.
+
+The workspace packages are independently installable runtime packages. Install
+the package you use from the registry and let npm resolve its declared runtime
+dependencies; do not rely on a repository checkout or workspace links. The
+filesystem adapter includes its reporting dependency, so `@snapdrift/adapter-fs`
+can load config, capture, comparison, and report entrypoints from an isolated
+consumer. Release a new adapter version before expecting an existing registry
+installation to include a dependency correction.
