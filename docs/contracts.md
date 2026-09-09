@@ -397,9 +397,21 @@ SnapDrift uses a small, stable subset of the Snap API:
 The Snap HTTP client classifies responses and applies the following rules:
 
 - **2xx** — success, return the parsed body.
-- **4xx** — non-retryable. The client throws `SnapApiError(status, message, path)` immediately. `onUnavailable` is **not** consulted for 4xx — a 404 from `/baselines/latest` is a "no baseline yet" signal, but a 4xx from `/runs` is a configuration error that retrying won't fix.
-- **5xx** — retryable up to 3 attempts with exponential backoff (`1 s` → `2 s` → `4 s`, capped at `30 s` total). If the final attempt still returns 5xx, the client falls through to the `onUnavailable` handler.
-- **Network errors** — same retry/backoff behavior as 5xx. After exhaustion, falls through to the `onUnavailable` handler.
+- **4xx** — non-retryable. The client throws `SnapApiError(status, message, path)` immediately. `onUnavailable` is **not** consulted for 4xx — a 404 from `/baselines/latest` is a "no baseline yet" signal, but a 4xx from `/runs` is a configuration error that retrying won't fix. If the diagnostic body itself stalls or is unavailable, the same `SnapApiError` retains the HTTP status and includes that diagnostic failure.
+- **5xx** — retryable up to 3 attempts with exponential backoff (`1 s` → `2 s` → `4 s`, with each delay capped at `30 s`). If the final attempt still returns 5xx, the client falls through to the `onUnavailable` handler.
+- **Network errors and transport timeouts** — same retry/backoff behavior as 5xx. After exhaustion, falls through to the `onUnavailable` handler.
+
+Every JSON request attempt has a 30-second limit; binary export attempts have a
+120-second limit. Headers and response bodies share the applicable attempt
+limit, and each public Snap operation has one 10-minute deadline covering all
+of its requests, retries, backoff, and polling. The client passes an
+`AbortSignal` to fetch and aborts/cancels stalled bodies; injected transports
+that ignore cancellation are still released by the client-side deadline.
+Retry and poll waits are clipped to the remaining operation time, so no new
+request starts after the operation deadline. Deadline exhaustion is treated as
+Snap unavailability and follows `onUnavailable`; received 4xx responses keep
+their immediate non-retryable behavior, and a stalled 4xx diagnostic body
+retains its HTTP status with a timeout diagnostic.
 
 `onUnavailable` is consulted once retries are exhausted:
 
@@ -443,12 +455,16 @@ All four error classes are exported from `lib/provider.mjs` and `lib/snap-provid
 
 | Class | Thrown when | Typical handler |
 |:------|:------------|:----------------|
-| `SnapApiError` | A 4xx response was received, or a 5xx/network error was retried to exhaustion. Carries `status` and `path` properties. | Surface the message; do not retry. |
-| `SnapUnavailableError` | A network error or 5xx was retried to exhaustion (used internally; usually re-wrapped as `SnapApiError`). | Treat as a temporary outage. |
+| `SnapApiError` | A 4xx response was received, including a response whose diagnostic body stalled. Carries `status` and `path` properties. A final 5xx response also retains its status when it reaches the outage handler. | Surface the message; do not retry. |
+| `SnapUnavailableError` | A retryable network error, transport timeout, or operation deadline was exhausted. In fail mode this may be surfaced directly; skip and fallback modes wrap it in their policy error. | Treat as a temporary outage. |
 | `SnapFallbackError` | `onUnavailable: "fallback-local"` is set and Snap could not be reached. | Catch and switch to `LocalProvider` for the rest of the pipeline. |
 | `SnapSkipError` | `onUnavailable: "warn-and-skip"` is set and Snap could not be reached. | Catch and exit cleanly with a skipped summary. |
 
 The wrapper actions (`actions/baseline`, `actions/pr-diff`) and the CLI both handle `SnapSkipError` and `SnapFallbackError` through `lib/outage-policy.mjs` (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`). Custom orchestrations that call `provider.capture()`, `provider.diff()` or `provider.publishBaseline()` directly should use those helpers rather than re-implementing the matrix.
+
+`SnapTransportTimeoutError` is an internal diagnostic name used while a
+request or response body is being bounded. It is not an additional public
+error class; callers should handle the exported error classes above.
 
 ## Primary entrypoints
 

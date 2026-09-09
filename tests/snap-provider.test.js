@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { jest } from '@jest/globals';
 
 const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError, isLocalBaseUrl } = await import('../lib/snap-provider.mjs');
 const { shouldFailDriftCheck } = await import('@snapdrift/manifest');
@@ -1849,6 +1850,28 @@ describe('SnapProvider retry behavior', () => {
     expect(callCount).toBe(2);
   });
 
+  it('cancels intermediate 5xx response bodies before retrying', async () => {
+    const bodyCancel = jest.fn();
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            ...errorResponse(503, { error: 'service unavailable' }),
+            body: { cancel: bodyCancel }
+          };
+        }
+        return okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: () => Promise.resolve()
+    });
+
+    await provider.checkBaselineExists('cancel-5xx-body');
+    expect(callCount).toBe(2);
+    expect(bodyCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry on 4xx', async () => {
     let callCount = 0;
     const mockFetch = async (_url, _opts) => {
@@ -1860,6 +1883,392 @@ describe('SnapProvider retry behavior', () => {
     await expect(provider.checkBaselineExists('abc123'))
       .rejects.toThrow(/Snap API 401/);
     expect(callCount).toBe(1);
+  });
+});
+
+describe('SnapProvider transport deadlines', () => {
+  beforeEach(() => {
+    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
+    jest.useFakeTimers({ now: 0 });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    delete process.env.SNAP_TEST_API_KEY;
+  });
+
+  it('aborts stalled response headers and exhausts retries without hanging', async () => {
+    const signals = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (_url, options) => {
+        signals.push(options.signal);
+        return new Promise(() => {});
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('stalled-headers');
+    const rejection = expect(pending).rejects.toThrow(/timed out/);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(95_000);
+
+    await rejection;
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal instanceof AbortSignal && signal.aborted)).toBe(true);
+  });
+
+  it('cancels a response that resolves after its request timeout', async () => {
+    let resolveFirstResponse;
+    const lateBodyCancel = jest.fn();
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return new Promise((resolve) => {
+            resolveFirstResponse = resolve;
+          });
+        }
+        return errorResponse(500, { error: 'service unavailable' });
+      },
+      sleepFn: () => Promise.resolve(),
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('late-response');
+    const rejection = expect(pending).rejects.toThrow(/Snap API 500/);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(30_000);
+    resolveFirstResponse({
+      ok: true,
+      status: 200,
+      body: { cancel: lateBodyCancel },
+      text: async () => JSON.stringify({})
+    });
+    await Promise.resolve();
+    await rejection;
+    expect(lateBodyCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds a stalled JSON response body and routes it through availability handling', async () => {
+    const signals = [];
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: async (_url, options) => {
+        signals.push(options.signal);
+        return { ok: true, status: 200, text: () => new Promise(() => {}) };
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('stalled-json-body');
+    const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(95_000);
+
+    await rejection;
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
+  it('bounds a stalled binary response body with the longer export request limit', async () => {
+    const signals = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (_url, options) => {
+        signals.push(options.signal);
+        return { ok: true, status: 200, arrayBuffer: () => new Promise(() => {}) };
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.exportBaselines();
+    const rejection = expect(pending).rejects.toThrow(/timed out/);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(370_000);
+
+    await rejection;
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal instanceof AbortSignal && signal.aborted)).toBe(true);
+  });
+
+  it('preserves a 4xx status when its diagnostic body stalls', async () => {
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        return { ok: false, status: 401, text: () => new Promise(() => {}) };
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('stalled-error-body');
+    const rejection = expect(pending).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringMatching(/diagnostic body timed out/)
+    });
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(95_000);
+
+    await rejection;
+    expect(callCount).toBe(1);
+  });
+
+  it('routes a polling deadline through onUnavailable and stops polling', async () => {
+    let pollCount = 0;
+    let clock = 0;
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: async (url) => {
+        if (url.includes('/visual/runs/')) {
+          pollCount += 1;
+          return okResponse({
+            id: 'run_deadline',
+            status: 'rendering',
+            captures: [{
+              id: `capture-${pollCount}`,
+              routeId: 'home',
+              routePath: '/',
+              status: 'pending',
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }]
+          });
+        }
+        return okResponse({});
+      },
+      nowFn: () => clock,
+      sleepFn: async (delay) => {
+        clock += delay;
+      }
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-deadline-'));
+    const resultsPath = path.join(dir, 'results.json');
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_deadline' })));
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      const pending = provider.diff({ configPath, currentResultsPath: resultsPath });
+      const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
+      await rejection;
+
+      expect(pollCount).toBeGreaterThan(1);
+      const completedPollCount = pollCount;
+      await Promise.resolve();
+      expect(pollCount).toBe(completedPollCount);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('shares one operation budget across baseline lookup and capture submissions', async () => {
+    let clock = 0;
+    let requestCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url) => {
+        requestCount += 1;
+        clock += 20_000;
+        if (url.includes('/baselines/latest')) return okResponse({ id: 'baseline-1' });
+        return okResponse({});
+      },
+      nowFn: () => clock,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-shared-deadline-'));
+    const configPath = path.join(dir, 'config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      baselineArtifactName: 'test',
+      workingDirectory: '.',
+      baseUrl: 'https://example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      routes: Array.from({ length: 40 }, (_, index) => ({
+        id: `route-${index}`,
+        path: `/${index}`,
+        viewport: 'desktop'
+      })),
+      diff: { threshold: 0.01, mode: 'report-only' }
+    }));
+
+    try {
+      await expect(provider.capture({ configPath, purpose: 'diff' }))
+        .rejects.toThrow(/operation deadline/);
+      expect(requestCount).toBeGreaterThan(1);
+      expect(requestCount).toBeLessThan(42);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('shares the publication budget between polling and the final baseline request', async () => {
+    let clock = 0;
+    const requests = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (url, options) => {
+        requests.push({ url, method: options.method });
+        if (url.includes('/visual/runs/')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => {
+              clock = 599_500;
+              return JSON.stringify({
+                id: 'run_pub',
+                status: 'new',
+                captures: [{
+                  routeId: 'home',
+                  routePath: '/',
+                  status: 'new',
+                  currentObjectKey: 'k/home/current.png',
+                  viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+                }]
+              });
+            }
+          };
+        }
+        clock = 600_000;
+        return okResponse({});
+      },
+      nowFn: () => clock,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-publish-deadline-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(baselineRunMetadata()));
+
+    try {
+      await expect(provider.publishBaseline({ resultsPath }))
+        .rejects.toThrow(/operation deadline/);
+      expect(requests.filter(({ method }) => method === 'GET')).toHaveLength(1);
+      expect(requests.filter(({ method }) => method === 'POST')).toHaveLength(1);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('clips retry backoff to the remaining operation budget', async () => {
+    let clock = 0;
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        clock = 599_500;
+        return errorResponse(503, { error: 'service unavailable' });
+      },
+      nowFn: () => clock,
+      sleepFn: async (delay) => {
+        delays.push(delay);
+        clock += delay;
+      }
+    });
+
+    await expect(provider.checkBaselineExists('clipped-backoff'))
+      .rejects.toThrow(/operation deadline/);
+    expect(callCount).toBe(1);
+    expect(delays).toEqual([500]);
+  });
+
+  it('allows an asynchronously scheduled retry wait to finish before its watchdog', async () => {
+    let callCount = 0;
+    const sleepSignals = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount += 1;
+        return callCount === 1
+          ? errorResponse(503, { error: 'service unavailable' })
+          : okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: async (delay, signal) => {
+        sleepSignals.push(signal);
+        await Promise.resolve();
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, delay);
+          const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            reject(signal?.reason ?? new Error('Sleep aborted.'));
+          };
+          signal?.addEventListener('abort', onAbort, { once: true });
+        });
+      },
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('async-retry-wait');
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    await expect(pending).resolves.toEqual({ id: 'baseline_1' });
+    expect(callCount).toBe(2);
+    expect(sleepSignals[0].aborted).toBe(false);
+  });
+
+  it('cancels a stalled retry wait without starting another request', async () => {
+    let callCount = 0;
+    const sleepSignals = [];
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: async () => {
+        callCount += 1;
+        return errorResponse(503, { error: 'service unavailable' });
+      },
+      sleepFn: (_delay, signal) => new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 10_000);
+        const onAbort = () => {
+          clearTimeout(timer);
+          signal?.removeEventListener('abort', onAbort);
+          reject(signal?.reason ?? new Error('Sleep aborted.'));
+        };
+        sleepSignals.push(signal);
+        signal?.addEventListener('abort', onAbort, { once: true });
+      }),
+      nowFn: () => Date.now()
+    });
+
+    const pending = provider.checkBaselineExists('stalled-retry-wait');
+    const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
+    for (let tick = 0; tick < 10 && sleepSignals.length === 0; tick += 1) {
+      await Promise.resolve();
+    }
+    expect(sleepSignals).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1_001);
+
+    await rejection;
+    expect(callCount).toBe(1);
+    expect(sleepSignals[0].aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('gives concurrent public operations independent deadlines', async () => {
+    const signals = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async (_url, options) => {
+        signals.push(options.signal);
+        return new Promise(() => {});
+      },
+      nowFn: () => Date.now()
+    });
+
+    const first = provider.checkBaselineExists('concurrent-one');
+    const second = provider.checkBaselineExists('concurrent-two');
+    const firstRejection = expect(first).rejects.toThrow(/timed out/);
+    const secondRejection = expect(second).rejects.toThrow(/timed out/);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(95_000);
+    await Promise.all([firstRejection, secondRejection]);
+
+    expect(signals).toHaveLength(6);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 });
 
@@ -2101,7 +2510,7 @@ describe('SnapProvider.exportBaselines()', () => {
 
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, headers: opts?.headers });
+      requests.push({ url, method: opts?.method, headers: opts?.headers, signal: opts?.signal });
       return tarResponse(tar);
     };
 
@@ -2112,6 +2521,7 @@ describe('SnapProvider.exportBaselines()', () => {
     expect(requests[0].url).toBe('https://snap.i2dev.com/v1/visual/projects/test-project-42/export');
     expect(requests[0].method).toBe('GET');
     expect(requests[0].headers['Authorization']).toBe('Bearer test-api-key-1234');
+    expect(requests[0].signal).toBeInstanceOf(AbortSignal);
 
     // Screenshots: filename derived from the route id, bytes from the archive
     expect(exported.screenshots).toHaveLength(1);
