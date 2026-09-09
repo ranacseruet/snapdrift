@@ -83,7 +83,7 @@ describe('SnapDrift action contracts', () => {
         expect(candidate.run).toContain('GITHUB_SHA');
         expect(candidate.run).toContain('current=true');
         expect(publish.if).toBe("steps.baseline_candidate.outputs.current == 'true'");
-        expect(publish.uses).toBe('ranacseruet/snapdrift@v0.8.2');
+        expect(publish.uses).toBe('ranacseruet/snapdrift@v0.9.0');
         expect(publish.with).not.toHaveProperty('route-ids');
     });
 

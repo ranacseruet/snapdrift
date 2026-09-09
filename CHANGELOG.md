@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 - 2026-09-09
 
 ### Fixes
 
@@ -45,6 +45,8 @@
 ### Chore
 
 - **The release workflow now fails when the root dispatcher's immutable pin predates wrapper changes** (#133). The Marketplace `action.yml` pins its inner `baseline` / `pr-diff` refs to an immutable commit SHA, but nothing detected when that pin went stale: between releases every change to `actions/baseline` or `actions/pr-diff` stayed invisible to consumers of the root action, so a release could ship bumped wrapper code while the dispatcher still executed old wrapper code at the pinned SHA. `npm run check:pin-stale` (new `scripts/check-pin-stale.mjs`) fails when the pinned SHA is older than the newest commit touching `actions/`. It runs in `publish.yml` (gated on a published release) rather than on every PR, because the pin is expected to lag wrapper changes on feature branches. The currently-stale pin in `action.yml` (which predated the #136 hosted-baseline fix) has been bumped to the latest `main` commit.
+
+- **Workspace patch releases ship previously-unpublished fixes.** `@snapdrift/compare-core` 1.0.1 and `@snapdrift/adapter-report-md` 1.1.1 publish the #154 and #158 changes that landed after 1.0.0 / 1.1.0 were already on npm; without new versions those fixes would not have shipped. `@snapdrift/manifest` 1.3.0 and `@snapdrift/adapter-fs` 1.1.0 publish for the first time in this release. Workflow examples in the README, Integration Guide, and baseline template now reference `@v0.9.0`.
 
 ## 0.8.2 - 2026-08-24
 
