@@ -1,3 +1,5 @@
+import type { SnapConfig } from '@snapdrift/manifest';
+
 /** Object-shaped data decoded from an external JSON or YAML boundary. */
 export type JsonObject = Record<string, any>;
 

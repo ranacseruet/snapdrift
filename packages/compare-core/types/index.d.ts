@@ -1,3 +1,5 @@
+import type { Buffer } from 'node:buffer';
+
 /**
  * Comparison result types for @snapdrift/compare-core.
  */
@@ -32,3 +34,7 @@ export interface CompareResult {
 }
 
 export type CompareBuffersResult = CompareResult;
+
+export function compareBuffers(baselineBuffer: Buffer, currentBuffer: Buffer): CompareBuffersResult;
+export function compareWithIgnoreRegions(baselineBuffer: Buffer, currentBuffer: Buffer, regions: IgnoreRegion[]): CompareBuffersResult;
+export function generateDiffImage(baselineBuffer: Buffer, currentBuffer: Buffer, options?: DiffImageOptions): Buffer;

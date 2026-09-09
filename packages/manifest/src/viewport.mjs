@@ -7,7 +7,7 @@
  * Single source of truth for viewport presets.
  * Dimensions and flags must match exactly for a preset match —
  * partial matches (right dimensions, wrong flags) fall through to `custom:WxH`.
- * @type {Record<string, ViewportDescriptor & { width: number, height: number }>}
+ * @type {Record<import('../types/index.d.ts').VisualViewportPreset, Required<ViewportDescriptor>> & { [name: string]: Required<ViewportDescriptor> | undefined }}
  */
 export const VIEWPORT_PRESETS = {
   desktop: { width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false },

@@ -1,3 +1,5 @@
+import type { CompareBuffersResult } from '@snapdrift/compare-core';
+
 /**
  * Filesystem I/O adapter types for @snapdrift/adapter-fs.
  */
@@ -5,7 +7,8 @@
 import type {
   VisualRegressionConfig,
   VisualRegressionRouteConfig,
-  VisualDiffSummary
+  VisualDiffSummary,
+  VisualDriftStatusSummary
 } from '@snapdrift/manifest';
 
 // --- config.mjs ---
@@ -25,13 +28,7 @@ export function loadSnapdriftConfig(configPath?: string): Promise<{
 export function comparePngs(
   baselinePath: string,
   currentPath: string
-): Promise<{
-  width: number;
-  height: number;
-  differentPixels: number;
-  totalPixels: number;
-  mismatchRatio: number;
-}>;
+): Promise<CompareBuffersResult>;
 
 export function resolveImagePath(runDir: string, relativeImagePath: string): Promise<string>;
 
@@ -111,7 +108,7 @@ export function writeDriftSummary(
 ): Promise<{
   summaryPath: string;
   markdownPath: string;
-  summary: Record<string, unknown>;
+  summary: VisualDriftStatusSummary;
   markdown: string;
 }>;
 

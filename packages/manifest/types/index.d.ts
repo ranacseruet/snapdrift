@@ -196,12 +196,21 @@ export interface VisualDiffSummary {
   dashboardUrl?: string;
 }
 
+/** Informational summary written without a pixel comparison. */
+export interface VisualDriftStatusSummary extends Partial<VisualDiffSummary> {
+  status: 'skipped' | 'clean' | 'changes-detected' | 'incomplete';
+  reason: string;
+}
+
+/** Accepted by provider and markdown comment renderers. */
+export type VisualReportSummary = VisualDiffSummary | VisualDriftStatusSummary;
+
 /**
  * What a skipped run writes to `summary.json` — no diff was performed, so none
  * of the diff counters exist. Emitted by `buildDriftSummary` for scope skips,
  * missing baselines, and Snap outages. See docs/contracts.md § Skipped summary.
  */
-export interface VisualDriftSkippedSummary {
+export interface VisualDriftSkippedSummary extends VisualDriftStatusSummary {
   status: 'skipped';
   reason: string;
   message?: string;
@@ -305,12 +314,12 @@ export interface VisualProvider {
   diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
   publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
   fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
-  buildCommentBody(summary: VisualDiffSummary, meta?: ProviderCommentMeta): string;
+  buildCommentBody(summary: VisualReportSummary, meta?: ProviderCommentMeta): string;
 }
 
 // --- Config validation and route selection ---
 
-export const VALID_DIFF_MODES: string[];
+export const VALID_DIFF_MODES: readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
 export const VALID_PROVIDER_VALUES: readonly ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES: readonly ['fail', 'warn-and-skip', 'fallback-local'];
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS: number;
@@ -321,3 +330,13 @@ export function validateSnapdriftConfig(value: unknown, sourceLabel?: string): V
 export function resolveFromWorkingDirectory(config: VisualRegressionConfig, relativePath: string): string;
 export function selectConfiguredRoutes(config: VisualRegressionConfig, requestedRouteIds: Iterable<string>): { routes: VisualRegressionRouteConfig[]; selectedRouteIds: string[] };
 export function selectRoutesForChangedFiles(config: VisualRegressionConfig, changedFiles: string[]): { shouldRun: boolean; reason: string; selectedRouteIds: string[] };
+
+// --- Manifest schema and viewport helpers ---
+
+export const CURRENT_SCHEMA_VERSION: number;
+export function validateManifest(value: unknown, sourceLabel?: string): VisualScreenshotManifest;
+export function indexManifestEntries(manifest: VisualScreenshotManifest, selectedRouteIds: string[], sourceLabel?: string): Map<string, VisualScreenshotManifestEntry>;
+export function indexRouteResults(results: VisualBaselineResults): Map<string, VisualBaselineRouteResult>;
+export const VIEWPORT_PRESETS: Record<VisualViewportPreset, Required<ViewportDescriptor>> & { [name: string]: Required<ViewportDescriptor> | undefined };
+export function viewportKey(viewport: VisualViewport): string;
+export function viewportHash(descriptor: ViewportDescriptor): string;

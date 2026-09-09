@@ -344,3 +344,17 @@ Capture failed before comparison. Confirm the app is fully ready and reachable b
 
 **Playwright install runs even though `provider: "snap"`**  
 That's expected for the Snap local-capture hybrid. Playwright runs locally to render the page, then the resulting screenshot is uploaded to Snap. The hybrid kicks in only when `baseUrl` points to a local address; for remote `baseUrl` Snap's render worker captures directly.
+
+
+## TypeScript package consumers
+
+Import APIs and types from the public `@snapdrift/*` package names. Their export
+maps support Bundler, Node16, and NodeNext resolution; enable `strict: true` and
+`skipLibCheck: false` to validate the contracts in your project. For Node16 or
+NodeNext, use `"type": "module"` or an `.mts` entrypoint. Install `typescript` and
+`@types/node` as development dependencies when using the Node buffer APIs.
+
+No TypeScript path aliases or imports into workspace source directories are
+needed. Root `snapdrift/lib/*` subpath typing is separate from these workspace
+contracts. The fixes become available to registry consumers after the packages
+are released and their installed versions are updated.
