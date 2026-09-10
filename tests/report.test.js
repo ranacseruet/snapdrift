@@ -39,7 +39,7 @@ describe('generateHtmlReport', () => {
     expect(html).toContain('<html lang="en">');
     expect(html).toContain('SnapDrift');
     expect(html).toContain('fail-on-changes');
-    expect(html).toContain('0.01');
+    expect(html).toContain('1%');
     expect(html).toContain('2024-01-01T00:00:05.000Z');
   });
 

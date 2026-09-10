@@ -18,6 +18,19 @@ export interface DiffImageOptions {
   ignoreRegions?: IgnoreRegion[];
 }
 
+export interface ComparisonDimensions {
+  width: number;
+  height: number;
+}
+
+export interface ComparisonMetadata {
+  baseline: ComparisonDimensions;
+  current: ComparisonDimensions;
+  canvas: ComparisonDimensions;
+  dimensionsChanged: boolean;
+  totalPixels: number;
+}
+
 export interface CompareResult {
   width: number;
   height: number;
@@ -35,6 +48,22 @@ export interface CompareResult {
 
 export type CompareBuffersResult = CompareResult;
 
+export interface CompareImagesOptions extends DiffImageOptions {}
+
+export interface CompareImagesResult extends CompareResult {
+  /** Visual diff generated from the same decoded images as the metrics. */
+  diffImageBuffer: Buffer;
+  /** Dimensions and effective denominator used by the union-canvas comparison. */
+  comparison: ComparisonMetadata;
+}
+
+export class ComparisonTooLargeError extends Error {
+  readonly code: 'comparison_too_large';
+}
+
+export const MAX_COMPARISON_PIXELS: number;
+
 export function compareBuffers(baselineBuffer: Buffer, currentBuffer: Buffer): CompareBuffersResult;
+export function compareImages(baselineBuffer: Buffer, currentBuffer: Buffer, options?: CompareImagesOptions): CompareImagesResult;
 export function compareWithIgnoreRegions(baselineBuffer: Buffer, currentBuffer: Buffer, regions: IgnoreRegion[]): CompareBuffersResult;
 export function generateDiffImage(baselineBuffer: Buffer, currentBuffer: Buffer, options?: DiffImageOptions): Buffer;

@@ -19,6 +19,7 @@ describe('SnapDrift action contracts', () => {
 
         expect(determineScope.inputs['pr-number'].required).toBe(false);
         expect(publishComment.inputs['pr-number'].required).toBe(false);
+        expect(publishComment.inputs['artifact-url'].default).toBe('');
         expect(compare.inputs['current-results-path'].default).toBe('');
         expect(compare.inputs['current-manifest-path'].default).toBe('');
         expect(compare.inputs['current-run-dir'].default).toBe('');
@@ -83,7 +84,7 @@ describe('SnapDrift action contracts', () => {
         expect(candidate.run).toContain('GITHUB_SHA');
         expect(candidate.run).toContain('current=true');
         expect(publish.if).toBe("steps.baseline_candidate.outputs.current == 'true'");
-        expect(publish.uses).toBe('ranacseruet/snapdrift@v0.9.0');
+        expect(publish.uses).toBe('ranacseruet/snapdrift@v0.10.0');
         expect(publish.with).not.toHaveProperty('route-ids');
     });
 
@@ -126,6 +127,19 @@ describe('SnapDrift action contracts', () => {
         expect(commentStep.with.script).toContain('createProvider');
         expect(commentStep.with.script).toContain('buildCommentBody');
         expect(commentStep.with.script).toContain('escapeMarkdown');
+    });
+
+    it('links PR diff images to the uploaded report artifact', async () => {
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+        const steps = prDiff.runs?.steps || [];
+        const upload = steps.find((step) => step.id === 'upload');
+        const commentStep = steps.find(
+            (step) => step.with?.script && String(step.with.script).includes('SnapDrift did not produce a summary.')
+        );
+
+        expect(upload.uses).toContain('actions/upload-artifact@');
+        expect(commentStep.env.ARTIFACT_URL).toBe('${{ steps.upload.outputs.artifact-url }}');
+        expect(commentStep.with.script).toContain("artifactUrl: process.env.ARTIFACT_URL || ''");
     });
 
     it('exposes baseline lookup status and fails local lookup errors before capture', async () => {

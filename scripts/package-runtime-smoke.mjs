@@ -20,7 +20,7 @@ const functionExports = {
     'validateSnapdriftConfig', 'selectConfiguredRoutes', 'selectRoutesForChangedFiles', 'resolveFromWorkingDirectory',
     'splitCommaList', 'sanitizeRouteId', 'assertUniqueRouteIdFilenames', 'determineDriftStatus', 'shouldFailDriftCheck'
   ],
-  '@snapdrift/compare-core': ['compareBuffers', 'generateDiffImage', 'compareWithIgnoreRegions'],
+  '@snapdrift/compare-core': ['compareBuffers', 'compareImages', 'generateDiffImage', 'compareWithIgnoreRegions'],
   '@snapdrift/adapter-report-md': [
     'makeMarkdown', 'formatViewport', 'formatDriftFailureMessage', 'buildDriftSummary', 'describeReason',
     'buildReportCommentBody', 'escapeMarkdown', 'generateHtmlReport'
@@ -91,6 +91,7 @@ if (packageName === '@snapdrift/manifest') {
   const baseline = solidPng(PNG, [0, 0, 0, 255]);
   const current = solidPng(PNG, [0, 0, 0, 255]);
   assert.equal(api.compareBuffers(baseline, current).mismatchRatio, 0);
+  assert.equal(api.compareImages(baseline, current).mismatchRatio, 0);
   assert(Buffer.isBuffer(api.generateDiffImage(baseline, current)));
 } else if (packageName === '@snapdrift/adapter-report-md') {
   const { summary, markdown } = api.buildDriftSummary({ reason: 'no_snapdrift_relevant_changes' });

@@ -112,6 +112,46 @@ describe('generateHtmlReport', () => {
     expect(html).toContain('1440&times;1092');
   });
 
+  it('renders v1 dimensions and embeds the staged diff image', async () => {
+    const imageReader = jest.fn().mockResolvedValue('diffBase64');
+    const html = await generateHtmlReport(makeSummary({
+      status: 'changes-detected',
+      changedScreenshots: 1,
+      changed: [{
+        id: 'home-desktop',
+        path: '/',
+        viewport: 'desktop',
+        baselineImagePath: 'baseline.png',
+        currentImagePath: 'current.png',
+        width: 1440,
+        height: 920,
+        differentPixels: 10,
+        totalPixels: 1324800,
+        mismatchRatio: 10 / 1324800,
+        status: 'changed',
+        comparison: {
+          baseline: { width: 1440, height: 900 },
+          current: { width: 1440, height: 920 },
+          canvas: { width: 1440, height: 920 },
+          dimensionsChanged: true,
+          totalPixels: 1324800
+        },
+        diffImagePath: 'diffs/home-desktop.png'
+      }]
+    }), {
+      baselineRunDir: '/tmp/baseline',
+      currentRunDir: '/tmp/current',
+      diffRunDir: '/tmp/diff',
+      imageReader
+    });
+
+    expect(imageReader).toHaveBeenCalledWith('/tmp/diff', 'diffs/home-desktop.png');
+    expect(html).toContain('1440&times;900');
+    expect(html).toContain('1440&times;920');
+    expect(html).toContain('data:image/png;base64,diffBase64');
+    expect(html).toContain('Diff image');
+  });
+
   it('renders errors when present', async () => {
     const html = await generateHtmlReport(makeSummary({
       status: 'incomplete',

@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { jest } from '@jest/globals';
 
-const { SnapProvider, SnapApiError, SnapUnavailableError, SnapFallbackError, SnapSkipError, isLocalBaseUrl } = await import('../lib/snap-provider.mjs');
+const { SnapProvider, SnapApiError, SnapUpgradeRequiredError, SnapUnavailableError, SnapFallbackError, SnapSkipError, isLocalBaseUrl } =
+  await import('../lib/snap-provider.mjs');
 const { shouldFailDriftCheck } = await import('@snapdrift/manifest');
 
 // ---------------------------------------------------------------------------
@@ -20,11 +21,15 @@ const validSnapConfig = {
 };
 
 function okResponse(body, status = 200) {
+  const responseBody =
+    body && typeof body === 'object' && typeof body.id === 'string' && body.id.startsWith('run_') && !body.comparisonPolicy
+      ? { ...body, comparisonPolicy: { version: 1, threshold: 0.01 } }
+      : body;
   return {
     ok: status >= 200 && status < 300,
     status,
-    text: async () => JSON.stringify(body),
-    json: async () => body
+    text: async () => JSON.stringify(responseBody),
+    json: async () => responseBody
   };
 }
 
@@ -53,9 +58,7 @@ const MOBILE_DESCRIPTOR_JSON = JSON.stringify({
 });
 
 function overrideEnvironment(updates) {
-  const previous = Object.fromEntries(
-    Object.keys(updates).map((name) => [name, process.env[name]])
-  );
+  const previous = Object.fromEntries(Object.keys(updates).map((name) => [name, process.env[name]]));
   for (const [name, value] of Object.entries(updates)) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
@@ -91,11 +94,13 @@ function baselineRunMetadata(overrides = {}) {
     startedAt: '2026-08-24T00:00:00.000Z',
     configuredRouteIds: ['home'],
     selectedRouteIds: ['home'],
-    expectedCaptures: [{
-      routeId: 'home',
-      routePath: '/',
-      viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-    }],
+    expectedCaptures: [
+      {
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ],
     ...overrides
   };
 }
@@ -105,8 +110,16 @@ function twoRouteBaselineRunMetadata(overrides = {}) {
     configuredRouteIds: ['home', 'about'],
     selectedRouteIds: ['home', 'about'],
     expectedCaptures: [
-      { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-      { routeId: 'about', routePath: '/about', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+      {
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      },
+      {
+        routeId: 'about',
+        routePath: '/about',
+        viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+      }
     ],
     ...overrides
   });
@@ -120,11 +133,13 @@ function diffRunMetadata(overrides = {}) {
     startedAt: '2026-08-24T00:00:00.000Z',
     configuredRouteIds: ['home'],
     selectedRouteIds: ['home'],
-    expectedCaptures: [{
-      routeId: 'home',
-      routePath: '/',
-      viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-    }],
+    expectedCaptures: [
+      {
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ],
     ...overrides
   };
 }
@@ -134,8 +149,16 @@ function twoRouteDiffRunMetadata(overrides = {}) {
     configuredRouteIds: ['home', 'about'],
     selectedRouteIds: ['home', 'about'],
     expectedCaptures: [
-      { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-      { routeId: 'about', routePath: '/about', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+      {
+        routeId: 'home',
+        routePath: '/',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      },
+      {
+        routeId: 'about',
+        routePath: '/about',
+        viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+      }
     ],
     ...overrides
   });
@@ -181,31 +204,38 @@ describe('SnapProvider construction', () => {
 
   it('resolves API key from apiKey with interpolation', () => {
     process.env.MY_SECRET_KEY = 'interpolated-key';
-    const provider = new SnapProvider({ apiKey: '${MY_SECRET_KEY}', projectId: 'p1' });
+    const provider = new SnapProvider({
+      apiKey: '${MY_SECRET_KEY}',
+      projectId: 'p1'
+    });
     expect(provider).toBeInstanceOf(SnapProvider);
     delete process.env.MY_SECRET_KEY;
   });
 
   it('throws if apiKey interpolation env var is missing', () => {
-    expect(() => new SnapProvider({ apiKey: '${MISSING_VAR}', projectId: 'p1' }))
-      .toThrow(/interpolation failed/);
+    expect(() => new SnapProvider({ apiKey: '${MISSING_VAR}', projectId: 'p1' })).toThrow(/interpolation failed/);
   });
 
   it('resolves projectId "auto" from GITHUB_REPOSITORY', () => {
     process.env.GITHUB_REPOSITORY = 'myorg/myrepo';
-    const provider = new SnapProvider({ ...validSnapConfig, projectId: 'auto' });
+    const provider = new SnapProvider({
+      ...validSnapConfig,
+      projectId: 'auto'
+    });
     expect(provider).toBeInstanceOf(SnapProvider);
     delete process.env.GITHUB_REPOSITORY;
   });
 
   it('throws if projectId is "auto" and GITHUB_REPOSITORY is not set', () => {
     delete process.env.GITHUB_REPOSITORY;
-    expect(() => new SnapProvider({ ...validSnapConfig, projectId: 'auto' }))
-      .toThrow(/GITHUB_REPOSITORY/);
+    expect(() => new SnapProvider({ ...validSnapConfig, projectId: 'auto' })).toThrow(/GITHUB_REPOSITORY/);
   });
 
   it('uses explicit projectId', () => {
-    const provider = new SnapProvider({ ...validSnapConfig, projectId: 'explicit-123' });
+    const provider = new SnapProvider({
+      ...validSnapConfig,
+      projectId: 'explicit-123'
+    });
     expect(provider).toBeInstanceOf(SnapProvider);
   });
 });
@@ -225,7 +255,12 @@ describe('SnapProvider.capture()', () => {
   it('POSTs to create run and submit captures with idempotency key', async () => {
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, headers: opts?.headers, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        headers: opts?.headers,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/runs/') && url.includes('/captures')) {
         return okResponse({ id: 'cap_1', status: 'pending' });
       }
@@ -260,14 +295,17 @@ describe('SnapProvider.capture()', () => {
       expect(runMetadata).toMatchObject({
         projectId: 'test-project-42',
         purpose: 'diff',
+        comparisonPolicy: { version: 1, threshold: 0.01 },
         configuredRouteIds: ['home'],
         selectedRouteIds: ['home']
       });
-      expect(runMetadata.expectedCaptures).toEqual([{
-        routeId: 'home',
-        routePath: '/',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }]);
+      expect(runMetadata.expectedCaptures).toEqual([
+        {
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ]);
 
       // Verify run creation POST
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
@@ -277,6 +315,10 @@ describe('SnapProvider.capture()', () => {
       // id is required by the Snap API
       expect(typeof runPost.body.id).toBe('string');
       expect(runPost.body.id).toMatch(/^run_/);
+      expect(runPost.body.comparisonPolicy).toEqual({
+        version: 1,
+        threshold: 0.01
+      });
       // captureProfileJson is intentionally NOT sent: the render environment is
       // owned by Snap's render worker, and a partial profile makes the server's
       // capture-profile comparison crash with a 500 when a baseline is attached.
@@ -305,6 +347,40 @@ describe('SnapProvider.capture()', () => {
     }
   });
 
+  it('fails before submitting captures when Snap does not acknowledge v1', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+      return okResponse({ id: 'legacy', status: 'pending', captures: [] });
+    };
+    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
+    const configPath = path.join(os.tmpdir(), 'snapdrift-snap-policy-ack-config.json');
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
+
+    try {
+      await expect(provider.capture({ configPath, purpose: 'capture' })).rejects.toBeInstanceOf(SnapUpgradeRequiredError);
+      expect(requests).toHaveLength(1);
+      expect(requests[0].body.comparisonPolicy).toEqual({
+        version: 1,
+        threshold: 0.01
+      });
+    } finally {
+      await fs.rm(configPath, { force: true });
+    }
+  });
+
   it('sanitizes hosted manifest image paths with the shared route filename helper', async () => {
     const mockFetch = async (url) => {
       if (url.includes('/runs/') && url.includes('/captures')) {
@@ -314,16 +390,19 @@ describe('SnapProvider.capture()', () => {
     };
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-sanitized-manifest-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'a/b', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'a/b', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
       const result = await provider.capture({ configPath, routeIds: ['a/b'] });
@@ -337,7 +416,11 @@ describe('SnapProvider.capture()', () => {
   it('attaches the latest accepted baseline id and branch to the run', async () => {
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/baselines/latest')) {
         return okResponse({ id: 'bsl_latest_123', refBranch: 'main' });
       }
@@ -387,7 +470,11 @@ describe('SnapProvider.capture()', () => {
   it('omits baselineId when no baseline exists yet (first run)', async () => {
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/baselines/latest')) {
         return errorResponse(404, { error: 'no baseline' });
       }
@@ -397,7 +484,10 @@ describe('SnapProvider.capture()', () => {
       return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-firstrun-config.json');
     const config = {
       baselineArtifactName: 'test',
@@ -429,7 +519,11 @@ describe('SnapProvider.capture()', () => {
     };
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       // A baseline DOES exist — but a baseline-publish run must not diff against
       // it, so the provider should never even ask for it.
       if (url.includes('/baselines/latest')) {
@@ -455,7 +549,11 @@ describe('SnapProvider.capture()', () => {
     };
     await fs.writeFile(configPath, JSON.stringify(config));
     try {
-      const result = await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
+      const result = await provider.capture({
+        configPath,
+        routeIds: ['home'],
+        purpose: 'baseline'
+      });
 
       const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
       expect(latestGet).toBeUndefined();
@@ -472,11 +570,13 @@ describe('SnapProvider.capture()', () => {
         publicationSequence: expectedRef.publicationSequence,
         configuredRouteIds: ['home'],
         selectedRouteIds: ['home'],
-        expectedCaptures: [{
-          routeId: 'home',
-          routePath: '/',
-          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-        }]
+        expectedCaptures: [
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+          }
+        ]
       });
 
       const metadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
@@ -504,26 +604,31 @@ describe('SnapProvider.capture()', () => {
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-partial-baseline-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [
-        { id: 'home', path: '/', viewport: 'desktop' },
-        { id: 'about', path: '/about', viewport: 'mobile' }
-      ],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          { id: 'home', path: '/', viewport: 'desktop' },
+          { id: 'about', path: '/about', viewport: 'mobile' }
+        ],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({
-        configPath,
-        routeIds: ['home'],
-        purpose: 'baseline'
-      })).rejects.toThrow(/requires all 2 configured route\(s\).*only 1 were selected/);
+      await expect(
+        provider.capture({
+          configPath,
+          routeIds: ['home'],
+          purpose: 'baseline'
+        })
+      ).rejects.toThrow(/requires all 2 configured route\(s\).*only 1 were selected/);
       expect(requests).toEqual([]);
     } finally {
       await fs.rm(configPath, { force: true });
@@ -539,23 +644,25 @@ describe('SnapProvider.capture()', () => {
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-collision-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [
-        { id: 'a/b', path: '/', viewport: 'desktop' },
-        { id: 'a_b', path: '/about', viewport: 'mobile' }
-      ],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          { id: 'a/b', path: '/', viewport: 'desktop' },
+          { id: 'a_b', path: '/about', viewport: 'mobile' }
+        ],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({ configPath, routeIds: ['a/b'] }))
-        .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+      await expect(provider.capture({ configPath, routeIds: ['a/b'] })).rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
       expect(requests).toEqual([]);
     } finally {
       await fs.rm(configPath, { force: true });
@@ -581,20 +688,22 @@ describe('SnapProvider.capture()', () => {
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-non-ci-baseline-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({ configPath, purpose: 'baseline' }))
-        .rejects.toThrow(/publication workflow identity.*publication sequence/);
+      await expect(provider.capture({ configPath, purpose: 'baseline' })).rejects.toThrow(/publication workflow identity.*publication sequence/);
       expect(requests).toEqual([]);
     } finally {
       restoreEnvironment();
@@ -617,20 +726,25 @@ describe('SnapProvider.capture()', () => {
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: async (url, opts) => {
         requests.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
-        return okResponse({});
+        return okResponse({
+          comparisonPolicy: { version: 1, threshold: 0.01 }
+        });
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-explicit-ci-baseline-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
       await provider.capture({ configPath, purpose: 'baseline' });
@@ -661,23 +775,28 @@ describe('SnapProvider.capture()', () => {
           method: opts?.method,
           body: opts?.body ? JSON.parse(opts.body) : null
         });
-        return okResponse({});
+        return okResponse({
+          comparisonPolicy: { version: 1, threshold: 0.01 }
+        });
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-scoped-capture-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [
-        { id: 'home', path: '/', viewport: 'desktop' },
-        { id: 'about', path: '/about', viewport: 'mobile' }
-      ],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          { id: 'home', path: '/', viewport: 'desktop' },
+          { id: 'about', path: '/about', viewport: 'mobile' }
+        ],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
       const result = await provider.capture({
@@ -686,9 +805,7 @@ describe('SnapProvider.capture()', () => {
         purpose: 'capture'
       });
       expect(requests.some((request) => request.url.includes('/baselines/latest'))).toBe(false);
-      const runPost = requests.find(
-        (request) => request.url.includes('/runs') && !request.url.includes('/captures')
-      );
+      const runPost = requests.find((request) => request.url.includes('/runs') && !request.url.includes('/captures'));
       expect(runPost.body.skipBaselineResolution).toBe(true);
       expect(runPost.body.capturePlan).toMatchObject({
         purpose: 'diff',
@@ -696,7 +813,10 @@ describe('SnapProvider.capture()', () => {
         selectedRouteIds: ['home']
       });
       const metadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
-      expect(metadata).toMatchObject({ purpose: 'capture', selectedRouteIds: ['home'] });
+      expect(metadata).toMatchObject({
+        purpose: 'capture',
+        selectedRouteIds: ['home']
+      });
       expect(metadata.refBranch).toBeUndefined();
     } finally {
       restoreEnvironment();
@@ -720,20 +840,22 @@ describe('SnapProvider.capture()', () => {
       }
     });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-invalid-sha-baseline-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({ configPath, purpose: 'baseline' }))
-        .rejects.toThrow(/40-character commit SHA/);
+      await expect(provider.capture({ configPath, purpose: 'baseline' })).rejects.toThrow(/40-character commit SHA/);
       expect(requests).toEqual([]);
     } finally {
       restoreEnvironment();
@@ -744,28 +866,38 @@ describe('SnapProvider.capture()', () => {
   it('preserves route scoping for hosted PR-diff captures', async () => {
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/baselines/latest')) return errorResponse(404, { error: 'no baseline' });
-      return okResponse({});
+      return okResponse({ comparisonPolicy: { version: 1, threshold: 0.01 } });
     };
     const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch });
     const configPath = path.join(os.tmpdir(), 'snapdrift-snap-scoped-diff-config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [
-        { id: 'home', path: '/', viewport: 'desktop' },
-        { id: 'about', path: '/about', viewport: 'mobile' }
-      ],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          { id: 'home', path: '/', viewport: 'desktop' },
+          { id: 'about', path: '/about', viewport: 'mobile' }
+        ],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      const result = await provider.capture({ configPath, routeIds: ['about'] });
+      const result = await provider.capture({
+        configPath,
+        routeIds: ['about']
+      });
       expect(result.selectedRouteIds).toEqual(['about']);
       const capturePosts = requests.filter((request) => /\/runs\/.+\/captures$/.test(request.url));
       expect(capturePosts).toHaveLength(1);
@@ -779,11 +911,13 @@ describe('SnapProvider.capture()', () => {
         purpose: 'diff',
         configuredRouteIds: ['home', 'about'],
         selectedRouteIds: ['about'],
-        expectedCaptures: [{
-          routeId: 'about',
-          routePath: '/about',
-          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
-        }]
+        expectedCaptures: [
+          {
+            routeId: 'about',
+            routePath: '/about',
+            viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+          }
+        ]
       });
     } finally {
       await fs.rm(configPath, { force: true });
@@ -794,7 +928,12 @@ describe('SnapProvider.capture()', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-'));
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, headers: opts?.headers, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        headers: opts?.headers,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/baselines/latest')) {
         return errorResponse(404, { error: 'no baseline' });
       }
@@ -814,21 +953,29 @@ describe('SnapProvider.capture()', () => {
       await fs.writeFile(path.join(screenshotsDir, 'home.png'), 'png-bytes');
       const resultsPath = path.join(screenshotsRoot, 'results.json');
       const manifestPath = path.join(screenshotsRoot, 'manifest.json');
-      await fs.writeFile(resultsPath, JSON.stringify({
-        baseUrl: 'http://127.0.0.1:3000',
-        routes: [{ id: 'home', status: 'passed', imagePath: 'screenshots/home.png' }]
-      }));
-      await fs.writeFile(manifestPath, JSON.stringify({
-        baseUrl: 'http://127.0.0.1:3000',
-        screenshots: [{
-          id: 'home',
-          path: '/',
-          viewport: 'desktop',
-          imagePath: 'screenshots/home.png',
-          width: 1440,
-          height: 900
-        }]
-      }));
+      await fs.writeFile(
+        resultsPath,
+        JSON.stringify({
+          baseUrl: 'http://127.0.0.1:3000',
+          routes: [{ id: 'home', status: 'passed', imagePath: 'screenshots/home.png' }]
+        })
+      );
+      await fs.writeFile(
+        manifestPath,
+        JSON.stringify({
+          baseUrl: 'http://127.0.0.1:3000',
+          screenshots: [
+            {
+              id: 'home',
+              path: '/',
+              viewport: 'desktop',
+              imagePath: 'screenshots/home.png',
+              width: 1440,
+              height: 900
+            }
+          ]
+        })
+      );
       return {
         resultsPath,
         manifestPath,
@@ -837,7 +984,10 @@ describe('SnapProvider.capture()', () => {
       };
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      localCaptureFn
+    });
     const configPath = path.join(tempDir, 'snapdrift.json');
     const config = {
       baselineArtifactName: 'test',
@@ -877,11 +1027,13 @@ describe('SnapProvider.capture()', () => {
       expect(rewrittenResults.runId).toMatch(/^run_/);
       expect(rewrittenResults.configuredRouteIds).toEqual(['home']);
       expect(rewrittenResults.selectedRouteIds).toEqual(['home']);
-      expect(rewrittenResults.expectedCaptures).toEqual([{
-        routeId: 'home',
-        routePath: '/',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }]);
+      expect(rewrittenResults.expectedCaptures).toEqual([
+        {
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ]);
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -898,7 +1050,11 @@ describe('SnapProvider.capture()', () => {
     };
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       // A baseline exists, but a baseline-publish run must not diff against it.
       if (url.includes('/baselines/latest')) {
         return okResponse({ id: 'bsl_existing_999', refBranch: 'main' });
@@ -920,28 +1076,55 @@ describe('SnapProvider.capture()', () => {
       const resultsPath = path.join(screenshotsRoot, 'results.json');
       const manifestPath = path.join(screenshotsRoot, 'manifest.json');
       await fs.writeFile(resultsPath, JSON.stringify({ baseUrl: 'http://127.0.0.1:3000', routes: [] }));
-      await fs.writeFile(manifestPath, JSON.stringify({
-        baseUrl: 'http://127.0.0.1:3000',
-        screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'screenshots/home.png', width: 1440, height: 900 }]
-      }));
-      return { resultsPath, manifestPath, screenshotsRoot, selectedRouteIds: ['home'] };
+      await fs.writeFile(
+        manifestPath,
+        JSON.stringify({
+          baseUrl: 'http://127.0.0.1:3000',
+          screenshots: [
+            {
+              id: 'home',
+              path: '/',
+              viewport: 'desktop',
+              imagePath: 'screenshots/home.png',
+              width: 1440,
+              height: 900
+            }
+          ]
+        })
+      );
+      return {
+        resultsPath,
+        manifestPath,
+        screenshotsRoot,
+        selectedRouteIds: ['home']
+      };
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      localCaptureFn
+    });
     const configPath = path.join(tempDir, 'snapdrift.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'http://127.0.0.1:3000',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'http://127.0.0.1:3000',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await provider.capture({ configPath, routeIds: ['home'], purpose: 'baseline' });
+      await provider.capture({
+        configPath,
+        routeIds: ['home'],
+        purpose: 'baseline'
+      });
 
       const latestGet = requests.find((r) => r.url.includes('/baselines/latest'));
       expect(latestGet).toBeUndefined();
@@ -958,20 +1141,19 @@ describe('SnapProvider.capture()', () => {
         publicationSequence: expectedRef.publicationSequence,
         configuredRouteIds: ['home'],
         selectedRouteIds: ['home'],
-        expectedCaptures: [{
-          routeId: 'home',
-          routePath: '/',
-          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-        }]
+        expectedCaptures: [
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+          }
+        ]
       });
 
       const uploadPost = requests.find((r) => r.url.includes('/local-result'));
       expect(uploadPost).toBeDefined();
 
-      const rewrittenResults = JSON.parse(await fs.readFile(
-        path.join(tempDir, 'capture', 'results.json'),
-        'utf-8'
-      ));
+      const rewrittenResults = JSON.parse(await fs.readFile(path.join(tempDir, 'capture', 'results.json'), 'utf-8'));
       expect(rewrittenResults.refBranch).toBe(expectedRef.refBranch);
       expect(rewrittenResults.refSha).toBe(expectedRef.refSha);
       expect(rewrittenResults.publicationWorkflowRef).toBe(expectedRef.publicationWorkflowRef);
@@ -1008,27 +1190,31 @@ describe('SnapProvider.capture()', () => {
       };
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      localCaptureFn
+    });
     const configPath = path.join(tempDir, 'snapdrift.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'http://127.0.0.1:3000',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'http://127.0.0.1:3000',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({ configPath, routeIds: ['home'] }))
-        .rejects.toThrow(/did not produce a screenshot for route "home"/);
+      await expect(provider.capture({ configPath, routeIds: ['home'] })).rejects.toThrow(/did not produce a screenshot for route "home"/);
 
       // Fail-fast guard: the missing screenshot must be detected before any run
       // is created, so Snap is never left with an orphaned run.
-      const runCreatePost = requests.find((r) =>
-        r.method === 'POST' && /\/projects\/.+\/runs$/.test(r.url));
+      const runCreatePost = requests.find((r) => r.method === 'POST' && /\/projects\/.+\/runs$/.test(r.url));
       expect(runCreatePost).toBeUndefined();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -1056,30 +1242,45 @@ describe('SnapProvider.diff() baseline mapping', () => {
           status: 'pass',
           captures: [
             // Rendered current but no baseline attached → server short-circuits to "diffed".
-            { routeId: 'home', routePath: '/', status: 'diffed', currentObjectKey: 'k/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+            {
+              routeId: 'home',
+              routePath: '/',
+              status: 'diffed',
+              currentObjectKey: 'k/current.png',
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }
           ]
         });
       }
       return okResponse({});
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_x' })));
     const configPath = path.join(dir, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
     try {
-      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      const { summary } = await provider.diff({
+        configPath,
+        currentResultsPath: resultsPath
+      });
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
@@ -1099,30 +1300,45 @@ describe('SnapProvider.diff() baseline mapping', () => {
           id: 'run_new',
           status: 'new',
           captures: [
-            { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+            {
+              routeId: 'home',
+              routePath: '/',
+              status: 'new',
+              currentObjectKey: 'k/current.png',
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }
           ]
         });
       }
       return okResponse({});
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-new-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_new' })));
     const configPath = path.join(dir, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
     try {
-      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      const { summary } = await provider.diff({
+        configPath,
+        currentResultsPath: resultsPath
+      });
       expect(summary.missingInBaseline).toBe(1);
       expect(summary.matchedScreenshots).toBe(0);
       expect(summary.missing[0].location).toBe('baseline');
@@ -1136,47 +1352,64 @@ describe('SnapProvider.diff() baseline mapping', () => {
   // Issue #93: a stale/wrong captured page diffs at 0% against the baseline,
   // silently hiding real regressions. Warn when every compared route is an
   // exact pixel-identical match.
-  async function runDiffWith(
-    captures,
-    metadata = diffRunMetadata({ runId: 'run_zero' }),
-    runOverrides = {},
-    runPayload
-  ) {
+  async function runDiffWith(captures, metadata = diffRunMetadata({ runId: 'run_zero' }), runOverrides = {}, runPayload) {
     const mockFetch = async (url) => {
       if (url.includes('/visual/runs/')) {
-        return okResponse(runPayload === undefined
-          ? { id: metadata.runId, status: 'pass', captures, ...runOverrides }
-          : runPayload);
+        return okResponse(runPayload === undefined ? { id: metadata.runId, status: 'pass', captures, ...runOverrides } : runPayload);
       }
       return okResponse({});
     };
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-zero-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, JSON.stringify(metadata));
     const configPath = path.join(dir, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [...new Map(
-        (metadata.expectedCaptures || [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }])
-          .map((capture) => [capture.routeId, {
-            id: capture.routeId,
-            path: capture.routePath,
-            viewport: capture.routeId === 'about' ? 'mobile' : 'desktop'
-          }])
-      ).values()],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          ...new Map(
+            (
+              metadata.expectedCaptures || [
+                {
+                  routeId: 'home',
+                  routePath: '/',
+                  viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+                }
+              ]
+            ).map((capture) => [
+              capture.routeId,
+              {
+                id: capture.routeId,
+                path: capture.routePath,
+                viewport: capture.routeId === 'about' ? 'mobile' : 'desktop'
+              }
+            ])
+          ).values()
+        ],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
     const writes = [];
     const original = process.stderr.write;
-    process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+    process.stderr.write = (chunk) => {
+      writes.push(String(chunk));
+      return true;
+    };
     try {
-      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      const { summary } = await provider.diff({
+        configPath,
+        currentResultsPath: resultsPath
+      });
       return { summary, stderr: writes.join('') };
     } finally {
       process.stderr.write = original;
@@ -1200,19 +1433,105 @@ describe('SnapProvider.diff() baseline mapping', () => {
   });
 
   it('reports expected captures missing from a terminal hosted run', async () => {
-    const { summary } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
-    ], twoRouteDiffRunMetadata({ runId: 'run_partial' }));
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      twoRouteDiffRunMetadata({ runId: 'run_partial' })
+    );
 
     expect(summary.totalScreenshots).toBe(2);
     expect(summary.matchedScreenshots).toBe(1);
     expect(summary.missingInCurrent).toBe(1);
-    expect(summary.missing).toContainEqual(expect.objectContaining({
-      id: 'about',
-      location: 'current',
-      viewport: { width: 390, height: 844 }
-    }));
+    expect(summary.missing).toContainEqual(
+      expect.objectContaining({
+        id: 'about',
+        location: 'current',
+        viewport: { width: 390, height: 844 }
+      })
+    );
     expect(summary.status).toBe('incomplete');
+  });
+
+  it('maps v1 unequal dimensions to a changed capture with union metadata', async () => {
+    const metadata = diffRunMetadata({
+      runId: 'run_dimension',
+      comparisonPolicy: { version: 1, threshold: 0.01 }
+    });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 1 / 3,
+          diffPixels: 1,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison: {
+            baseline: { width: 2, height: 1 },
+            current: { width: 3, height: 1 },
+            canvas: { width: 3, height: 1 },
+            dimensionsChanged: true,
+            totalPixels: 3
+          },
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata
+    );
+
+    expect(summary.status).toBe('changes-detected');
+    expect(summary.comparisonPolicy).toEqual({ version: 1, threshold: 0.01 });
+    expect(summary.changed).toHaveLength(1);
+    expect(summary.changed[0]).toMatchObject({
+      differentPixels: 1,
+      totalPixels: 3,
+      mismatchRatio: 1 / 3,
+      comparison: { dimensionsChanged: true }
+    });
+    expect(summary.dimensionChanges).toHaveLength(0);
+  });
+
+  it('fails closed when a v1 capture has no complete comparison metadata', async () => {
+    const metadata = diffRunMetadata({
+      runId: 'run_missing_comparison',
+      comparisonPolicy: { version: 1, threshold: 0.01 }
+    });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata
+    );
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.matchedScreenshots).toBe(0);
+    expect(summary.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringMatching(/missing complete comparison metadata/)
+        })
+      ])
+    );
   });
 
   it('waits for a temporarily incomplete capture set before mapping the diff', async () => {
@@ -1247,26 +1566,35 @@ describe('SnapProvider.diff() baseline mapping', () => {
       }
       return okResponse({});
     };
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-eventual-'));
     const resultsPath = path.join(dir, 'results.json');
     const configPath = path.join(dir, 'config.json');
     await fs.writeFile(resultsPath, JSON.stringify(metadata));
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [
-        { id: 'home', path: '/', viewport: 'desktop' },
-        { id: 'about', path: '/about', viewport: 'mobile' }
-      ],
-      diff: { threshold: 0.01, mode: 'strict' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [
+          { id: 'home', path: '/', viewport: 'desktop' },
+          { id: 'about', path: '/about', viewport: 'mobile' }
+        ],
+        diff: { threshold: 0.01, mode: 'strict' }
+      })
+    );
     try {
-      const { summary } = await provider.diff({ configPath, currentResultsPath: resultsPath });
+      const { summary } = await provider.diff({
+        configPath,
+        currentResultsPath: resultsPath
+      });
       expect(pollCount).toBe(2);
       expect(summary.status).toBe('clean');
       expect(summary.totalScreenshots).toBe(2);
@@ -1278,40 +1606,58 @@ describe('SnapProvider.diff() baseline mapping', () => {
 
   it('does not count a diffed capture without diffPct as matched', async () => {
     const { summary } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        baselineObjectKey: 'b/home.png',
+        currentObjectKey: 'c/home.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
     ]);
 
     expect(summary.matchedScreenshots).toBe(0);
     expect(summary.changedScreenshots).toBe(0);
-    expect(summary.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'home', status: 'error' })
-    ]));
+    expect(summary.errors).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'home', status: 'error' })]));
     expect(summary.status).toBe('incomplete');
     expect(shouldFailDriftCheck({ ...summary, diffMode: 'strict' })).toBe(true);
   });
 
   it('reports an errored expected capture once without also calling it missing', async () => {
-    const { summary } = await runDiffWith([
-      {
-        routeId: 'home',
-        routePath: '/',
-        status: 'error',
-        errorCode: 'render_failed',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }
-    ], diffRunMetadata({ runId: 'run_capture_error' }));
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'error',
+          errorCode: 'render_failed',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      diffRunMetadata({ runId: 'run_capture_error' })
+    );
 
-    expect(summary.errors).toEqual([
-      expect.objectContaining({ id: 'home', message: 'render_failed' })
-    ]);
+    expect(summary.errors).toEqual([expect.objectContaining({ id: 'home', message: 'render_failed' })]);
     expect(summary.missingInCurrent).toBe(0);
     expect(summary.status).toBe('incomplete');
   });
 
   it('uses capture metrics instead of a server fail status when the comparison is within threshold', async () => {
-    const { summary } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
-    ], diffRunMetadata({ runId: 'run_server_fail' }), { status: 'fail' });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      diffRunMetadata({ runId: 'run_server_fail' }),
+      { status: 'fail' }
+    );
 
     expect(summary.status).toBe('clean');
     expect(summary.matchedScreenshots).toBe(1);
@@ -1320,7 +1666,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
 
   it('preserves a valid changed comparison above the configured threshold', async () => {
     const { summary } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0.02, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        baselineObjectKey: 'b/home.png',
+        currentObjectKey: 'c/home.png',
+        diffPct: 0.02,
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
     ]);
 
     expect(summary.status).toBe('changes-detected');
@@ -1332,9 +1686,43 @@ describe('SnapProvider.diff() baseline mapping', () => {
     });
   });
 
+  it('preserves legacy capture dimensions and pixel totals without comparison metadata', async () => {
+    const { summary } = await runDiffWith([
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        baselineObjectKey: 'b/home.png',
+        currentObjectKey: 'c/home.png',
+        width: 12,
+        height: 8,
+        diffPixels: 3,
+        diffPct: 0.02,
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ]);
+
+    expect(summary.changed[0]).toMatchObject({
+      width: 12,
+      height: 8,
+      differentPixels: 3,
+      totalPixels: 96,
+      mismatchRatio: 0.02
+    });
+    expect(summary.changed[0].comparison).toBeUndefined();
+  });
+
   it('keeps a comparison at the configured threshold clean', async () => {
     const { summary } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0.01, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        baselineObjectKey: 'b/home.png',
+        currentObjectKey: 'c/home.png',
+        diffPct: 0.01,
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
     ]);
 
     expect(summary.status).toBe('clean');
@@ -1347,8 +1735,24 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'duplicate identity',
       metadata: twoRouteDiffRunMetadata({ runId: 'run_duplicate' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home-1.png', currentObjectKey: 'c/home-1.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home-2.png', currentObjectKey: 'c/home-2.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home-1.png',
+          currentObjectKey: 'c/home-1.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        },
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home-2.png',
+          currentObjectKey: 'c/home-2.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /duplicate route\/viewport/
     },
@@ -1356,7 +1760,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'unexpected identity',
       metadata: diffRunMetadata({ runId: 'run_unexpected' }),
       captures: [
-        { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+        {
+          routeId: 'about',
+          routePath: '/about',
+          status: 'diffed',
+          baselineObjectKey: 'b/about.png',
+          currentObjectKey: 'c/about.png',
+          diffPct: 0,
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }
       ],
       message: /unexpected route\/viewport/
     },
@@ -1364,7 +1776,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'path mismatch',
       metadata: diffRunMetadata({ runId: 'run_path_mismatch' }),
       captures: [
-        { routeId: 'home', routePath: '/changed', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/changed',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /unexpected path/
     },
@@ -1372,7 +1792,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'viewport mismatch',
       metadata: diffRunMetadata({ runId: 'run_viewport_mismatch' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }
       ],
       message: /unexpected route\/viewport/
     },
@@ -1380,7 +1808,12 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'pending status',
       metadata: diffRunMetadata({ runId: 'run_pending' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'pending', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'pending',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /unknown status "pending"/
     },
@@ -1388,7 +1821,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'invalid diff metric',
       metadata: diffRunMetadata({ runId: 'run_invalid_metric' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 2, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 2,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /invalid diffPct/
     },
@@ -1396,7 +1837,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'string diff metric',
       metadata: diffRunMetadata({ runId: 'run_string_metric' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: '0.02', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: '0.02',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /invalid diffPct/
     },
@@ -1404,7 +1853,15 @@ describe('SnapProvider.diff() baseline mapping', () => {
       name: 'invalid baseline object key',
       metadata: diffRunMetadata({ runId: 'run_invalid_baseline_key' }),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: {}, currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: {},
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       message: /invalid baselineObjectKey/
     }
@@ -1417,69 +1874,84 @@ describe('SnapProvider.diff() baseline mapping', () => {
   });
 
   it('rejects legacy metadata without expected capture identities', async () => {
-    await expect(runDiffWith([], { runId: 'run_legacy', projectId: 'test-project-42' }))
-      .rejects.toThrow(/no expected capture identities.*recapture/i);
+    await expect(runDiffWith([], { runId: 'run_legacy', projectId: 'test-project-42' })).rejects.toThrow(/no expected capture identities.*recapture/i);
   });
 
   it('rejects malformed source metadata with a recapture instruction', async () => {
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => okResponse({}) });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => okResponse({})
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-diff-malformed-metadata-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, '{not-json');
     try {
-      await expect(provider.diff({ currentResultsPath: resultsPath }))
-        .rejects.toThrow(/not valid JSON.*recapture/i);
+      await expect(provider.diff({ currentResultsPath: resultsPath })).rejects.toThrow(/not valid JSON.*recapture/i);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
 
   it('distinguishes an unreadable source metadata path from malformed JSON', async () => {
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => okResponse({}) });
-    await expect(provider.diff({ currentResultsPath: '/tmp/snapdrift-missing-results.json' }))
-      .rejects.toThrow(/could not read capture results metadata/);
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => okResponse({})
+    });
+    await expect(
+      provider.diff({
+        currentResultsPath: '/tmp/snapdrift-missing-results.json'
+      })
+    ).rejects.toThrow(/could not read capture results metadata/);
   });
 
   it('rejects capture metadata for a different project before polling', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ projectId: 'other-project' })))
-      .rejects.toThrow(/belong to project/);
+    await expect(runDiffWith([], diffRunMetadata({ projectId: 'other-project' }))).rejects.toThrow(/belong to project/);
   });
 
   it('rejects an expected capture set that is inconsistent with selected routes', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ selectedRouteIds: ['about'] })))
-      .rejects.toThrow(/invalid or not selected/);
+    await expect(runDiffWith([], diffRunMetadata({ selectedRouteIds: ['about'] }))).rejects.toThrow(/invalid or not selected/);
   });
 
   it('rejects source metadata recorded for a baseline capture', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ purpose: 'baseline' })))
-      .rejects.toThrow(/purpose "baseline", not "diff"/);
+    await expect(runDiffWith([], diffRunMetadata({ purpose: 'baseline' }))).rejects.toThrow(/purpose "baseline", not "diff"/);
   });
 
   it('rejects duplicate expected route identities before polling', async () => {
     const metadata = twoRouteDiffRunMetadata({
       expectedCaptures: [
-        { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-        { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        },
+        {
+          routeId: 'home',
+          routePath: '/',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ]
     });
 
-    await expect(runDiffWith([], metadata))
-      .rejects.toThrow(/duplicate route "home"/);
+    await expect(runDiffWith([], metadata)).rejects.toThrow(/duplicate route "home"/);
   });
 
   it('rejects a response for a different run id', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_requested' }), { id: 'run_other', status: 'error' }))
-      .rejects.toThrow(/returned run "run_other" for requested run "run_requested"/);
+    await expect(
+      runDiffWith([], diffRunMetadata({ runId: 'run_requested' }), {
+        id: 'run_other',
+        status: 'error'
+      })
+    ).rejects.toThrow(/returned run "run_other" for requested run "run_requested"/);
   });
 
   it('rejects a response that omits the run id', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_missing_id' }), { id: undefined }))
-      .rejects.toThrow(/returned run "unknown" for requested run "run_missing_id"/);
+    await expect(
+      runDiffWith([], diffRunMetadata({ runId: 'run_missing_id' }), {
+        id: undefined
+      })
+    ).rejects.toThrow(/returned run "unknown" for requested run "run_missing_id"/);
   });
 
   it('rejects a malformed run response without treating it as an outage', async () => {
-    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_malformed_payload' }), {}, null))
-      .rejects.toThrow(/malformed run response/);
+    await expect(runDiffWith([], diffRunMetadata({ runId: 'run_malformed_payload' }), {}, null)).rejects.toThrow(/malformed run response/);
   });
 
   it('marks a malformed captures field incomplete instead of treating it as clean', async () => {
@@ -1493,27 +1965,76 @@ describe('SnapProvider.diff() baseline mapping', () => {
   });
 
   it('warns when every compared route is a pixel-identical 0% match (stale-capture guard)', async () => {
-    const { summary, stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
-    ], twoRouteDiffRunMetadata({ runId: 'run_zero' }));
+    const { summary, stderr } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        },
+        {
+          routeId: 'about',
+          routePath: '/about',
+          status: 'diffed',
+          baselineObjectKey: 'b/about.png',
+          currentObjectKey: 'c/about.png',
+          diffPct: 0,
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }
+      ],
+      twoRouteDiffRunMetadata({ runId: 'run_zero' })
+    );
     expect(summary.matchedScreenshots).toBe(2);
     expect(stderr).toMatch(/pixel-identical/);
     expect(stderr).toMatch(/issue #93/);
   });
 
   it('does not warn when at least one route shows non-zero drift', async () => {
-    const { stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-      { routeId: 'about', routePath: '/about', status: 'diffed', baselineObjectKey: 'b/about.png', currentObjectKey: 'c/about.png', diffPct: 0.005, viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
-    ], twoRouteDiffRunMetadata({ runId: 'run_zero' }));
+    const { stderr } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        },
+        {
+          routeId: 'about',
+          routePath: '/about',
+          status: 'diffed',
+          baselineObjectKey: 'b/about.png',
+          currentObjectKey: 'c/about.png',
+          diffPct: 0.005,
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }
+      ],
+      twoRouteDiffRunMetadata({ runId: 'run_zero' })
+    );
     expect(stderr).not.toMatch(/pixel-identical/);
   });
 
   it('does not warn for a single pixel-identical route (indistinguishable from a clean diff)', async () => {
-    const { stderr } = await runDiffWith([
-      { routeId: 'home', routePath: '/', status: 'diffed', baselineObjectKey: 'b/home.png', currentObjectKey: 'c/home.png', diffPct: 0, viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
-    ], diffRunMetadata({ runId: 'run_zero' }));
+    const { stderr } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      diffRunMetadata({ runId: 'run_zero' })
+    );
     expect(stderr).not.toMatch(/pixel-identical/);
   });
 });
@@ -1534,15 +2055,30 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     const requests = [];
     let pollCount = 0;
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, headers: opts?.headers, body: opts?.body ? JSON.parse(opts.body) : null });
+      requests.push({
+        url,
+        method: opts?.method,
+        headers: opts?.headers,
+        body: opts?.body ? JSON.parse(opts.body) : null
+      });
       if (url.includes('/visual/runs/')) {
         const captures = [
-          { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home/current.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-          { routeId: 'about', routePath: '/about', status: 'new', currentObjectKey: 'k/about/current.png', viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON }
+          {
+            routeId: 'home',
+            routePath: '/',
+            status: 'new',
+            currentObjectKey: 'k/home/current.png',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+          },
+          {
+            routeId: 'about',
+            routePath: '/about',
+            status: 'new',
+            currentObjectKey: 'k/about/current.png',
+            viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+          }
         ];
-        const responseCaptures = pollCount++ === 0
-          ? [captures[0]]
-          : (pollCount % 2 === 0 ? captures : captures.reverse());
+        const responseCaptures = pollCount++ === 0 ? [captures[0]] : pollCount % 2 === 0 ? captures : captures.reverse();
         return okResponse({
           id: 'run_pub',
           status: 'new',
@@ -1552,21 +2088,20 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       return okResponse({ id: 'bsl_new_1' });
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-new-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, JSON.stringify(twoRouteBaselineRunMetadata()));
     const bundleDirs = [];
     try {
-      bundleDirs.push(
-        (await provider.publishBaseline({ resultsPath })).bundleDir,
-        (await provider.publishBaseline({ resultsPath })).bundleDir
-      );
+      bundleDirs.push((await provider.publishBaseline({ resultsPath })).bundleDir, (await provider.publishBaseline({ resultsPath })).bundleDir);
 
       const baselinePosts = requests.filter((r) => r.method === 'POST' && /\/baselines$/.test(r.url));
       expect(baselinePosts).toHaveLength(2);
-      expect(requests.filter((r) => r.method === 'GET' && r.url.includes('/visual/runs/run_pub')))
-        .toHaveLength(3);
+      expect(requests.filter((r) => r.method === 'GET' && r.url.includes('/visual/runs/run_pub'))).toHaveLength(3);
       expect(baselinePosts[0].body).toEqual(baselinePosts[1].body);
       expect(baselinePosts[0].headers['Idempotency-Key']).toBe('baseline-run_pub');
       expect(baselinePosts[1].headers['Idempotency-Key']).toBe('baseline-run_pub');
@@ -1603,13 +2138,15 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
         return okResponse({
           id: 'run_pub',
           status: 'new',
-          captures: [{
-            routeId: 'home',
-            routePath: '/',
-            status: pollCount < 5 ? 'rendering' : 'new',
-            ...(pollCount < 5 ? {} : { currentObjectKey: 'k/home/current.png' }),
-            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-          }]
+          captures: [
+            {
+              routeId: 'home',
+              routePath: '/',
+              status: pollCount < 5 ? 'rendering' : 'new',
+              ...(pollCount < 5 ? {} : { currentObjectKey: 'k/home/current.png' }),
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }
+          ]
         });
       }
       return okResponse({ id: 'bsl_new_1' });
@@ -1625,8 +2162,7 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     try {
       await expect(provider.publishBaseline({ resultsPath })).resolves.toBeDefined();
       expect(pollCount).toBe(5);
-      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url)))
-        .toBe(true);
+      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(true);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -1642,13 +2178,15 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
         return okResponse({
           id: 'run_pub',
           status: 'rendering',
-          captures: [{
-            routeId: 'home',
-            routePath: '/',
-            status: 'new',
-            currentObjectKey: 'k/home/current.png',
-            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-          }]
+          captures: [
+            {
+              routeId: 'home',
+              routePath: '/',
+              status: 'new',
+              currentObjectKey: 'k/home/current.png',
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }
+          ]
         });
       }
       return okResponse({});
@@ -1662,8 +2200,7 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     await fs.writeFile(resultsPath, JSON.stringify(twoRouteBaselineRunMetadata()));
 
     try {
-      await expect(provider.publishBaseline({ resultsPath }))
-        .rejects.toThrow(/complete baseline publication requires "new"/);
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(/complete baseline publication requires "new"/);
       expect(pollCount).toBe(31);
       expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(false);
     } finally {
@@ -1676,73 +2213,118 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       name: 'a terminal error run',
       metadata: baselineRunMetadata(),
       runStatus: 'error',
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'error',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'error',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /complete baseline publication requires "new"/
     },
     {
       name: 'a failed capture',
       metadata: baselineRunMetadata(),
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'error', currentObjectKey: 'k/home.png',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'error',
+          currentObjectKey: 'k/home.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /status "error"/
     },
     {
       name: 'a capture without currentObjectKey',
       metadata: baselineRunMetadata(),
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'new',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /has no currentObjectKey/
     },
     {
       name: 'a duplicate route/viewport identity',
       metadata: twoRouteBaselineRunMetadata(),
       captures: [
-        { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home-1.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON },
-        { routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home-2.png', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON }
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          currentObjectKey: 'k/home-1.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        },
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          currentObjectKey: 'k/home-2.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
       ],
       expectedError: /duplicate source route\/viewport identity/
     },
     {
       name: 'a missing configured capture',
       metadata: twoRouteBaselineRunMetadata(),
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          currentObjectKey: 'k/home.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /has 1 capture\(s\), expected 2/
     },
     {
       name: 'an extra capture identity',
       metadata: baselineRunMetadata(),
-      captures: [{
-        routeId: 'about', routePath: '/about', status: 'new', currentObjectKey: 'k/about.png',
-        viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'about',
+          routePath: '/about',
+          status: 'new',
+          currentObjectKey: 'k/about.png',
+          viewportDescriptorJson: MOBILE_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /unexpected route\/viewport capture/
     },
     {
       name: 'a source-project mismatch',
       metadata: baselineRunMetadata({ projectId: 'other-project' }),
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          currentObjectKey: 'k/home.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /belongs to project "other-project"/
     },
     {
       name: 'malformed expected-capture metadata',
       metadata: baselineRunMetadata({ expectedCaptures: [null] }),
-      captures: [{
-        routeId: 'home', routePath: '/', status: 'new', currentObjectKey: 'k/home.png',
-        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-      }],
+      captures: [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'new',
+          currentObjectKey: 'k/home.png',
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
       expectedError: /duplicate or extra route "unknown"/
     }
   ])('fails closed without publishing when the run contains $name', async ({ metadata, runStatus = 'new', captures, expectedError }) => {
@@ -1750,11 +2332,18 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     const mockFetch = async (url, opts) => {
       requests.push({ url, method: opts?.method });
       if (url.includes('/visual/runs/')) {
-        return okResponse({ id: metadata.runId, status: runStatus, captures });
+        return okResponse({
+          id: metadata.runId,
+          status: runStatus,
+          captures
+        });
       }
       return okResponse({});
     };
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-invalid-'));
     const resultsPath = path.join(dir, 'results.json');
     await fs.writeFile(resultsPath, JSON.stringify(metadata));
@@ -1777,7 +2366,10 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       requests.push(url);
       return okResponse({});
     };
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-norunid-'));
     const resultsPath = path.join(dir, 'results.json');
     // A local-provider results.json: valid JSON, no runId.
@@ -1798,15 +2390,11 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-badresults-'));
     try {
       // Missing file — the read error used to be swallowed by a bare catch.
-      await expect(
-        provider.publishBaseline({ resultsPath: path.join(dir, 'nope.json') })
-      ).rejects.toThrow(/Could not read that file/);
+      await expect(provider.publishBaseline({ resultsPath: path.join(dir, 'nope.json') })).rejects.toThrow(/Could not read that file/);
 
       const badPath = path.join(dir, 'results.json');
       await fs.writeFile(badPath, '{not json');
-      await expect(provider.publishBaseline({ resultsPath: badPath })).rejects.toThrow(
-        /Could not read that file/
-      );
+      await expect(provider.publishBaseline({ resultsPath: badPath })).rejects.toThrow(/Could not read that file/);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -1817,9 +2405,7 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
       fetchFn: async () => okResponse({}),
       sleepFn: () => Promise.resolve()
     });
-    await expect(provider.publishBaseline({})).rejects.toThrow(
-      /neither resultsPath nor bundleDir/
-    );
+    await expect(provider.publishBaseline({})).rejects.toThrow(/neither resultsPath nor bundleDir/);
   });
 });
 
@@ -1845,7 +2431,10 @@ describe('SnapProvider retry behavior', () => {
       return okResponse({ id: 'run_1', status: 'pending' });
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     await provider.checkBaselineExists('abc123');
     expect(callCount).toBe(2);
   });
@@ -1879,9 +2468,11 @@ describe('SnapProvider retry behavior', () => {
       return errorResponse(401, { error: 'unauthorized' });
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123'))
-      .rejects.toThrow(/Snap API 401/);
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.checkBaselineExists('abc123')).rejects.toThrow(/Snap API 401/);
     expect(callCount).toBe(1);
   });
 });
@@ -1951,13 +2542,16 @@ describe('SnapProvider transport deadlines', () => {
 
   it('bounds a stalled JSON response body and routes it through availability handling', async () => {
     const signals = [];
-    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
-      fetchFn: async (_url, options) => {
-        signals.push(options.signal);
-        return { ok: true, status: 200, text: () => new Promise(() => {}) };
-      },
-      nowFn: () => Date.now()
-    });
+    const provider = new SnapProvider(
+      { ...validSnapConfig, onUnavailable: 'warn-and-skip' },
+      {
+        fetchFn: async (_url, options) => {
+          signals.push(options.signal);
+          return { ok: true, status: 200, text: () => new Promise(() => {}) };
+        },
+        nowFn: () => Date.now()
+      }
+    );
 
     const pending = provider.checkBaselineExists('stalled-json-body');
     const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
@@ -1974,7 +2568,11 @@ describe('SnapProvider transport deadlines', () => {
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: async (_url, options) => {
         signals.push(options.signal);
-        return { ok: true, status: 200, arrayBuffer: () => new Promise(() => {}) };
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: () => new Promise(() => {})
+        };
       },
       nowFn: () => Date.now()
     });
@@ -2014,46 +2612,59 @@ describe('SnapProvider transport deadlines', () => {
   it('routes a polling deadline through onUnavailable and stops polling', async () => {
     let pollCount = 0;
     let clock = 0;
-    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
-      fetchFn: async (url) => {
-        if (url.includes('/visual/runs/')) {
-          pollCount += 1;
+    const provider = new SnapProvider(
+      { ...validSnapConfig, onUnavailable: 'warn-and-skip' },
+      {
+        fetchFn: async (url) => {
+          if (url.includes('/visual/runs/')) {
+            pollCount += 1;
+            return okResponse({
+              id: 'run_deadline',
+              status: 'rendering',
+              captures: [
+                {
+                  id: `capture-${pollCount}`,
+                  routeId: 'home',
+                  routePath: '/',
+                  status: 'pending',
+                  viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+                }
+              ]
+            });
+          }
           return okResponse({
-            id: 'run_deadline',
-            status: 'rendering',
-            captures: [{
-              id: `capture-${pollCount}`,
-              routeId: 'home',
-              routePath: '/',
-              status: 'pending',
-              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-            }]
+            comparisonPolicy: { version: 1, threshold: 0.01 }
           });
+        },
+        nowFn: () => clock,
+        sleepFn: async (delay) => {
+          clock += delay;
         }
-        return okResponse({});
-      },
-      nowFn: () => clock,
-      sleepFn: async (delay) => {
-        clock += delay;
       }
-    });
+    );
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-deadline-'));
     const resultsPath = path.join(dir, 'results.json');
     const configPath = path.join(dir, 'config.json');
     await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_deadline' })));
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      const pending = provider.diff({ configPath, currentResultsPath: resultsPath });
+      const pending = provider.diff({
+        configPath,
+        currentResultsPath: resultsPath
+      });
       const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
       await rejection;
 
@@ -2074,31 +2685,35 @@ describe('SnapProvider transport deadlines', () => {
         requestCount += 1;
         clock += 20_000;
         if (url.includes('/baselines/latest')) return okResponse({ id: 'baseline-1' });
-        return okResponse({});
+        return okResponse({
+          comparisonPolicy: { version: 1, threshold: 0.01 }
+        });
       },
       nowFn: () => clock,
       sleepFn: () => Promise.resolve()
     });
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-shared-deadline-'));
     const configPath = path.join(dir, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      baselineArtifactName: 'test',
-      workingDirectory: '.',
-      baseUrl: 'https://example.com',
-      resultsFile: 'results.json',
-      manifestFile: 'manifest.json',
-      screenshotsRoot: 'screenshots',
-      routes: Array.from({ length: 40 }, (_, index) => ({
-        id: `route-${index}`,
-        path: `/${index}`,
-        viewport: 'desktop'
-      })),
-      diff: { threshold: 0.01, mode: 'report-only' }
-    }));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        baselineArtifactName: 'test',
+        workingDirectory: '.',
+        baseUrl: 'https://example.com',
+        resultsFile: 'results.json',
+        manifestFile: 'manifest.json',
+        screenshotsRoot: 'screenshots',
+        routes: Array.from({ length: 40 }, (_, index) => ({
+          id: `route-${index}`,
+          path: `/${index}`,
+          viewport: 'desktop'
+        })),
+        diff: { threshold: 0.01, mode: 'report-only' }
+      })
+    );
 
     try {
-      await expect(provider.capture({ configPath, purpose: 'diff' }))
-        .rejects.toThrow(/operation deadline/);
+      await expect(provider.capture({ configPath, purpose: 'diff' })).rejects.toThrow(/operation deadline/);
       expect(requestCount).toBeGreaterThan(1);
       expect(requestCount).toBeLessThan(42);
     } finally {
@@ -2121,13 +2736,15 @@ describe('SnapProvider transport deadlines', () => {
               return JSON.stringify({
                 id: 'run_pub',
                 status: 'new',
-                captures: [{
-                  routeId: 'home',
-                  routePath: '/',
-                  status: 'new',
-                  currentObjectKey: 'k/home/current.png',
-                  viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
-                }]
+                captures: [
+                  {
+                    routeId: 'home',
+                    routePath: '/',
+                    status: 'new',
+                    currentObjectKey: 'k/home/current.png',
+                    viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+                  }
+                ]
               });
             }
           };
@@ -2143,8 +2760,7 @@ describe('SnapProvider transport deadlines', () => {
     await fs.writeFile(resultsPath, JSON.stringify(baselineRunMetadata()));
 
     try {
-      await expect(provider.publishBaseline({ resultsPath }))
-        .rejects.toThrow(/operation deadline/);
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(/operation deadline/);
       expect(requests.filter(({ method }) => method === 'GET')).toHaveLength(1);
       expect(requests.filter(({ method }) => method === 'POST')).toHaveLength(1);
     } finally {
@@ -2169,8 +2785,7 @@ describe('SnapProvider transport deadlines', () => {
       }
     });
 
-    await expect(provider.checkBaselineExists('clipped-backoff'))
-      .rejects.toThrow(/operation deadline/);
+    await expect(provider.checkBaselineExists('clipped-backoff')).rejects.toThrow(/operation deadline/);
     expect(callCount).toBe(1);
     expect(delays).toEqual([500]);
   });
@@ -2181,9 +2796,7 @@ describe('SnapProvider transport deadlines', () => {
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: async () => {
         callCount += 1;
-        return callCount === 1
-          ? errorResponse(503, { error: 'service unavailable' })
-          : okResponse({ id: 'baseline_1' });
+        return callCount === 1 ? errorResponse(503, { error: 'service unavailable' }) : okResponse({ id: 'baseline_1' });
       },
       sleepFn: async (delay, signal) => {
         sleepSignals.push(signal);
@@ -2217,23 +2830,27 @@ describe('SnapProvider transport deadlines', () => {
   it('cancels a stalled retry wait without starting another request', async () => {
     let callCount = 0;
     const sleepSignals = [];
-    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
-      fetchFn: async () => {
-        callCount += 1;
-        return errorResponse(503, { error: 'service unavailable' });
-      },
-      sleepFn: (_delay, signal) => new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, 10_000);
-        const onAbort = () => {
-          clearTimeout(timer);
-          signal?.removeEventListener('abort', onAbort);
-          reject(signal?.reason ?? new Error('Sleep aborted.'));
-        };
-        sleepSignals.push(signal);
-        signal?.addEventListener('abort', onAbort, { once: true });
-      }),
-      nowFn: () => Date.now()
-    });
+    const provider = new SnapProvider(
+      { ...validSnapConfig, onUnavailable: 'warn-and-skip' },
+      {
+        fetchFn: async () => {
+          callCount += 1;
+          return errorResponse(503, { error: 'service unavailable' });
+        },
+        sleepFn: (_delay, signal) =>
+          new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 10_000);
+            const onAbort = () => {
+              clearTimeout(timer);
+              signal?.removeEventListener('abort', onAbort);
+              reject(signal?.reason ?? new Error('Sleep aborted.'));
+            };
+            sleepSignals.push(signal);
+            signal?.addEventListener('abort', onAbort, { once: true });
+          }),
+        nowFn: () => Date.now()
+      }
+    );
 
     const pending = provider.checkBaselineExists('stalled-retry-wait');
     const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
@@ -2283,22 +2900,19 @@ describe('SnapProvider onUnavailable modes', () => {
   it('fail mode (default) throws on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fail' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123'))
-      .rejects.toThrow(/Snap API 500/);
+    await expect(provider.checkBaselineExists('abc123')).rejects.toThrow(/Snap API 500/);
   });
 
   it('fallback-local mode throws SnapFallbackError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fallback-local' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123'))
-      .rejects.toBeInstanceOf(SnapFallbackError);
+    await expect(provider.checkBaselineExists('abc123')).rejects.toBeInstanceOf(SnapFallbackError);
   });
 
   it('warn-and-skip mode throws SnapSkipError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123'))
-      .rejects.toBeInstanceOf(SnapSkipError);
+    await expect(provider.checkBaselineExists('abc123')).rejects.toBeInstanceOf(SnapSkipError);
   });
 });
 
@@ -2354,7 +2968,10 @@ describe('project ID resolution', () => {
 
   it('converts GITHUB_REPOSITORY owner/repo to slug', () => {
     process.env.GITHUB_REPOSITORY = 'myorg/myrepo';
-    const provider = new SnapProvider({ ...validSnapConfig, projectId: 'auto' });
+    const provider = new SnapProvider({
+      ...validSnapConfig,
+      projectId: 'auto'
+    });
     expect(provider).toBeInstanceOf(SnapProvider);
     delete process.env.GITHUB_REPOSITORY;
   });
@@ -2374,14 +2991,20 @@ describe('SnapProvider.checkBaselineExists()', () => {
 
   it('returns baseline data when found', async () => {
     const mockFetch = async () => okResponse({ id: 'baseline-1', headSha: 'abc123' });
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const result = await provider.checkBaselineExists('abc123');
     expect(result).toEqual({ id: 'baseline-1', headSha: 'abc123' });
   });
 
   it('returns null on 404', async () => {
     const mockFetch = async () => errorResponse(404, { error: 'not found' });
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const result = await provider.checkBaselineExists('nonexistent');
     expect(result).toBeNull();
   });
@@ -2472,7 +3095,11 @@ describe('SnapProvider.exportBaselines()', () => {
   }
 
   const DESKTOP_DESCRIPTOR_JSON = JSON.stringify({
-    width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false
+    width: 1440,
+    height: 900,
+    deviceScaleFactor: 1,
+    isMobile: false,
+    hasTouch: false
   });
 
   function makeBaseline(overrides = {}) {
@@ -2486,14 +3113,21 @@ describe('SnapProvider.exportBaselines()', () => {
       sourceManifest: {
         schemaVersion: 1,
         sourceRunId: 'run_src_1',
-        routes: [{
-          routeId: 'home',
-          routePath: '/',
-          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
-          objectKey: 'visual/p/home.png'
-        }]
+        routes: [
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/home.png'
+          }
+        ]
       },
-      objects: [{ sourceKey: 'visual/p/home.png', archivePath: 'bsl_export_1/images/aaaa1111bbbb2222.png' }],
+      objects: [
+        {
+          sourceKey: 'visual/p/home.png',
+          archivePath: 'bsl_export_1/images/aaaa1111bbbb2222.png'
+        }
+      ],
       ...overrides
     };
   }
@@ -2502,19 +3136,39 @@ describe('SnapProvider.exportBaselines()', () => {
     const png = tinyPng(2, 3);
     const baseline = makeBaseline();
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'test-project-42', slug: 'test' }, baselines: [baseline] }) },
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({
+          project: { id: 'test-project-42', slug: 'test' },
+          baselines: [baseline]
+        })
+      },
       { name: 'bsl_export_1/images/aaaa1111bbbb2222.png', body: png },
-      { name: 'bsl_export_1/capture_profile.json', body: JSON.stringify({ schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }) },
+      {
+        name: 'bsl_export_1/capture_profile.json',
+        body: JSON.stringify({
+          schemaVersion: 1,
+          engine: { name: 'snapdrift-local', version: 'v0' }
+        })
+      },
       { name: 'MIGRATION_NOTES.md', body: '# notes\n' }
     ]);
 
     const requests = [];
     const mockFetch = async (url, opts) => {
-      requests.push({ url, method: opts?.method, headers: opts?.headers, signal: opts?.signal });
+      requests.push({
+        url,
+        method: opts?.method,
+        headers: opts?.headers,
+        signal: opts?.signal
+      });
       return tarResponse(tar);
     };
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
     const exported = await provider.exportBaselines();
 
     // Request shape
@@ -2545,7 +3199,12 @@ describe('SnapProvider.exportBaselines()', () => {
     expect(exported.results.refBranch).toBe('main');
     expect(exported.results.routes).toHaveLength(1);
     expect(exported.results.routes[0]).toMatchObject({
-      id: 'home', path: '/', status: 'passed', imagePath: 'screenshots/home.png', width: 2, height: 3
+      id: 'home',
+      path: '/',
+      status: 'passed',
+      imagePath: 'screenshots/home.png',
+      width: 2,
+      height: 3
     });
 
     // Engine passes through from the capture profile
@@ -2559,29 +3218,67 @@ describe('SnapProvider.exportBaselines()', () => {
       createdAt: '2026-06-01T00:00:00.000Z',
       sourceManifest: {
         schemaVersion: 1,
-        routes: [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/old.png' }]
+        routes: [
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/old.png'
+          }
+        ]
       },
-      objects: [{ sourceKey: 'visual/p/old.png', archivePath: 'bsl_old/images/1111.png' }]
+      objects: [
+        {
+          sourceKey: 'visual/p/old.png',
+          archivePath: 'bsl_old/images/1111.png'
+        }
+      ]
     });
     const newer = makeBaseline({
       id: 'bsl_new',
       createdAt: '2026-07-02T00:00:00.000Z',
       sourceManifest: {
         schemaVersion: 1,
-        routes: [{ routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/new.png' }]
+        routes: [
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/new.png'
+          }
+        ]
       },
-      objects: [{ sourceKey: 'visual/p/new.png', archivePath: 'bsl_new/images/2222.png' }]
+      objects: [
+        {
+          sourceKey: 'visual/p/new.png',
+          archivePath: 'bsl_new/images/2222.png'
+        }
+      ]
     });
     const tar = buildTar([
       // Older listed last so the pick is proven to come from createdAt, not array order.
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [newer, older] }) },
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({
+          project: { id: 'p' },
+          baselines: [newer, older]
+        })
+      },
       { name: 'bsl_old/images/1111.png', body: png },
       { name: 'bsl_new/images/2222.png', body: png },
       { name: 'bsl_old/capture_profile.json', body: '{}' },
-      { name: 'bsl_new/capture_profile.json', body: JSON.stringify({ engine: { name: 'snapdrift-local', version: 'v0' } }) }
+      {
+        name: 'bsl_new/capture_profile.json',
+        body: JSON.stringify({
+          engine: { name: 'snapdrift-local', version: 'v0' }
+        })
+      }
     ]);
 
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
     const exported = await provider.exportBaselines();
 
     expect(exported.results.baselineId).toBe('bsl_new');
@@ -2590,29 +3287,45 @@ describe('SnapProvider.exportBaselines()', () => {
 
   it('throws a clear error when the export has no accepted baselines', async () => {
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [] }) }
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [] })
+      }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
-    await expect(provider.exportBaselines())
-      .rejects.toThrow(/no accepted baselines to export/);
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.exportBaselines()).rejects.toThrow(/no accepted baselines to export/);
   });
 
   it('throws a scope-specific error on 403', async () => {
-    const mockFetch = async () => errorResponse(403, { error: 'insufficient scope', code: 'unauthorized_visual_scope' });
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.exportBaselines())
-      .rejects.toThrow(/visual:export/);
+    const mockFetch = async () =>
+      errorResponse(403, {
+        error: 'insufficient scope',
+        code: 'unauthorized_visual_scope'
+      });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.exportBaselines()).rejects.toThrow(/visual:export/);
   });
 
   it('throws a clear error for a legacy baseline with no source manifest', async () => {
     const legacy = makeBaseline({ sourceManifest: null, objects: [] });
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [legacy] }) },
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [legacy] })
+      },
       { name: 'bsl_export_1/capture_profile.json', body: '{}' }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
-    await expect(provider.exportBaselines())
-      .rejects.toThrow(/predates manifest tracking/);
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.exportBaselines()).rejects.toThrow(/predates manifest tracking/);
   });
 
   it('rejects colliding source route ids before importing exported screenshots', async () => {
@@ -2621,24 +3334,45 @@ describe('SnapProvider.exportBaselines()', () => {
       sourceManifest: {
         schemaVersion: 1,
         routes: [
-          { routeId: 'a/b', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one.png' },
-          { routeId: 'a_b', routePath: '/about', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two.png' }
+          {
+            routeId: 'a/b',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/one.png'
+          },
+          {
+            routeId: 'a_b',
+            routePath: '/about',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/two.png'
+          }
         ]
       },
       objects: [
-        { sourceKey: 'visual/p/one.png', archivePath: 'bsl_export_1/images/one.png' },
-        { sourceKey: 'visual/p/two.png', archivePath: 'bsl_export_1/images/two.png' }
+        {
+          sourceKey: 'visual/p/one.png',
+          archivePath: 'bsl_export_1/images/one.png'
+        },
+        {
+          sourceKey: 'visual/p/two.png',
+          archivePath: 'bsl_export_1/images/two.png'
+        }
       ]
     });
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) },
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] })
+      },
       { name: 'bsl_export_1/images/one.png', body: png },
       { name: 'bsl_export_1/images/two.png', body: png }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
 
-    await expect(provider.exportBaselines())
-      .rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
+    await expect(provider.exportBaselines()).rejects.toThrow(/screenshots\/a_b\.png.*Rename.*recapture/);
   });
 
   it('uses each exported archive extension when checking route filename collisions', async () => {
@@ -2647,21 +3381,43 @@ describe('SnapProvider.exportBaselines()', () => {
       sourceManifest: {
         schemaVersion: 1,
         routes: [
-          { routeId: 'a/b', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' },
-          { routeId: 'a_b', routePath: '/about', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two' }
+          {
+            routeId: 'a/b',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/one'
+          },
+          {
+            routeId: 'a_b',
+            routePath: '/about',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/two'
+          }
         ]
       },
       objects: [
-        { sourceKey: 'visual/p/one', archivePath: 'bsl_export_1/images/one.jpg' },
-        { sourceKey: 'visual/p/two', archivePath: 'bsl_export_1/images/two.png' }
+        {
+          sourceKey: 'visual/p/one',
+          archivePath: 'bsl_export_1/images/one.jpg'
+        },
+        {
+          sourceKey: 'visual/p/two',
+          archivePath: 'bsl_export_1/images/two.png'
+        }
       ]
     });
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) },
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] })
+      },
       { name: 'bsl_export_1/images/one.jpg', body: png },
       { name: 'bsl_export_1/images/two.png', body: png }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
 
     const exported = await provider.exportBaselines();
     expect(exported.screenshots.map(({ filename }) => filename)).toEqual(['a_b.jpg', 'a_b.png']);
@@ -2672,16 +3428,32 @@ describe('SnapProvider.exportBaselines()', () => {
       sourceManifest: {
         schemaVersion: 1,
         routes: [
-          { routeId: 'home', routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' },
-          { routeId: 'home', routePath: '/duplicate', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/two' }
+          {
+            routeId: 'home',
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/one'
+          },
+          {
+            routeId: 'home',
+            routePath: '/duplicate',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/two'
+          }
         ]
       },
       objects: []
     });
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) }
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] })
+      }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
 
     await expect(provider.exportBaselines()).rejects.toThrow(/source manifest.*screenshots\/home\.png.*Rename.*recapture/);
   });
@@ -2690,14 +3462,27 @@ describe('SnapProvider.exportBaselines()', () => {
     const baseline = makeBaseline({
       sourceManifest: {
         schemaVersion: 1,
-        routes: [{ routeId: null, routePath: '/', viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON, objectKey: 'visual/p/one' }]
+        routes: [
+          {
+            routeId: null,
+            routePath: '/',
+            viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON,
+            objectKey: 'visual/p/one'
+          }
+        ]
       },
       objects: []
     });
     const tar = buildTar([
-      { name: 'manifest.json', body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] }) }
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'p' }, baselines: [baseline] })
+      }
     ]);
-    const provider = new SnapProvider(validSnapConfig, { fetchFn: async () => tarResponse(tar), sleepFn: () => Promise.resolve() });
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
 
     await expect(provider.exportBaselines()).rejects.toThrow(/source manifest.*non-empty string/);
   });

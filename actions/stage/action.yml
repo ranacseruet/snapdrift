@@ -57,6 +57,10 @@ inputs:
     description: Current screenshots dir for diff artifact staging.
     required: false
     default: ''
+  diff-images-dir:
+    description: Local diff PNG directory for diff artifact staging.
+    required: false
+    default: ''
 
 outputs:
   bundle-dir:
@@ -91,6 +95,7 @@ runs:
         CURRENT_MANIFEST_PATH: ${{ inputs.current-manifest-path }}
         BASELINE_SCREENSHOTS_DIR: ${{ inputs.baseline-screenshots-dir }}
         CURRENT_SCREENSHOTS_DIR: ${{ inputs.current-screenshots-dir }}
+        DIFF_IMAGES_DIR: ${{ inputs.diff-images-dir }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -113,7 +118,8 @@ runs:
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
           baselineScreenshotsDir: process.env.BASELINE_SCREENSHOTS_DIR || undefined,
-          currentScreenshotsDir: process.env.CURRENT_SCREENSHOTS_DIR || undefined
+          currentScreenshotsDir: process.env.CURRENT_SCREENSHOTS_DIR || undefined,
+          diffImagesDir: process.env.DIFF_IMAGES_DIR || undefined
         });
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);

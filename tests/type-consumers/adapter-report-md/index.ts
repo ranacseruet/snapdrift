@@ -22,7 +22,7 @@ api.PR_COMMENT_MARKER.toUpperCase();
 api.PR_COMMENT_MARKERS.map(marker => marker.toUpperCase());
 api.escapeMarkdown({ untrusted: true }).toUpperCase();
 api.generateHtmlReport(summary, {
-  baselineRunDir: '.', currentRunDir: '.',
+  baselineRunDir: '.', currentRunDir: '.', diffRunDir: './diff',
   imageReader: async (dir, imagePath) => dir && imagePath ? 'data:image/png;base64,' : null
 }).then(html => html.toUpperCase());
 // @ts-expect-error invalid enforcement mode

@@ -13,6 +13,7 @@ import {
   validateManifest,
   indexManifestEntries,
   indexRouteResults,
+  sanitizeRouteId,
   determineDriftStatus,
   shouldFailDriftCheck
 } from '@snapdrift/manifest';
@@ -23,6 +24,7 @@ import { makeMarkdown, formatDriftFailureMessage } from '@snapdrift/adapter-repo
 /** @typedef {import('../../manifest/types/index').VisualDiffDimensionItem} DriftDimensionItem */
 /** @typedef {import('../../manifest/types/index').VisualDiffErrorItem} DriftErrorItem */
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
+/** @typedef {import('../../manifest/types/index').ComparisonPolicy} ComparisonPolicy */
 /** @typedef {import('../../manifest/types/index').VisualScreenshotManifest} ScreenshotManifest */
 /** @typedef {import('../../manifest/types/index').VisualScreenshotManifestEntry} ScreenshotManifestEntry */
 
@@ -35,6 +37,8 @@ import { makeMarkdown, formatDriftFailureMessage } from '@snapdrift/adapter-repo
  *   currentManifestPath?: string,
  *   baselineRunDir?: string,
  *   currentRunDir?: string,
+ *   diffImagesDir?: string,
+ *   comparisonPolicy?: ComparisonPolicy,
  *   routeIds?: Iterable<string>,
  *   baselineArtifactName?: string,
  *   baselineSourceSha?: string
@@ -45,10 +49,8 @@ export async function generateDriftReport(options = {}) {
   clearFileIndexCache();
 
   const { config } = await loadSnapdriftConfig(options.configPath);
-  const selectedRouteIds = selectConfiguredRoutes(
-    config,
-    options.routeIds || splitCommaList(readFirstDefinedEnv(['SNAPDRIFT_ROUTE_IDS']))
-  ).selectedRouteIds;
+  const comparisonPolicy = options.comparisonPolicy ?? config.diff.comparisonPolicy;
+  const selectedRouteIds = selectConfiguredRoutes(config, options.routeIds || splitCommaList(readFirstDefinedEnv(['SNAPDRIFT_ROUTE_IDS']))).selectedRouteIds;
 
   const resolvedBaselineResultsPath = path.resolve(
     options.baselineResultsPath || readFirstDefinedEnv(['SNAPDRIFT_BASELINE_RESULTS_PATH']) || resolveFromWorkingDirectory(config, config.resultsFile)
@@ -92,7 +94,7 @@ export async function generateDriftReport(options = {}) {
     baselineManifestPath: resolvedBaselineManifestPath,
     currentManifestPath: resolvedCurrentManifestPath,
     diffMode: config.diff.mode,
-    threshold: config.diff.threshold,
+    threshold: comparisonPolicy?.threshold ?? config.diff.threshold,
     totalScreenshots: selectedRouteIds.length,
     matchedScreenshots: 0,
     changedScreenshots: 0,
@@ -103,6 +105,7 @@ export async function generateDriftReport(options = {}) {
     errors: [],
     dimensionChanges: [],
     selectedRoutes: selectedRouteIds,
+    ...(comparisonPolicy ? { comparisonPolicy: { ...comparisonPolicy } } : {}),
     baselineArtifactName: options.baselineArtifactName || envBaselineArtifactName || undefined,
     baselineSourceSha: options.baselineSourceSha || envBaselineSourceSha || undefined,
     baselineAvailable: true
@@ -159,9 +162,9 @@ export async function generateDriftReport(options = {}) {
     }
 
     try {
-      if (baselineEntry.width !== currentEntry.width || baselineEntry.height !== currentEntry.height) {
-      /** @type {DriftDimensionItem} */
-      const dimensionRecord = {
+      if (!comparisonPolicy && (baselineEntry.width !== currentEntry.width || baselineEntry.height !== currentEntry.height)) {
+        /** @type {DriftDimensionItem} */
+        const dimensionRecord = {
           id: routeId,
           path: currentEntry.path || baselineEntry.path || routeConfig?.path,
           viewport: currentEntry.viewport || baselineEntry.viewport || routeConfig?.viewport,
@@ -179,9 +182,14 @@ export async function generateDriftReport(options = {}) {
         resolveImagePath(resolvedBaselineRunDir, baselineEntry.imagePath),
         resolveImagePath(resolvedCurrentRunDir, currentEntry.imagePath)
       ]);
-      const comparison = await comparePngs(resolvedBaselineImagePath, resolvedCurrentImagePath);
+      const comparison = comparisonPolicy
+        ? await comparePngs(resolvedBaselineImagePath, resolvedCurrentImagePath, { comparisonPolicy })
+        : await comparePngs(resolvedBaselineImagePath, resolvedCurrentImagePath);
+      const imageComparison = comparisonPolicy ? /** @type {import('@snapdrift/compare-core').CompareImagesResult} */ (comparison) : undefined;
+      const comparisonThreshold = comparisonPolicy?.threshold ?? config.diff.threshold;
+      const dimensionsChanged = imageComparison?.comparison.dimensionsChanged ?? false;
 
-      if (comparison.mismatchRatio <= config.diff.threshold) {
+      if (!dimensionsChanged && comparison.mismatchRatio <= comparisonThreshold) {
         summary.matchedScreenshots += 1;
         continue;
       }
@@ -200,6 +208,16 @@ export async function generateDriftReport(options = {}) {
         mismatchRatio: comparison.mismatchRatio,
         status: 'changed'
       };
+
+      if (imageComparison) {
+        changedRecord.comparison = imageComparison.comparison;
+        if (options.diffImagesDir) {
+          const diffFileName = `${sanitizeRouteId(routeId)}.png`;
+          await fs.mkdir(options.diffImagesDir, { recursive: true });
+          await fs.writeFile(path.join(options.diffImagesDir, diffFileName), imageComparison.diffImageBuffer);
+          changedRecord.diffImagePath = path.posix.join('diffs', diffFileName);
+        }
+      }
       summary.changedScreenshots += 1;
       summary.changed.push(changedRecord);
     } catch (error) {
@@ -228,6 +246,8 @@ export async function generateDriftReport(options = {}) {
 /**
  * @param {Parameters<typeof generateDriftReport>[0] & {
  *   outDir?: string,
+ *   diffImagesDir?: string,
+ *   comparisonPolicy?: ComparisonPolicy,
  *   summaryPath?: string,
  *   markdownPath?: string,
  *   enforceOutcome?: boolean
@@ -235,23 +255,29 @@ export async function generateDriftReport(options = {}) {
  * @returns {Promise<void>}
  */
 export async function runDriftCheckCli(options = {}) {
+  const { config } = await loadSnapdriftConfig(options.configPath);
+  const comparisonPolicy = options.comparisonPolicy ??
+    config.diff.comparisonPolicy ?? {
+      version: 1,
+      threshold: config.diff.threshold
+    };
   const resolvedOutDir = path.resolve(
     options.outDir || readFirstDefinedEnv(['SNAPDRIFT_DRIFT_OUT_DIR']) || path.join('qa-artifacts', 'snapdrift', 'drift', 'current')
   );
-  const resolvedSummaryPath = path.resolve(
-    options.summaryPath || readFirstDefinedEnv(['SNAPDRIFT_SUMMARY_PATH']) || path.join(resolvedOutDir, 'summary.json')
-  );
+  const resolvedSummaryPath = path.resolve(options.summaryPath || readFirstDefinedEnv(['SNAPDRIFT_SUMMARY_PATH']) || path.join(resolvedOutDir, 'summary.json'));
   const resolvedMarkdownPath = path.resolve(
     options.markdownPath || readFirstDefinedEnv(['SNAPDRIFT_SUMMARY_MARKDOWN_PATH']) || path.join(resolvedOutDir, 'summary.md')
   );
-  const shouldEnforceOutcome = options.enforceOutcome ?? (readFirstDefinedEnv(['SNAPDRIFT_ENFORCE_OUTCOME']) !== '0');
+  const shouldEnforceOutcome = options.enforceOutcome ?? readFirstDefinedEnv(['SNAPDRIFT_ENFORCE_OUTCOME']) !== '0';
+  const resolvedDiffImagesDir = path.resolve(options.diffImagesDir || path.join(resolvedOutDir, 'diffs'));
 
   await fs.mkdir(resolvedOutDir, { recursive: true });
-  const { summary, markdown } = await generateDriftReport(options);
-  await Promise.all([
-    fs.writeFile(resolvedSummaryPath, JSON.stringify(summary, null, 2)),
-    fs.writeFile(resolvedMarkdownPath, markdown)
-  ]);
+  const { summary, markdown } = await generateDriftReport({
+    ...options,
+    comparisonPolicy,
+    diffImagesDir: resolvedDiffImagesDir
+  });
+  await Promise.all([fs.writeFile(resolvedSummaryPath, JSON.stringify(summary, null, 2)), fs.writeFile(resolvedMarkdownPath, markdown)]);
 
   if (shouldEnforceOutcome && shouldFailDriftCheck(summary)) {
     throw new Error(formatDriftFailureMessage(summary.diffMode, summary));

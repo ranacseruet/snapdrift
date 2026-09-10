@@ -5,7 +5,8 @@
 
 /**
  * True when the summary reports something that leaves the run incomplete —
- * an error, a dimension change, or a screenshot missing on either side.
+ * an error, a legacy dimension change, or a screenshot missing on either side.
+ * Completed v1 dimension comparisons are changed signals instead.
  *
  * @param {Partial<DriftSummary>} summaryData
  * @returns {boolean}

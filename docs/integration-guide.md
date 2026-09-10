@@ -46,7 +46,7 @@ SnapDrift owns route selection, capture, comparison, skipped-report generation, 
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.9.0
+  uses: ranacseruet/snapdrift@v0.10.0
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
@@ -71,7 +71,7 @@ Then add SnapDrift after the app is running:
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.9.0
+  uses: ranacseruet/snapdrift@v0.10.0
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,8 +86,8 @@ The wrappers remain published in their own right, and are equivalent to the disp
 
 | Entry point | Equivalent to |
 |-------------|---------------|
-| `ranacseruet/snapdrift@v0.9.0` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.9.0` |
-| `ranacseruet/snapdrift@v0.9.0` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.9.0` |
+| `ranacseruet/snapdrift@v0.10.0` with `mode: baseline` | `ranacseruet/snapdrift/actions/baseline@v0.10.0` |
+| `ranacseruet/snapdrift@v0.10.0` with `mode: pr-diff` | `ranacseruet/snapdrift/actions/pr-diff@v0.10.0` |
 
 Use the wrappers directly when you want to skip the dispatcher's input indirection, and the lower-level `capture`, `compare`, `scope`, `resolve-baseline`, `stage`, `comment`, and `enforce` actions when you need to orchestrate the stages yourself.
 
@@ -130,7 +130,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.9.0
+        uses: ranacseruet/snapdrift@v0.10.0
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -170,7 +170,7 @@ jobs:
           done
 
       - name: SnapDrift Report
-        uses: ranacseruet/snapdrift@v0.9.0
+        uses: ranacseruet/snapdrift@v0.10.0
         with:
           mode: pr-diff
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -281,7 +281,8 @@ The `pr-diff` wrapper composes the following low-level steps. They're still avai
   `error`, while `missing` remains the intentional first-baseline result
 - `actions/stage` — assemble the baseline or diff bundle for upload
 - `actions/enforce` — evaluate the summary against `diff.mode` and fail when required
-- `actions/comment` — upsert a PR comment from a summary (provider-aware)
+- `actions/comment` — upsert a PR comment from a summary (provider-aware); pass
+  `artifact-url` from `upload-artifact` when local diff PNGs are present
 
 The two wrapper actions that orchestrate the full pipeline are `actions/baseline` (publish) and `actions/pr-diff` (drift detection). They are the primary integration points.
 
@@ -309,7 +310,12 @@ See the [Local CLI guide](local-cli.md) for full command reference, flags, direc
 
 ## Refresh the baseline automatically
 
-After an intentional layout change or dimension shift merges, the baseline must be republished before SnapDrift can compare like-for-like frames again. Without automation, this is a manual step.
+After an intentional layout change merges, the baseline can be republished as
+usual. Legacy local comparisons still require like-for-like dimensions; an
+updated local client may opt into the exact
+`diff.comparisonPolicy: { "version": 1, "threshold": number }` contract to
+compare unequal frames on a union canvas and keep the dimension metadata in the
+report.
 
 Use the provided workflow template to refresh the baseline automatically on every push to your default branch (i.e. every merge):
 
@@ -337,7 +343,11 @@ Grant `issues: write` and `pull-requests: write` to the job.
 The Snap client never retries 4xx and never falls back, even when `onUnavailable` is set. Inspect the response body — the most common cause is a project-id mismatch between `GITHUB_REPOSITORY` (auto-derived) and the project's id on Snap.
 
 **Screenshots have different dimensions**  
-SnapDrift reports this as a dimension shift and skips pixel comparison for that route. Refresh the baseline after the change lands.
+Without `diff.comparisonPolicy`, SnapDrift reports this as a legacy dimension
+shift and skips pixel comparison. With the exact v1 policy, it compares the
+top-left-aligned union canvas, records the route in `changed[]`, and writes a
+local diff PNG; refresh the baseline after an intentional change when you want
+future runs to return to equal-size comparisons.
 
 **A route appears in `errors[]`**  
 Capture failed before comparison. Confirm the app is fully ready and reachable before SnapDrift runs.

@@ -1,4 +1,4 @@
-import type { CompareBuffersResult } from '@snapdrift/compare-core';
+import type { CompareBuffersResult, CompareImagesResult } from '@snapdrift/compare-core';
 
 /**
  * Filesystem I/O adapter types for @snapdrift/adapter-fs.
@@ -8,7 +8,8 @@ import type {
   VisualRegressionConfig,
   VisualRegressionRouteConfig,
   VisualDiffSummary,
-  VisualDriftStatusSummary
+  VisualDriftStatusSummary,
+  ComparisonPolicy
 } from '@snapdrift/manifest';
 
 // --- config.mjs ---
@@ -25,10 +26,13 @@ export function loadSnapdriftConfig(configPath?: string): Promise<{
 
 // --- compare-files.mjs ---
 
+export function comparePngs(baselinePath: string, currentPath: string): Promise<CompareBuffersResult>;
+
 export function comparePngs(
   baselinePath: string,
-  currentPath: string
-): Promise<CompareBuffersResult>;
+  currentPath: string,
+  options: { comparisonPolicy: ComparisonPolicy }
+): Promise<CompareImagesResult>;
 
 export function resolveImagePath(runDir: string, relativeImagePath: string): Promise<string>;
 
@@ -46,6 +50,9 @@ export interface GenerateDriftReportOptions {
   currentManifestPath?: string;
   baselineRunDir?: string;
   currentRunDir?: string;
+  diffImagesDir?: string;
+  /** Explicitly selects the v1 union-canvas comparison; omitted direct calls retain strict behavior. */
+  comparisonPolicy?: ComparisonPolicy;
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
@@ -83,6 +90,7 @@ export interface StageArtifactsOptions {
   currentManifestPath?: string;
   baselineScreenshotsDir?: string;
   currentScreenshotsDir?: string;
+  diffImagesDir?: string;
 }
 
 export function stageArtifacts(options: StageArtifactsOptions): Promise<{
@@ -103,9 +111,7 @@ export interface WriteDriftSummaryOptions {
   markdownPath?: string;
 }
 
-export function writeDriftSummary(
-  options: WriteDriftSummaryOptions
-): Promise<{
+export function writeDriftSummary(options: WriteDriftSummaryOptions): Promise<{
   summaryPath: string;
   markdownPath: string;
   summary: VisualDriftStatusSummary;
@@ -120,9 +126,7 @@ export interface RunBaselineCaptureOptions {
   outDir?: string;
 }
 
-export function runBaselineCapture(
-  options?: RunBaselineCaptureOptions
-): Promise<{
+export function runBaselineCapture(options?: RunBaselineCaptureOptions): Promise<{
   resultsPath: string;
   manifestPath: string;
   screenshotsRoot: string;

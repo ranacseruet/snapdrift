@@ -1,10 +1,11 @@
 /** @jest-environment node */
 
 describe('makeMarkdown', () => {
-  let makeMarkdown, formatViewport, formatDriftFailureMessage;
+  let makeMarkdown, formatViewport, formatPercentage, formatDriftFailureMessage;
 
   beforeAll(async () => {
     ({ makeMarkdown, formatViewport, formatDriftFailureMessage } = await import('../src/markdown.mjs'));
+    ({ formatPercentage } = await import('../src/constants.mjs'));
   });
 
   const makeSummary = (overrides = {}) => ({
@@ -44,6 +45,13 @@ describe('makeMarkdown', () => {
     });
   });
 
+  describe('formatPercentage', () => {
+    it('renders ratios as percentages without unnecessary trailing zeros', () => {
+      expect(formatPercentage(0.05)).toBe('5%');
+      expect(formatPercentage(0.005)).toBe('0.5%');
+    });
+  });
+
   describe('makeMarkdown', () => {
     it('renders a clean report with icon and heading', () => {
       const md = makeMarkdown(makeSummary());
@@ -53,7 +61,7 @@ describe('makeMarkdown', () => {
 
     it('renders the stats table with correct values', () => {
       const md = makeMarkdown(makeSummary());
-      expect(md).toContain('| 2 | 2 | `report-only` | 0.01 |');
+      expect(md).toContain('| 2 | 2 | `report-only` | 1% |');
       expect(md).toContain('| Drift signals | 0 |');
       expect(md).toContain('| Errors | 0 |');
     });
@@ -78,6 +86,40 @@ describe('makeMarkdown', () => {
       }));
       expect(md).toContain('🟡 SnapDrift Report — Drift detected');
       expect(md).toContain('| home-desktop | desktop | 0.04% | 500/1296000 |');
+    });
+
+    it('renders v1 comparison dimensions and the staged diff image', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'changes-detected',
+        changedScreenshots: 1,
+        changed: [{
+          id: 'home-desktop',
+          path: '/',
+          viewport: 'desktop',
+          baselineImagePath: 'baseline.png',
+          currentImagePath: 'current.png',
+          width: 1440,
+          height: 900,
+          differentPixels: 10,
+          totalPixels: 100,
+          mismatchRatio: 0.1,
+          status: 'changed',
+          comparison: {
+            baseline: { width: 1440, height: 900 },
+            current: { width: 1440, height: 920 },
+            canvas: { width: 1440, height: 920 },
+            dimensionsChanged: true,
+            totalPixels: 1324800
+          },
+          diffImagePath: 'diffs/home-desktop.png'
+        }]
+      }));
+
+      expect(md).toContain('| Dimension shifts | 1 |');
+      expect(md).toContain('| home-desktop | desktop | 1440×900 | 1440×920 | 1440×920 |');
+      expect(md).toContain('![Diff image](diffs/home-desktop.png)');
+      expect(md).toContain('Pixel comparison included');
+      expect(md).not.toContain('Pixel comparison was skipped');
     });
 
     it('renders capture gaps when missing items exist', () => {
