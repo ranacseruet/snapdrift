@@ -15,6 +15,30 @@ function formatViewport(viewport) {
 }
 
 /**
+ * @param {{ width: number, height: number } | undefined} dimensions
+ * @returns {string}
+ */
+function formatDimensions(dimensions) {
+  return dimensions ? `${dimensions.width}&times;${dimensions.height}` : '&ndash;';
+}
+
+/**
+ * @param {DriftSummary['changed']} changed
+ * @returns {DriftSummary['changed']}
+ */
+function getComparisonDimensionChanges(changed) {
+  return changed.filter((item) => item.comparison?.dimensionsChanged);
+}
+
+/**
+ * @param {DriftSummary['changed'][number]} item
+ * @returns {boolean}
+ */
+function hasComparisonDetails(item) {
+  return Boolean(item.comparison || item.diffImagePath);
+}
+
+/**
  * @param {string} text
  * @returns {string}
  */
@@ -44,13 +68,17 @@ function imgTag(base64Data, alt) {
  * @param {{
  *   baselineRunDir?: string,
  *   currentRunDir?: string,
+ *   diffRunDir?: string,
  *   imageReader?: (runDir: string, imagePath: string) => Promise<string | null>
  * }} [options]
  * @returns {Promise<string>}
  */
 export async function generateHtmlReport(summary, options = {}) {
-  const { baselineRunDir, currentRunDir, imageReader } = options;
+  const { baselineRunDir, currentRunDir, diffRunDir, imageReader } = options;
   const dimensionChanges = summary.dimensionChanges || [];
+  const comparisonDimensionChanges = getComparisonDimensionChanges(summary.changed);
+  const dimensionShiftCount = dimensionChanges.length + comparisonDimensionChanges.length;
+  const comparisonDetails = summary.changed.some(hasComparisonDetails);
 
   const statusClass = {
     clean: 'status-clean',
@@ -74,6 +102,7 @@ export async function generateHtmlReport(summary, options = {}) {
     const rows = await Promise.all(summary.changed.map(async (item) => {
       let baselineImgHtml = '';
       let currentImgHtml = '';
+      let diffImgHtml = '';
 
       if (imageReader && baselineRunDir) {
         const base64 = await imageReader(baselineRunDir, item.baselineImagePath);
@@ -83,19 +112,31 @@ export async function generateHtmlReport(summary, options = {}) {
         const base64 = await imageReader(currentRunDir, item.currentImagePath);
         currentImgHtml = imgTag(base64, `Current: ${item.id}`);
       }
+      if (imageReader && diffRunDir && item.diffImagePath) {
+        const base64 = await imageReader(diffRunDir, item.diffImagePath);
+        diffImgHtml = imgTag(base64, `Diff: ${item.id}`);
+      }
 
+      const comparisonCells = comparisonDetails ? `
+        <td>${formatDimensions(item.comparison?.baseline)}</td>
+        <td>${formatDimensions(item.comparison?.current)}</td>
+        <td>${formatDimensions(item.comparison?.canvas)}</td>` : '';
+      const diffCell = comparisonDetails ? `<td>${item.diffImagePath ? escapeHtml(item.diffImagePath) : '&ndash;'}</td>` : '';
       const dataRow = `<tr>
         <td>${escapeHtml(item.id)}</td>
         <td>${escapeHtml(item.path)}</td>
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
+        ${comparisonCells}
         <td>${(item.mismatchRatio * 100).toFixed(2)}%</td>
         <td>${item.differentPixels}/${item.totalPixels}</td>
+        ${diffCell}
       </tr>`;
 
-      const imagesRow = (baselineImgHtml || currentImgHtml) ? `<tr class="images-row"><td colspan="5">
+      const imagesRow = (baselineImgHtml || currentImgHtml || diffImgHtml) ? `<tr class="images-row"><td colspan="${comparisonDetails ? 9 : 5}">
         <div class="image-compare">
           <div class="image-col"><div class="image-label">Baseline</div>${baselineImgHtml || '<span class="no-img">&ndash;</span>'}</div>
           <div class="image-col"><div class="image-label">Current</div>${currentImgHtml || '<span class="no-img">&ndash;</span>'}</div>
+          ${comparisonDetails ? `<div class="image-col"><div class="image-label">Diff</div>${diffImgHtml || '<span class="no-img">&ndash;</span>'}</div>` : ''}
         </div>
       </td></tr>` : '';
 
@@ -103,7 +144,7 @@ export async function generateHtmlReport(summary, options = {}) {
     }));
 
     changedHtml = `<table>
-      <thead><tr><th>Route</th><th>Path</th><th>Viewport</th><th>Mismatch</th><th>Pixels changed</th></tr></thead>
+      <thead><tr><th>Route</th><th>Path</th><th>Viewport</th>${comparisonDetails ? '<th>Baseline</th><th>Current</th><th>Canvas</th>' : ''}<th>Mismatch</th><th>Pixels changed</th>${comparisonDetails ? '<th>Diff image</th>' : ''}</tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>`;
   }
@@ -126,9 +167,9 @@ export async function generateHtmlReport(summary, options = {}) {
 
   // --- Dimension shifts ---
   let dimensionHtml;
-  if (dimensionChanges.length === 0) {
+  if (dimensionShiftCount === 0) {
     dimensionHtml = '<p class="none">None</p>';
-  } else {
+  } else if (comparisonDimensionChanges.length === 0) {
     const rows = dimensionChanges.map((item) => `<tr>
         <td>${escapeHtml(item.id)}</td>
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
@@ -138,6 +179,27 @@ export async function generateHtmlReport(summary, options = {}) {
     dimensionHtml = `<table>
       <thead><tr><th>Route</th><th>Viewport</th><th>Baseline</th><th>Current</th></tr></thead>
       <tbody>${rows}</tbody>
+    </table>`;
+  } else {
+    const legacyRows = dimensionChanges.map((item) => `<tr>
+        <td>${escapeHtml(item.id)}</td>
+        <td>${escapeHtml(formatViewport(item.viewport))}</td>
+        <td>${item.baselineWidth}&times;${item.baselineHeight}</td>
+        <td>${item.currentWidth}&times;${item.currentHeight}</td>
+        <td>&ndash;</td>
+        <td>&ndash;</td>
+      </tr>`).join('');
+    const comparisonRows = comparisonDimensionChanges.map((item) => `<tr>
+        <td>${escapeHtml(item.id)}</td>
+        <td>${escapeHtml(formatViewport(item.viewport))}</td>
+        <td>${formatDimensions(item.comparison?.baseline)}</td>
+        <td>${formatDimensions(item.comparison?.current)}</td>
+        <td>${formatDimensions(item.comparison?.canvas)}</td>
+        <td>${item.diffImagePath ? escapeHtml(item.diffImagePath) : '&ndash;'}</td>
+      </tr>`).join('');
+    dimensionHtml = `<table>
+      <thead><tr><th>Route</th><th>Viewport</th><th>Baseline</th><th>Current</th><th>Canvas</th><th>Diff image</th></tr></thead>
+      <tbody>${legacyRows}${comparisonRows}</tbody>
     </table>`;
   }
 
@@ -213,7 +275,7 @@ export async function generateHtmlReport(summary, options = {}) {
       <div class="stat"><strong>${summary.changedScreenshots}</strong><span>Drift signals</span></div>
       <div class="stat"><strong>${summary.matchedScreenshots}</strong><span>Stable captures</span></div>
       <div class="stat"><strong>${summary.missingInBaseline + summary.missingInCurrent}</strong><span>Capture gaps</span></div>
-      <div class="stat"><strong>${dimensionChanges.length}</strong><span>Dimension shifts</span></div>
+      <div class="stat"><strong>${dimensionShiftCount}</strong><span>Dimension shifts</span></div>
       <div class="stat"><strong>${summary.errors.length}</strong><span>Errors</span></div>
     </div>
     <div class="meta">${metaParts.map((p) => `<em>${p}</em>`).join('')}</div>

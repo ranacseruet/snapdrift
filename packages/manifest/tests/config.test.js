@@ -5,6 +5,7 @@ import {
   resolveFromWorkingDirectory,
   splitCommaList,
   VALID_DIFF_MODES,
+  COMPARISON_POLICY_VERSION,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS
 } from '../src/config.mjs';
@@ -98,6 +99,30 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
     const copy = { ...VALID_CONFIG, diff: { threshold: 2, mode: 'report-only' } };
     expect(() => validateSnapdriftConfig(copy)).toThrow('threshold');
   });
+
+  test('accepts the exact v1 comparison policy shape', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 1, threshold: 0.05 } }
+    };
+    expect(validateSnapdriftConfig(copy).diff.comparisonPolicy).toEqual({ version: 1, threshold: 0.05 });
+  });
+
+  test('rejects an unsupported comparison policy version', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 2, threshold: 0.05 } }
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('diff.comparisonPolicy.version');
+  });
+
+  test('rejects an invalid comparison policy threshold', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 1, threshold: 2 } }
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('diff.comparisonPolicy.threshold');
+  });
 });
 
 describe('@snapdrift/manifest — selectConfiguredRoutes', () => {
@@ -170,6 +195,10 @@ describe('@snapdrift/manifest — constants', () => {
   test('VALID_DIFF_MODES includes expected modes', () => {
     expect(VALID_DIFF_MODES).toContain('report-only');
     expect(VALID_DIFF_MODES).toContain('strict');
+  });
+
+  test('comparison policy version is v1', () => {
+    expect(COMPARISON_POLICY_VERSION).toBe(1);
   });
 
   test('SNAPDRIFT_NAVIGATION_TIMEOUT_MS is positive', () => {

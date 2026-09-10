@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **Optional unequal-dimension comparisons** — `@snapdrift/compare-core` now
+  exposes `compareImages()` for top-left-aligned union-canvas comparisons while
+  the existing strict APIs remain unchanged. The local adapter accepts the
+  exact `diff.comparisonPolicy: { "version": 1, "threshold": number }` opt-in,
+  records comparison dimensions and the geometric union denominator, stages a
+  generated diff PNG, and renders it in Markdown, HTML, and PR reports. Legacy
+  dimension shifts remain in `dimensionChanges[]`; completed v1 dimension
+  changes are `changed[]` signals and do not fail `fail-on-incomplete` alone.
+
 ## 0.9.0 - 2026-09-09
 
 ### Fixes

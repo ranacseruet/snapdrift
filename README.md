@@ -116,7 +116,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 - Full-page capture only
 - Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - One global `diff.threshold`
-- Dimension shifts are reported separately from pixel drift
+- Unequal dimensions remain strict by default; local updated clients may opt in with `diff.comparisonPolicy: { "version": 1, "threshold": number }`
 - Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
 - Hosted Snap baselines publish only from the default branch and always include the complete configured route set
 

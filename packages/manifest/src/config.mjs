@@ -7,6 +7,7 @@ import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 /** @type {readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict']} */
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
+export const COMPARISON_POLICY_VERSION = 1;
 export const VALID_PROVIDER_VALUES = ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];
 
@@ -168,6 +169,25 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
 
     if (!isNonEmptyString(candidate.diff.mode) || !VALID_DIFF_MODE_SET.has(candidate.diff.mode)) {
       errors.push(`diff.mode must be one of: ${VALID_DIFF_MODES.join(', ')}.`);
+    }
+
+    if (candidate.diff.comparisonPolicy !== undefined) {
+      if (!isRecord(candidate.diff.comparisonPolicy)) {
+        errors.push('diff.comparisonPolicy must be an object when provided.');
+      } else {
+        const comparisonPolicy = candidate.diff.comparisonPolicy;
+        if (comparisonPolicy.version !== COMPARISON_POLICY_VERSION) {
+          errors.push(`diff.comparisonPolicy.version must be ${COMPARISON_POLICY_VERSION}.`);
+        }
+        if (
+          typeof comparisonPolicy.threshold !== 'number' ||
+          !Number.isFinite(comparisonPolicy.threshold) ||
+          comparisonPolicy.threshold < 0 ||
+          comparisonPolicy.threshold > 1
+        ) {
+          errors.push('diff.comparisonPolicy.threshold must be a finite number between 0 and 1.');
+        }
+      }
     }
   }
 

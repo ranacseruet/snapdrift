@@ -63,6 +63,7 @@ export function generateHtmlReport(
   options?: {
     baselineRunDir?: string;
     currentRunDir?: string;
+    diffRunDir?: string;
     imageReader?: (runDir: string, imagePath: string) => Promise<string | null>;
   }
 ): Promise<string>;

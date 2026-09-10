@@ -78,6 +78,26 @@ describe('@snapdrift/adapter-fs — stage', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
+    test('stages generated diff PNGs beside the diff summary', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-stage-'));
+      const summaryJsonPath = path.join(tmpDir, 'summary.json');
+      const diffImagePath = path.join(tmpDir, 'diffs', 'home.png');
+      await fs.writeFile(summaryJsonPath, JSON.stringify({ status: 'changes-detected' }));
+      await fs.mkdir(path.dirname(diffImagePath), { recursive: true });
+      await fs.writeFile(diffImagePath, 'png-data');
+
+      const bundleDir = path.join(tmpDir, 'bundle');
+      const { bundleDir: resolved } = await stageArtifacts({
+        artifactType: 'diff',
+        bundleDir,
+        summaryJsonPath
+      });
+
+      expect(await fs.readFile(path.join(resolved, 'diffs', 'home.png'), 'utf8')).toBe('png-data');
+
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
     test('removes previous bundle directory before staging', async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-stage-'));
       const bundleDir = path.join(tmpDir, 'bundle');

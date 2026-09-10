@@ -84,7 +84,8 @@ async function copyPngFiles(sourceDir, targetDir) {
  *   baselineManifestPath?: string,
  *   currentManifestPath?: string,
  *   baselineScreenshotsDir?: string,
- *   currentScreenshotsDir?: string
+ *   currentScreenshotsDir?: string,
+ *   diffImagesDir?: string
  * }} options
  * @returns {Promise<{ bundleDir: string }>}
  */
@@ -116,6 +117,12 @@ export async function stageArtifacts(options) {
     }
     if (options.currentScreenshotsDir) {
       await copyPngFiles(options.currentScreenshotsDir, path.join(resolvedBundleDir, 'current', 'screenshots'));
+    }
+    const diffImagesDir = options.diffImagesDir || (
+      options.summaryJsonPath ? path.join(path.dirname(options.summaryJsonPath), 'diffs') : undefined
+    );
+    if (diffImagesDir) {
+      await copyPngFiles(diffImagesDir, path.join(resolvedBundleDir, 'diffs'));
     }
   }
 

@@ -67,6 +67,9 @@ outputs:
   markdown-path:
     description: Absolute path to the generated summary markdown file.
     value: ${{ steps.compare.outputs.markdown_path }}
+  diff-images-dir:
+    description: Absolute path to generated local diff PNGs.
+    value: ${{ steps.compare.outputs.diff_images_dir }}
   status:
     description: Computed SnapDrift status.
     value: ${{ steps.compare.outputs.status }}
@@ -133,6 +136,7 @@ runs:
         const resolvedOutDir = path.resolve(process.env.OUT_DIR || 'qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.resolve(process.env.SUMMARY_PATH || path.join(resolvedOutDir, 'summary.json'));
         const resolvedMarkdownPath = path.resolve(process.env.MARKDOWN_PATH || path.join(resolvedOutDir, 'summary.md'));
+        const resolvedDiffImagesDir = path.join(resolvedOutDir, 'diffs');
 
         await runDriftCheckCli({
           configPath: process.env.REPO_CONFIG_PATH || undefined,
@@ -143,6 +147,7 @@ runs:
           baselineRunDir: process.env.BASELINE_RUN_DIR || undefined,
           currentRunDir: process.env.CURRENT_RUN_DIR || undefined,
           outDir: resolvedOutDir,
+          diffImagesDir: resolvedDiffImagesDir,
           summaryPath: resolvedSummaryPath,
           markdownPath: resolvedMarkdownPath,
           routeIds: splitCommaList(process.env.ROUTE_IDS),
@@ -155,6 +160,7 @@ runs:
         const outputs = [
           `summary_path=${resolvedSummaryPath}`,
           `markdown_path=${resolvedMarkdownPath}`,
+          `diff_images_dir=${resolvedDiffImagesDir}`,
           `status=${summary.status || ''}`,
           `changed_screenshots=${summary.changedScreenshots || 0}`,
           `matched_screenshots=${summary.matchedScreenshots || 0}`,

@@ -77,6 +77,31 @@ describe('@snapdrift/adapter-fs — compare-files', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
+    test('uses compareImages only for an explicit v1 policy and returns its diff metadata', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-cmp-'));
+      const baselinePath = path.join(tmpDir, 'baseline.png');
+      const currentPath = path.join(tmpDir, 'current.png');
+
+      await writePngFile(baselinePath, 2, 1, [0, 0, 0, 255]);
+      await writePngFile(currentPath, 3, 1, [0, 0, 0, 255]);
+
+      const result = await comparePngs(baselinePath, currentPath, {
+        comparisonPolicy: { version: 1, threshold: 0.1 }
+      });
+
+      expect(result.comparison).toEqual({
+        baseline: { width: 2, height: 1 },
+        current: { width: 3, height: 1 },
+        canvas: { width: 3, height: 1 },
+        dimensionsChanged: true,
+        totalPixels: 3
+      });
+      expect(result.differentPixels).toBe(1);
+      expect(Buffer.isBuffer(result.diffImageBuffer)).toBe(true);
+
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
     test('returns full-precision mismatchRatio', async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-cmp-'));
       const baselinePath = path.join(tmpDir, 'baseline.png');

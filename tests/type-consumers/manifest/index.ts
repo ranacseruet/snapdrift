@@ -3,7 +3,8 @@ import type {
   VisualRegressionConfig, VisualBaselineResults, VisualScreenshotManifest,
   VisualDiffSummary, VisualDriftSkippedSummary, VisualProvider, SnapConfig,
   ProviderCaptureOptions, ProviderDiffOptions, ProviderPublishBaselineOptions,
-  ProviderFetchBaselineOptions, ProviderBaselineData, ProviderCommentMeta
+  ProviderFetchBaselineOptions, ProviderBaselineData, ProviderCommentMeta,
+  ComparisonPolicy, ComparisonMetadata
 } from '@snapdrift/manifest';
 
 const snap: SnapConfig = { projectId: 'test', onUnavailable: 'fail', apiKeyEnv: 'SNAP_KEY' };
@@ -11,8 +12,18 @@ const config: VisualRegressionConfig = {
   baselineArtifactName: 'baseline', workingDirectory: '.', baseUrl: 'https://example.com',
   resultsFile: 'results.json', manifestFile: 'manifest.json', screenshotsRoot: 'screenshots',
   routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
-  diff: { threshold: 0.01, mode: 'strict' }, provider: 'snap', snap
+  diff: { threshold: 0.01, mode: 'strict', comparisonPolicy: { version: 1, threshold: 0.01 } }, provider: 'snap', snap
 };
+const policy: ComparisonPolicy = config.diff.comparisonPolicy!;
+const comparison: ComparisonMetadata = {
+  baseline: { width: 1, height: 1 },
+  current: { width: 2, height: 1 },
+  canvas: { width: 2, height: 1 },
+  dimensionsChanged: true,
+  totalPixels: 2
+};
+policy.threshold.toFixed();
+comparison.canvas.width.toFixed();
 const validated: VisualRegressionConfig = api.validateSnapdriftConfig(config, 'fixture');
 api.splitCommaList('home');
 api.resolveFromWorkingDirectory(validated, 'results.json').toUpperCase();

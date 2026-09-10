@@ -40,6 +40,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.apiKey` | `string` | Inline API key with `${VAR}` interpolation (mutually exclusive with `snap.apiKeyEnv`) |
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
+| `diff.comparisonPolicy` | `{ "version": 1, "threshold": number }` | Optional local opt-in to top-left-aligned unequal-dimension comparison; absent preserves strict legacy dimension handling |
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 
@@ -154,6 +155,7 @@ The pull request drift bundle contains:
 | `current/results.json` | Current capture results |
 | `current/manifest.json` | Current manifest |
 | `current/screenshots/*.png` | Current images |
+| `diffs/*.png` | Generated v1 diff images for changed screenshots |
 
 ## Screenshot manifest shape
 
@@ -208,6 +210,13 @@ The pull request drift bundle contains:
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
+| `comparisonPolicy` | `{ "version": 1, "threshold": number }?` | Exact v1 comparison policy used by the local adapter when opted in |
+
+When v1 comparison is enabled, each affected `changed[]` item may also contain
+`comparison` with `baseline`, `current`, and `canvas` `{ width, height }`
+objects, `dimensionsChanged`, and the effective `totalPixels` denominator. A
+local changed item with a generated image contains `diffImagePath`, relative to
+the diff output bundle (for example `diffs/home.png`).
 
 ### Status values
 
@@ -237,7 +246,9 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 - Mismatch ratio is `different_pixels / total_pixels`
 - `diff.threshold` applies per screenshot
 - Missing captures are counted separately from drift signals
-- Dimension mismatches skip pixel comparison and land in `dimensionChanges[]`
+- Without `diff.comparisonPolicy`, dimension mismatches skip pixel comparison and land in `dimensionChanges[]`.
+- With the exact v1 policy `{ "version": 1, "threshold": number }`, images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator. Dimension changes land in `changed[]` with comparison metadata and a generated local diff image.
+- For v1, `diff.comparisonPolicy.threshold` is applied after pixel aggregation. A mismatch exactly equal to the threshold is matched; a dimension change is still a changed signal independent of ratio.
 - `diff.mode` controls enforcement, not summary generation
 
 ## Drift modes
@@ -246,7 +257,7 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 |:-----|:-------------------|
 | `report-only` | Never |
 | `fail-on-changes` | `changedScreenshots > 0` |
-| `fail-on-incomplete` | Errors, dimension shifts, or missing captures occur |
+| `fail-on-incomplete` | Errors or missing captures occur; a completed v1 dimension comparison alone does not fail |
 | `strict` | Any drift or incomplete comparison appears |
 
 A summary with `status: "skipped"` — or any summary carrying no `diff.mode` —

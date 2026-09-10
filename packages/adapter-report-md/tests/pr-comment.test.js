@@ -71,6 +71,35 @@ describe('buildReportCommentBody', () => {
     expect(body).toContain('| home-desktop | desktop | 5.23% |');
   });
 
+  it('renders v1 dimensions and a staged diff image in drift details', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'changes-detected',
+      changedScreenshots: 1,
+      changed: [{
+        id: 'home-desktop',
+        viewport: 'desktop',
+        mismatchRatio: 0.1,
+        differentPixels: 10,
+        totalPixels: 100,
+        comparison: {
+          baseline: { width: 1440, height: 900 },
+          current: { width: 1440, height: 920 },
+          canvas: { width: 1440, height: 920 },
+          dimensionsChanged: true,
+          totalPixels: 1324800
+        },
+        diffImagePath: 'diffs/home-desktop.png'
+      }]
+    });
+
+    expect(body).toContain('| Dimension shifts | 1 |');
+    expect(body).toContain('| home-desktop | desktop | 1440×900 | 1440×920 | 1440×920 |');
+    expect(body).toContain('![Diff image](diffs/home-desktop.png)');
+    expect(body).toContain('pixel comparison included');
+    expect(body).not.toContain('comparison skipped');
+  });
+
   it('truncates changed screenshots at 20 with overflow note', () => {
     const changed = Array.from({ length: 25 }, (_, i) => ({
       id: `route-${i}`,

@@ -1,4 +1,4 @@
-import type { CompareBuffersResult } from '@snapdrift/compare-core';
+import type { CompareBuffersResult, CompareImagesResult } from '@snapdrift/compare-core';
 
 /**
  * Filesystem I/O adapter types for @snapdrift/adapter-fs.
@@ -8,7 +8,8 @@ import type {
   VisualRegressionConfig,
   VisualRegressionRouteConfig,
   VisualDiffSummary,
-  VisualDriftStatusSummary
+  VisualDriftStatusSummary,
+  ComparisonPolicy
 } from '@snapdrift/manifest';
 
 // --- config.mjs ---
@@ -30,6 +31,12 @@ export function comparePngs(
   currentPath: string
 ): Promise<CompareBuffersResult>;
 
+export function comparePngs(
+  baselinePath: string,
+  currentPath: string,
+  options: { comparisonPolicy: ComparisonPolicy }
+): Promise<CompareImagesResult>;
+
 export function resolveImagePath(runDir: string, relativeImagePath: string): Promise<string>;
 
 export function loadJson<T = unknown>(filePath: string, label: string): Promise<T>;
@@ -46,6 +53,7 @@ export interface GenerateDriftReportOptions {
   currentManifestPath?: string;
   baselineRunDir?: string;
   currentRunDir?: string;
+  diffImagesDir?: string;
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
@@ -83,6 +91,7 @@ export interface StageArtifactsOptions {
   currentManifestPath?: string;
   baselineScreenshotsDir?: string;
   currentScreenshotsDir?: string;
+  diffImagesDir?: string;
 }
 
 export function stageArtifacts(options: StageArtifactsOptions): Promise<{

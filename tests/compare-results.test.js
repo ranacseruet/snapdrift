@@ -42,7 +42,7 @@ async function writePng(filePath, width, height, r, g, b) {
 /**
  * Minimal valid SnapDrift config.
  * @param {Array<{ id: string, path: string, viewport: string }>} routes
- * @param {{ mode?: string, threshold?: number }} [diff]
+ * @param {{ mode?: string, threshold?: number, comparisonPolicy?: { version: 1, threshold: number } }} [diff]
  */
 function makeConfig(routes, diff = {}) {
     return {
@@ -53,7 +53,11 @@ function makeConfig(routes, diff = {}) {
         manifestFile: 'qa-artifacts/snapdrift/baseline/current/manifest.json',
         screenshotsRoot: 'qa-artifacts/snapdrift/baseline/current',
         routes,
-        diff: { threshold: diff.threshold ?? 0.01, mode: diff.mode ?? 'report-only' }
+        diff: {
+            threshold: diff.threshold ?? 0.01,
+            mode: diff.mode ?? 'report-only',
+            ...(diff.comparisonPolicy ? { comparisonPolicy: diff.comparisonPolicy } : {})
+        }
     };
 }
 
@@ -80,7 +84,7 @@ function makeManifestEntry(id, viewport, imagePath, width, height) {
 /**
  * Writes all fixture files needed by generateDriftReport / runDriftCheckCli.
  */
-async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries, baselinePngs = [], currentPngs = [], diffMode, threshold }) {
+async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries, baselinePngs = [], currentPngs = [], diffMode, threshold, comparisonPolicy }) {
     const configPath = path.join(tempDir, 'snapdrift.json');
     const baselineResultsPath = path.join(tempDir, 'baseline', 'results.json');
     const baselineManifestPath = path.join(tempDir, 'baseline', 'manifest.json');
@@ -89,7 +93,7 @@ async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries,
     const baselineRunDir = path.join(tempDir, 'baseline');
     const currentRunDir = path.join(tempDir, 'current');
 
-    await writeJson(configPath, makeConfig(routes, { mode: diffMode, threshold }));
+    await writeJson(configPath, makeConfig(routes, { mode: diffMode, threshold, comparisonPolicy }));
     await writeJson(baselineResultsPath, makeResults(routes.map((r) => r.id)));
     await writeJson(currentResultsPath, makeResults(routes.map((r) => r.id)));
     await writeJson(baselineManifestPath, {
@@ -373,6 +377,80 @@ describe('generateDriftReport', () => {
         expect(summary.errors).toHaveLength(0);
         expect(summary.matchedScreenshots).toBe(0);
         expect(summary.changedScreenshots).toBe(0);
+    });
+
+    it('classifies v1 dimension changes as changed and preserves comparison metadata and diff path', async () => {
+        const routeId = 'root-index-desktop';
+        const imagePath = 'screenshots/r.png';
+        const diffImagesDir = path.join(tempDir, 'out', 'diffs');
+
+        const opts = await setupFixtures(tempDir, {
+            routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+            baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 1)],
+            currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 3, 1)],
+            baselinePngs: [{ relPath: imagePath, width: 2, height: 1, r: 0, g: 0, b: 0 }],
+            currentPngs: [{ relPath: imagePath, width: 3, height: 1, r: 0, g: 0, b: 0 }],
+            comparisonPolicy: { version: 1, threshold: 1 }
+        });
+
+        const { summary } = await generateDriftReport({ ...opts, routeIds: [routeId], diffImagesDir });
+
+        expect(summary.status).toBe('changes-detected');
+        expect(summary.dimensionChanges).toHaveLength(0);
+        expect(summary.changedScreenshots).toBe(1);
+        expect(summary.comparisonPolicy).toEqual({ version: 1, threshold: 1 });
+        expect(summary.changed[0]).toMatchObject({
+            id: routeId,
+            differentPixels: 1,
+            totalPixels: 3,
+            mismatchRatio: 1 / 3,
+            comparison: {
+                baseline: { width: 2, height: 1 },
+                current: { width: 3, height: 1 },
+                canvas: { width: 3, height: 1 },
+                dimensionsChanged: true,
+                totalPixels: 3
+            },
+            diffImagePath: 'diffs/root-index-desktop.png'
+        });
+
+        const diffPng = PNG.sync.read(await fs.readFile(path.join(diffImagesDir, 'root-index-desktop.png')));
+        expect(diffPng.width).toBe(3);
+        expect(diffPng.height).toBe(1);
+        expect([...diffPng.data.slice(8, 12)]).toEqual([255, 0, 0, 255]);
+    });
+
+    it('uses <= threshold for equal-size v1 comparisons while dimensions remain an independent signal', async () => {
+        const routeId = 'threshold-route';
+        const imagePath = 'screenshots/threshold.png';
+        const opts = await setupFixtures(tempDir, {
+            routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+            baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 2)],
+            currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 2)],
+            baselinePngs: [{ relPath: imagePath, width: 2, height: 2, r: 0, g: 0, b: 0 }],
+            currentPngs: [{ relPath: imagePath, width: 2, height: 2, r: 0, g: 0, b: 0 }],
+            comparisonPolicy: { version: 1, threshold: 0.25 }
+        });
+        const currentImagePath = path.join(opts.currentRunDir, imagePath);
+        const currentPng = PNG.sync.read(await fs.readFile(currentImagePath));
+
+        currentPng.data[0] = 255;
+        currentPng.data[1] = 255;
+        currentPng.data[2] = 255;
+        await fs.writeFile(currentImagePath, PNG.sync.write(currentPng));
+
+        const equalThreshold = await generateDriftReport({ ...opts, routeIds: [routeId] });
+        expect(equalThreshold.summary.status).toBe('clean');
+        expect(equalThreshold.summary.matchedScreenshots).toBe(1);
+
+        currentPng.data[4] = 255;
+        currentPng.data[5] = 255;
+        currentPng.data[6] = 255;
+        await fs.writeFile(currentImagePath, PNG.sync.write(currentPng));
+
+        const aboveThreshold = await generateDriftReport({ ...opts, routeIds: [routeId] });
+        expect(aboveThreshold.summary.status).toBe('changes-detected');
+        expect(aboveThreshold.summary.changed[0].mismatchRatio).toBe(0.5);
     });
 
     it('records missingInCurrent when a route is absent from the current manifest', async () => {
@@ -979,5 +1057,37 @@ describe('runDriftCheckCli', () => {
         await expect(
             runDriftCheckCli({ ...opts, enforceOutcome: true })
         ).resolves.toBeUndefined();
+    });
+
+    it('enforces v1 dimension changes as changed, except in report-only and fail-on-incomplete modes', async () => {
+        const routeId = 'dimension-route';
+        const imagePath = 'screenshots/dimension.png';
+        const modes = ['report-only', 'fail-on-changes', 'strict', 'fail-on-incomplete'];
+
+        for (const mode of modes) {
+            const modeDir = path.join(tempDir, mode);
+            const fixtures = await setupFixtures(modeDir, {
+                routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+                baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 1)],
+                currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 3, 1)],
+                baselinePngs: [{ relPath: imagePath, width: 2, height: 1, r: 0, g: 0, b: 0 }],
+                currentPngs: [{ relPath: imagePath, width: 3, height: 1, r: 0, g: 0, b: 0 }],
+                diffMode: mode,
+                comparisonPolicy: { version: 1, threshold: 1 }
+            });
+            const output = cliOutputPaths(path.join(modeDir, 'out'));
+            const run = runDriftCheckCli({ ...fixtures, ...output, routeIds: [routeId], enforceOutcome: true });
+
+            if (mode === 'fail-on-changes' || mode === 'strict') {
+                await expect(run).rejects.toThrow(/drift|strict/i);
+            } else {
+                await expect(run).resolves.toBeUndefined();
+            }
+
+            const summary = JSON.parse(await fs.readFile(output.summaryPath, 'utf8'));
+            expect(summary.changedScreenshots).toBe(1);
+            expect(summary.status).toBe('changes-detected');
+            expect(summary.dimensionChanges).toHaveLength(0);
+        }
     });
 });

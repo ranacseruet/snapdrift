@@ -80,6 +80,40 @@ describe('makeMarkdown', () => {
       expect(md).toContain('| home-desktop | desktop | 0.04% | 500/1296000 |');
     });
 
+    it('renders v1 comparison dimensions and the staged diff image', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'changes-detected',
+        changedScreenshots: 1,
+        changed: [{
+          id: 'home-desktop',
+          path: '/',
+          viewport: 'desktop',
+          baselineImagePath: 'baseline.png',
+          currentImagePath: 'current.png',
+          width: 1440,
+          height: 900,
+          differentPixels: 10,
+          totalPixels: 100,
+          mismatchRatio: 0.1,
+          status: 'changed',
+          comparison: {
+            baseline: { width: 1440, height: 900 },
+            current: { width: 1440, height: 920 },
+            canvas: { width: 1440, height: 920 },
+            dimensionsChanged: true,
+            totalPixels: 1324800
+          },
+          diffImagePath: 'diffs/home-desktop.png'
+        }]
+      }));
+
+      expect(md).toContain('| Dimension shifts | 1 |');
+      expect(md).toContain('| home-desktop | desktop | 1440×900 | 1440×920 | 1440×920 |');
+      expect(md).toContain('![Diff image](diffs/home-desktop.png)');
+      expect(md).toContain('Pixel comparison included');
+      expect(md).not.toContain('Pixel comparison was skipped');
+    });
+
     it('renders capture gaps when missing items exist', () => {
       const md = makeMarkdown(makeSummary({
         status: 'incomplete',

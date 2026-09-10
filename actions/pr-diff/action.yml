@@ -459,6 +459,7 @@ runs:
         const resolvedOutDir = path.resolve('qa-artifacts/snapdrift/drift/current');
         const resolvedSummaryPath = path.join(resolvedOutDir, 'summary.json');
         const resolvedMarkdownPath = path.join(resolvedOutDir, 'summary.md');
+        const resolvedDiffImagesDir = path.join(resolvedOutDir, 'diffs');
 
         const captureOptions = {
           configPath: process.env.REPO_CONFIG_PATH || undefined,
@@ -475,7 +476,8 @@ runs:
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
           currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
-          currentRunDir: process.env.CURRENT_SCREENSHOTS_ROOT || undefined
+          currentRunDir: process.env.CURRENT_SCREENSHOTS_ROOT || undefined,
+          diffImagesDir: resolvedDiffImagesDir
         };
 
         const diffed = await diffWithPolicy({

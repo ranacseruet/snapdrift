@@ -225,6 +225,7 @@ After running `capture` and `diff` with default paths:
     summary.json          # structured drift summary
     summary.md            # human-readable markdown report
     report.html           # self-contained HTML report with side-by-side images
+    diffs/                # v1 generated diff PNGs, when comparisonPolicy is enabled
 ```
 
 Add `.snapdrift/` to your `.gitignore` to keep local run output out of version control.
@@ -271,7 +272,7 @@ Comparing against baseline ...
 Report: .snapdrift/diff/report.html
 ```
 
-**Incomplete run** (errors, missing captures, or dimension shifts):
+**Incomplete run** (errors, missing captures, or legacy dimension shifts):
 
 ```
 ❌  SnapDrift — incomplete
@@ -288,6 +289,19 @@ Report: .snapdrift/diff/report.html
 The `Missing`, `Errors`, and `Dim diff` lines only print when their count is greater than zero. `summary.status` is the unstyled value from the run (`clean`, `changes-detected`, `incomplete`, or `skipped`).
 
 The `report.html` path is printed whenever the status is anything other than `clean`; pass `--open` to also launch it in your default browser.
+
+To compare unequal local screenshot dimensions, add the exact opt-in policy to
+`diff`:
+
+```json
+"comparisonPolicy": { "version": 1, "threshold": 0.01 }
+```
+
+The v1 report includes the baseline, current, and union-canvas dimensions in
+`summary.md` and `report.html`, and stores changed-route diff PNGs under
+`.snapdrift/diff/diffs/`. A completed dimension comparison is a normal changed
+signal, so `fail-on-incomplete` does not fail solely because its dimensions
+differ; `fail-on-changes` and `strict` still enforce it.
 
 ---
 
