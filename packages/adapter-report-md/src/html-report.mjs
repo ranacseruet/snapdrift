@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, formatPercentage } from './constants.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 /** @typedef {import('../../manifest/types/index').VisualViewport} VisualViewport */
@@ -127,7 +127,7 @@ export async function generateHtmlReport(summary, options = {}) {
         <td>${escapeHtml(item.path)}</td>
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
         ${comparisonCells}
-        <td>${(item.mismatchRatio * 100).toFixed(2)}%</td>
+        <td>${formatPercentage(item.mismatchRatio)}</td>
         <td>${item.differentPixels}/${item.totalPixels}</td>
         ${diffCell}
       </tr>`;
@@ -223,7 +223,7 @@ export async function generateHtmlReport(summary, options = {}) {
   if (summary.baselineArtifactName) metaParts.push(`Baseline: <code>${escapeHtml(summary.baselineArtifactName)}</code>`);
   if (summary.baselineSourceSha) metaParts.push(`SHA: <code>${escapeHtml(summary.baselineSourceSha)}</code>`);
   metaParts.push(`Diff mode: <code>${escapeHtml(summary.diffMode)}</code>`);
-  metaParts.push(`Threshold: <code>${summary.threshold}</code>`);
+  metaParts.push(`Threshold: <code>${formatPercentage(summary.threshold)}</code>`);
 
   const generatedAt = escapeHtml(summary.finishedAt || summary.startedAt);
 

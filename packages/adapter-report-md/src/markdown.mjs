@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage } from './constants.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary['diffMode']} DriftMode */
@@ -66,7 +66,7 @@ export function makeMarkdown(summaryData) {
     '',
     '| Selected routes | Stable captures | Diff mode | Threshold |',
     '|---------------:|----------------:|:----------|----------:|',
-    `| ${selectedRoutes} | ${summaryData.matchedScreenshots} | \`${summaryData.diffMode}\` | ${summaryData.threshold} |`,
+    `| ${selectedRoutes} | ${summaryData.matchedScreenshots} | \`${summaryData.diffMode}\` | ${formatPercentage(summaryData.threshold)} |`,
     '',
     '| Signal | Count |',
     '|:-------|------:|',
@@ -108,9 +108,9 @@ export function makeMarkdown(summaryData) {
     }
     for (const item of summaryData.changed) {
       if (comparisonDetails) {
-        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${(item.mismatchRatio * 100).toFixed(2)}% | ${item.differentPixels}/${item.totalPixels} | ${formatDiffImage(item.diffImagePath)} |`);
+        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} | ${formatDiffImage(item.diffImagePath)} |`);
       } else {
-        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${(item.mismatchRatio * 100).toFixed(2)}% | ${item.differentPixels}/${item.totalPixels} |`);
+        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} |`);
       }
     }
   }

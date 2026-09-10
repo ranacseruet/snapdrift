@@ -45,10 +45,13 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
   });
 
   test('rejects duplicate route ids', () => {
-    const copy = { ...VALID_CONFIG, routes: [
-      { id: 'home', path: '/', viewport: 'desktop' },
-      { id: 'home', path: '/home', viewport: 'desktop' }
-    ]};
+    const copy = {
+      ...VALID_CONFIG,
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop' },
+        { id: 'home', path: '/home', viewport: 'desktop' }
+      ]
+    };
     expect(() => validateSnapdriftConfig(copy)).toThrow('duplicates');
   });
 
@@ -57,26 +60,35 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
     ['backslash', 'a\\b', 'a_b', 'screenshots/a_b.png'],
     ['traversal token', 'a..b', 'a_b', 'screenshots/a_b.png'],
     ['control character', 'a\u0000b', 'ab', 'screenshots/ab.png']
-  ])('rejects %s route ids that sanitize to one screenshot filename', (_caseLabel, firstId, secondId, expectedFilename) => {
-    const copy = { ...VALID_CONFIG, routes: [
-      { id: firstId, path: '/', viewport: 'desktop' },
-      { id: secondId, path: '/about', viewport: 'mobile' }
-    ]};
-    const validate = () => validateSnapdriftConfig(copy);
+  ])(
+    'rejects %s route ids that sanitize to one screenshot filename',
+    (_caseLabel, firstId, secondId, expectedFilename) => {
+      const copy = {
+        ...VALID_CONFIG,
+        routes: [
+          { id: firstId, path: '/', viewport: 'desktop' },
+          { id: secondId, path: '/about', viewport: 'mobile' }
+        ]
+      };
+      const validate = () => validateSnapdriftConfig(copy);
 
-    expect(validate).toThrow(firstId);
-    expect(validate).toThrow(secondId);
-    expect(validate).toThrow(expectedFilename);
-    expect(validate).toThrow(/Rename.*recapture/);
-  });
+      expect(validate).toThrow(firstId);
+      expect(validate).toThrow(secondId);
+      expect(validate).toThrow(expectedFilename);
+      expect(validate).toThrow(/Rename.*recapture/);
+    }
+  );
 
   test('reports every route filename collision in one validation error', () => {
-    const copy = { ...VALID_CONFIG, routes: [
-      { id: 'a/b', path: '/', viewport: 'desktop' },
-      { id: 'a_b', path: '/a', viewport: 'desktop' },
-      { id: 'c/d', path: '/c', viewport: 'desktop' },
-      { id: 'c_d', path: '/c-d', viewport: 'desktop' }
-    ] };
+    const copy = {
+      ...VALID_CONFIG,
+      routes: [
+        { id: 'a/b', path: '/', viewport: 'desktop' },
+        { id: 'a_b', path: '/a', viewport: 'desktop' },
+        { id: 'c/d', path: '/c', viewport: 'desktop' },
+        { id: 'c_d', path: '/c-d', viewport: 'desktop' }
+      ]
+    };
 
     let error;
     try {
@@ -91,27 +103,42 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
   });
 
   test('rejects invalid diff mode', () => {
-    const copy = { ...VALID_CONFIG, diff: { threshold: 0.01, mode: 'invalid' } };
+    const copy = {
+      ...VALID_CONFIG,
+      diff: { threshold: 0.01, mode: 'invalid' }
+    };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.mode');
   });
 
   test('rejects threshold out of range', () => {
-    const copy = { ...VALID_CONFIG, diff: { threshold: 2, mode: 'report-only' } };
+    const copy = {
+      ...VALID_CONFIG,
+      diff: { threshold: 2, mode: 'report-only' }
+    };
     expect(() => validateSnapdriftConfig(copy)).toThrow('threshold');
   });
 
   test('accepts the exact v1 comparison policy shape', () => {
     const copy = {
       ...VALID_CONFIG,
-      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 1, threshold: 0.05 } }
+      diff: {
+        ...VALID_CONFIG.diff,
+        comparisonPolicy: { version: 1, threshold: 0.01 }
+      }
     };
-    expect(validateSnapdriftConfig(copy).diff.comparisonPolicy).toEqual({ version: 1, threshold: 0.05 });
+    expect(validateSnapdriftConfig(copy).diff.comparisonPolicy).toEqual({
+      version: 1,
+      threshold: 0.01
+    });
   });
 
   test('rejects an unsupported comparison policy version', () => {
     const copy = {
       ...VALID_CONFIG,
-      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 2, threshold: 0.05 } }
+      diff: {
+        ...VALID_CONFIG.diff,
+        comparisonPolicy: { version: 2, threshold: 0.01 }
+      }
     };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.comparisonPolicy.version');
   });
@@ -119,9 +146,23 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
   test('rejects an invalid comparison policy threshold', () => {
     const copy = {
       ...VALID_CONFIG,
-      diff: { ...VALID_CONFIG.diff, comparisonPolicy: { version: 1, threshold: 2 } }
+      diff: {
+        ...VALID_CONFIG.diff,
+        comparisonPolicy: { version: 1, threshold: 2 }
+      }
     };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.comparisonPolicy.threshold');
+  });
+
+  test('rejects a comparison policy threshold that differs from diff.threshold', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      diff: {
+        ...VALID_CONFIG.diff,
+        comparisonPolicy: { version: 1, threshold: 0.05 }
+      }
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('must match diff.threshold');
   });
 });
 
@@ -153,16 +194,27 @@ describe('@snapdrift/manifest — selectRoutesForChangedFiles', () => {
   });
 
   test('shared exact file triggers all routes', () => {
-    const config = { ...VALID_CONFIG, selection: { sharedExact: ['package.json'] } };
+    const config = {
+      ...VALID_CONFIG,
+      selection: { sharedExact: ['package.json'] }
+    };
     const result = selectRoutesForChangedFiles(config, ['package.json']);
     expect(result.shouldRun).toBe(true);
     expect(result.reason).toBe('shared_snapdrift_change');
   });
 
   test('route changePaths match triggers scoped routes', () => {
-    const config = { ...VALID_CONFIG, routes: [
-      { id: 'home', path: '/', viewport: 'desktop', changePaths: ['src/components/Home/'] }
-    ]};
+    const config = {
+      ...VALID_CONFIG,
+      routes: [
+        {
+          id: 'home',
+          path: '/',
+          viewport: 'desktop',
+          changePaths: ['src/components/Home/']
+        }
+      ]
+    };
     const result = selectRoutesForChangedFiles(config, ['src/components/Home/index.tsx']);
     expect(result.shouldRun).toBe(true);
     expect(result.selectedRouteIds).toEqual(['home']);

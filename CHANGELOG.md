@@ -1,17 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 - 2026-09-10
 
 ### Features
 
-- **Optional unequal-dimension comparisons** — `@snapdrift/compare-core` now
-  exposes `compareImages()` for top-left-aligned union-canvas comparisons while
-  the existing strict APIs remain unchanged. The local adapter accepts the
-  exact `diff.comparisonPolicy: { "version": 1, "threshold": number }` opt-in,
-  records comparison dimensions and the geometric union denominator, stages a
-  generated diff PNG, and renders it in Markdown, HTML, and PR reports. Legacy
-  dimension shifts remain in `dimensionChanges[]`; completed v1 dimension
-  changes are `changed[]` signals and do not fail `fail-on-incomplete` alone.
+- **Unequal-dimension comparisons** — `@snapdrift/compare-core` now exposes
+  `compareImages()` for top-left-aligned union-canvas comparisons while the
+  existing strict APIs remain unchanged. Updated local and hosted providers
+  explicitly request comparison policy v1, record comparison dimensions and the
+  geometric union denominator, stage a generated diff PNG, and render it in
+  Markdown, HTML, and PR reports. Low-level public adapter calls remain strict
+  unless they opt in with `diff.comparisonPolicy`. Legacy dimension shifts remain
+  in `dimensionChanges[]`; completed v1 dimension changes are `changed[]` signals
+  and do not fail `fail-on-incomplete` alone.
+
+- **Workspace packages** — publish `@snapdrift/manifest` 1.4.0,
+  `@snapdrift/compare-core` 1.1.0, `@snapdrift/adapter-report-md` 1.2.0, and
+  `@snapdrift/adapter-fs` 1.2.0 before activating the updated hosted Snap client.
 
 ## 0.9.0 - 2026-09-09
 

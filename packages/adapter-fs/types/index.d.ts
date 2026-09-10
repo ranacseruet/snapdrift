@@ -26,10 +26,7 @@ export function loadSnapdriftConfig(configPath?: string): Promise<{
 
 // --- compare-files.mjs ---
 
-export function comparePngs(
-  baselinePath: string,
-  currentPath: string
-): Promise<CompareBuffersResult>;
+export function comparePngs(baselinePath: string, currentPath: string): Promise<CompareBuffersResult>;
 
 export function comparePngs(
   baselinePath: string,
@@ -54,6 +51,8 @@ export interface GenerateDriftReportOptions {
   baselineRunDir?: string;
   currentRunDir?: string;
   diffImagesDir?: string;
+  /** Explicitly selects the v1 union-canvas comparison; omitted direct calls retain strict behavior. */
+  comparisonPolicy?: ComparisonPolicy;
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
@@ -112,9 +111,7 @@ export interface WriteDriftSummaryOptions {
   markdownPath?: string;
 }
 
-export function writeDriftSummary(
-  options: WriteDriftSummaryOptions
-): Promise<{
+export function writeDriftSummary(options: WriteDriftSummaryOptions): Promise<{
   summaryPath: string;
   markdownPath: string;
   summary: VisualDriftStatusSummary;
@@ -129,9 +126,7 @@ export interface RunBaselineCaptureOptions {
   outDir?: string;
 }
 
-export function runBaselineCapture(
-  options?: RunBaselineCaptureOptions
-): Promise<{
+export function runBaselineCapture(options?: RunBaselineCaptureOptions): Promise<{
   resultsPath: string;
   manifestPath: string;
   screenshotsRoot: string;

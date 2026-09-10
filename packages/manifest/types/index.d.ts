@@ -72,7 +72,11 @@ export interface VisualRegressionRouteConfig {
 }
 
 export function sanitizeRouteId(id: string): string;
-export function assertUniqueRouteIdFilenames(routeIds: Iterable<unknown>, sourceLabel?: string, extension?: string): void;
+export function assertUniqueRouteIdFilenames(
+  routeIds: Iterable<unknown>,
+  sourceLabel?: string,
+  extension?: string
+): void;
 
 export interface VisualRegressionConfig {
   baselineArtifactName: string;
@@ -252,7 +256,9 @@ export interface VisualDriftSkippedSummary extends VisualDriftStatusSummary {
 // Both take a partial summary because `actions/enforce` reads whatever
 // `summary.json` holds without narrowing it first, and shouldFailDriftCheck
 // additionally accepts the skipped shape, which it always passes.
-export function determineDriftStatus(summaryData: Partial<VisualDiffSummary>): 'clean' | 'changes-detected' | 'incomplete';
+export function determineDriftStatus(
+  summaryData: Partial<VisualDiffSummary>
+): 'clean' | 'changes-detected' | 'incomplete';
 export function shouldFailDriftCheck(summaryData: Partial<VisualDiffSummary> | VisualDriftSkippedSummary): boolean;
 
 // --- Provider abstraction ---
@@ -292,6 +298,8 @@ export interface ProviderDiffOptions {
   currentRunDir?: string;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
+  /** Explicit comparison contract selected by the provider. */
+  comparisonPolicy?: ComparisonPolicy;
 }
 
 export interface ProviderDiffResult {
@@ -355,15 +363,27 @@ export const SNAPDRIFT_SETTLE_DELAY_MS: number;
 export function splitCommaList(value: string | undefined): string[];
 export function validateSnapdriftConfig(value: unknown, sourceLabel?: string): VisualRegressionConfig;
 export function resolveFromWorkingDirectory(config: VisualRegressionConfig, relativePath: string): string;
-export function selectConfiguredRoutes(config: VisualRegressionConfig, requestedRouteIds: Iterable<string>): { routes: VisualRegressionRouteConfig[]; selectedRouteIds: string[] };
-export function selectRoutesForChangedFiles(config: VisualRegressionConfig, changedFiles: string[]): { shouldRun: boolean; reason: string; selectedRouteIds: string[] };
+export function selectConfiguredRoutes(
+  config: VisualRegressionConfig,
+  requestedRouteIds: Iterable<string>
+): { routes: VisualRegressionRouteConfig[]; selectedRouteIds: string[] };
+export function selectRoutesForChangedFiles(
+  config: VisualRegressionConfig,
+  changedFiles: string[]
+): { shouldRun: boolean; reason: string; selectedRouteIds: string[] };
 
 // --- Manifest schema and viewport helpers ---
 
 export const CURRENT_SCHEMA_VERSION: number;
 export function validateManifest(value: unknown, sourceLabel?: string): VisualScreenshotManifest;
-export function indexManifestEntries(manifest: VisualScreenshotManifest, selectedRouteIds: string[], sourceLabel?: string): Map<string, VisualScreenshotManifestEntry>;
+export function indexManifestEntries(
+  manifest: VisualScreenshotManifest,
+  selectedRouteIds: string[],
+  sourceLabel?: string
+): Map<string, VisualScreenshotManifestEntry>;
 export function indexRouteResults(results: VisualBaselineResults): Map<string, VisualBaselineRouteResult>;
-export const VIEWPORT_PRESETS: Record<VisualViewportPreset, Required<ViewportDescriptor>> & { [name: string]: Required<ViewportDescriptor> | undefined };
+export const VIEWPORT_PRESETS: Record<VisualViewportPreset, Required<ViewportDescriptor>> & {
+  [name: string]: Required<ViewportDescriptor> | undefined;
+};
 export function viewportKey(viewport: VisualViewport): string;
 export function viewportHash(descriptor: ViewportDescriptor): string;

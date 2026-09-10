@@ -30,8 +30,7 @@ const VALID_ON_UNAVAILABLE_SET = new Set(VALID_ON_UNAVAILABLE_MODES);
 function isValidCustomViewport(value) {
   if (!isRecord(value)) return false;
   const rec = /** @type {Record<string,unknown>} */ (value);
-  return Number.isInteger(rec.width) && /** @type {number} */ (rec.width) > 0 &&
-    Number.isInteger(rec.height) && /** @type {number} */ (rec.height) > 0;
+  return Number.isInteger(rec.width) && /** @type {number} */ (rec.width) > 0 && Number.isInteger(rec.height) && /** @type {number} */ (rec.height) > 0;
 }
 
 /**
@@ -96,14 +95,7 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
   }
 
   const candidate = /** @type {Record<string, unknown>} */ (value);
-  const requiredStringFields = [
-    'baselineArtifactName',
-    'workingDirectory',
-    'baseUrl',
-    'resultsFile',
-    'manifestFile',
-    'screenshotsRoot'
-  ];
+  const requiredStringFields = ['baselineArtifactName', 'workingDirectory', 'baseUrl', 'resultsFile', 'manifestFile', 'screenshotsRoot'];
 
   for (const fieldName of requiredStringFields) {
     if (!isNonEmptyString(candidate[fieldName])) {
@@ -135,8 +127,7 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
         errors.push(`${routeLabel}.path must be a non-empty string.`);
       }
 
-      const viewportValid = (isNonEmptyString(route.viewport) && VALID_VIEWPORT_PRESETS.has(route.viewport)) ||
-        isValidCustomViewport(route.viewport);
+      const viewportValid = (isNonEmptyString(route.viewport) && VALID_VIEWPORT_PRESETS.has(route.viewport)) || isValidCustomViewport(route.viewport);
       if (!viewportValid) {
         errors.push(`${routeLabel}.viewport must be one of: ${[...VALID_VIEWPORT_PRESETS].join(', ')} or an object with positive integer width and height.`);
       }
@@ -145,8 +136,7 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
         errors.push(`${routeLabel}.changePaths must be an array of non-empty strings when provided.`);
       }
 
-      if (route.navigationTimeout !== undefined &&
-          (!Number.isInteger(route.navigationTimeout) || /** @type {number} */ (route.navigationTimeout) <= 0)) {
+      if (route.navigationTimeout !== undefined && (!Number.isInteger(route.navigationTimeout) || /** @type {number} */ (route.navigationTimeout) <= 0)) {
         errors.push(`${routeLabel}.navigationTimeout must be a positive integer when provided.`);
       }
     }
@@ -186,6 +176,14 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
           comparisonPolicy.threshold > 1
         ) {
           errors.push('diff.comparisonPolicy.threshold must be a finite number between 0 and 1.');
+        } else if (
+          typeof candidate.diff.threshold === 'number' &&
+          Number.isFinite(candidate.diff.threshold) &&
+          candidate.diff.threshold >= 0 &&
+          candidate.diff.threshold <= 1 &&
+          comparisonPolicy.threshold !== candidate.diff.threshold
+        ) {
+          errors.push('diff.comparisonPolicy.threshold must match diff.threshold.');
         }
       }
     }

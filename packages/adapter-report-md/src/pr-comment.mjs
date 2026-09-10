@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage } from './constants.mjs';
 
 export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
 export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
@@ -113,9 +113,7 @@ export function buildReportCommentBody(summary, meta = {}) {
       lines.push('|:------|:---------|:---------|');
     }
     for (const item of changed.slice(0, maxChangedRows)) {
-      const percentChanged = typeof item.mismatchRatio === 'number'
-        ? `${(item.mismatchRatio * 100).toFixed(2)}%`
-        : 'n/a';
+      const percentChanged = typeof item.mismatchRatio === 'number' ? formatPercentage(item.mismatchRatio) : 'n/a';
       if (comparisonDetails) {
         lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${percentChanged} | ${item.differentPixels ?? '—'}/${item.totalPixels ?? '—'} | ${item.diffImagePath ? `![Diff image](${item.diffImagePath})` : '—'} |`);
       } else {

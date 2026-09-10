@@ -617,6 +617,7 @@ runs:
         CURRENT_MANIFEST_PATH: ${{ steps.compare.outputs.current_manifest_file || steps.capture.outputs.manifest_file }}
         BASELINE_SCREENSHOTS_DIR: ${{ steps.baseline_paths.outputs.screenshots_dir }}
         CURRENT_SCREENSHOTS_ROOT: ${{ steps.compare.outputs.current_screenshots_root || steps.capture.outputs.screenshots_root }}
+        DIFF_IMAGES_DIR: ${{ steps.compare.outputs.diff_images_dir }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -637,7 +638,8 @@ runs:
           baselineManifestPath: process.env.BASELINE_MANIFEST_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
           baselineScreenshotsDir: process.env.BASELINE_SCREENSHOTS_DIR || undefined,
-          currentScreenshotsDir: currentScreenshotsRoot ? path.join(currentScreenshotsRoot, 'screenshots') : undefined
+          currentScreenshotsDir: currentScreenshotsRoot ? path.join(currentScreenshotsRoot, 'screenshots') : undefined,
+          diffImagesDir: process.env.DIFF_IMAGES_DIR || undefined
         });
 
         await fs.appendFile(process.env.GITHUB_OUTPUT, `bundle_dir=${result.bundleDir}\n`);

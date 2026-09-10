@@ -15,6 +15,7 @@ export const DEFAULT_SNAPDRIFT_REPO_URL: string;
 export const DEFAULT_SNAPDRIFT_ICON_URL: string;
 export const STATUS_ICONS: Readonly<Record<string, string>>;
 export const STATUS_LABELS: Readonly<Record<string, string>>;
+export function formatPercentage(ratio: number): string;
 
 // --- markdown.mjs ---
 
