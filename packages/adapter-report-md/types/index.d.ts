@@ -50,6 +50,7 @@ export function buildReportCommentBody(
   summary: VisualReportSummary,
   meta?: {
     artifactName?: string;
+    artifactUrl?: string;
     runUrl?: string;
     dashboardUrl?: string;
     maxChangedRows?: number;

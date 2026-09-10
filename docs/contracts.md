@@ -218,6 +218,11 @@ objects, `dimensionsChanged`, and the effective `totalPixels` denominator. A
 local changed item with a generated image contains `diffImagePath`, relative to
 the diff output bundle (for example `diffs/home.png`).
 
+When a changed item has a generated local `diffImagePath`, its PR comment cell
+links to the uploaded report artifact (or the workflow run when no artifact URL
+was supplied) and shows the bundle-relative path. It does not use that relative
+path as a GitHub-hosted image URL.
+
 ### Status values
 
 | Status | Meaning |
@@ -558,6 +563,7 @@ Snap's server-side notification posting should render the same template from the
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `artifactName` | `string?` | PR diff artifact label |
+| `artifactUrl` | `string?` | Authenticated GitHub Actions artifact URL for diff links |
 | `runUrl` | `string?` | GitHub Actions run URL (adds `[View run]` link) |
 | `dashboardUrl` | `string?` | Snap dashboard URL (adds `[View in dashboard →]` link; SnapProvider only) |
 | `maxChangedRows` | `number` | Max drift-signal rows before truncation (default 20) |

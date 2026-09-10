@@ -2,6 +2,14 @@
 
 ## 0.10.0 - 2026-09-10
 
+### Fixes
+
+- **PR diff artifacts remain reviewable from GitHub comments** — generated local
+  diff paths are now linked to the authenticated Actions artifact (or workflow
+  run fallback) instead of being emitted as broken relative image URLs. Hosted
+  legacy captures also retain their reported dimensions and pixel denominator
+  when v1 comparison metadata is absent.
+
 ### Features
 
 - **Unequal-dimension comparisons** — `@snapdrift/compare-core` now exposes

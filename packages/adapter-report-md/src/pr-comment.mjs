@@ -46,8 +46,26 @@ function hasComparisonDetails(item) {
 }
 
 /**
+ * @param {string | undefined} diffImagePath
+ * @param {string | undefined} artifactUrl
+ * @param {string | undefined} runUrl
+ * @returns {string}
+ */
+function formatDiffImage(diffImagePath, artifactUrl, runUrl) {
+  if (!diffImagePath) return '—';
+
+  const linkUrl = /^https?:\/\//.test(artifactUrl || '')
+    ? artifactUrl
+    : /^https?:\/\//.test(runUrl || '')
+      ? runUrl
+      : undefined;
+  const pathLabel = `\`${escapeMarkdown(diffImagePath)}\``;
+  return linkUrl ? `[View report artifacts →](${linkUrl}) ${pathLabel}` : pathLabel;
+}
+
+/**
  * @param {import('@snapdrift/manifest').VisualReportSummary} summary
- * @param {{ artifactName?: string, runUrl?: string, dashboardUrl?: string, maxChangedRows?: number, maxErrorRows?: number }} [meta]
+ * @param {{ artifactName?: string, artifactUrl?: string, runUrl?: string, dashboardUrl?: string, maxChangedRows?: number, maxErrorRows?: number }} [meta]
  * @returns {string}
  */
 export function buildReportCommentBody(summary, meta = {}) {
@@ -115,7 +133,7 @@ export function buildReportCommentBody(summary, meta = {}) {
     for (const item of changed.slice(0, maxChangedRows)) {
       const percentChanged = typeof item.mismatchRatio === 'number' ? formatPercentage(item.mismatchRatio) : 'n/a';
       if (comparisonDetails) {
-        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${percentChanged} | ${item.differentPixels ?? '—'}/${item.totalPixels ?? '—'} | ${item.diffImagePath ? `![Diff image](${item.diffImagePath})` : '—'} |`);
+        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${percentChanged} | ${item.differentPixels ?? '—'}/${item.totalPixels ?? '—'} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
       } else {
         lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${percentChanged} |`);
       }
@@ -158,7 +176,7 @@ export function buildReportCommentBody(summary, meta = {}) {
       lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} | — | — |`);
     }
     for (const item of comparisonDimensionChanges) {
-      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${item.diffImagePath ? `![Diff image](${item.diffImagePath})` : '—'} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
     }
     lines.push('');
     lines.push('</details>');

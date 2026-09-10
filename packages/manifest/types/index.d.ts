@@ -337,6 +337,7 @@ export interface ProviderBaselineData {
 
 export interface ProviderCommentMeta {
   artifactName?: string;
+  artifactUrl?: string;
   runUrl?: string;
   dashboardUrl?: string;
   maxChangedRows?: number;

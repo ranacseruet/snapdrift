@@ -1686,6 +1686,32 @@ describe('SnapProvider.diff() baseline mapping', () => {
     });
   });
 
+  it('preserves legacy capture dimensions and pixel totals without comparison metadata', async () => {
+    const { summary } = await runDiffWith([
+      {
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        baselineObjectKey: 'b/home.png',
+        currentObjectKey: 'c/home.png',
+        width: 12,
+        height: 8,
+        diffPixels: 3,
+        diffPct: 0.02,
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ]);
+
+    expect(summary.changed[0]).toMatchObject({
+      width: 12,
+      height: 8,
+      differentPixels: 3,
+      totalPixels: 96,
+      mismatchRatio: 0.02
+    });
+    expect(summary.changed[0].comparison).toBeUndefined();
+  });
+
   it('keeps a comparison at the configured threshold clean', async () => {
     const { summary } = await runDiffWith([
       {

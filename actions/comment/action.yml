@@ -24,6 +24,10 @@ inputs:
     description: Artifact label to include in the comment.
     required: false
     default: ''
+  artifact-url:
+    description: Authenticated URL to the uploaded report artifact.
+    required: false
+    default: ''
   repo-config-path:
     description: Path to the SnapDrift config file (needed for provider-aware comment rendering).
     required: false
@@ -58,6 +62,7 @@ runs:
         VISUAL_DIFF_SUMMARY_PATH: ${{ inputs.summary-path }}
         VISUAL_DIFF_RUN_URL: ${{ inputs.run-url }}
         VISUAL_DIFF_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        VISUAL_DIFF_ARTIFACT_URL: ${{ inputs.artifact-url }}
         INPUT_PR_NUMBER: ${{ inputs.pr-number }}
         REPO_CONFIG_PATH: ${{ inputs.repo-config-path }}
         MAX_CHANGED_ROWS: ${{ inputs.max-changed-rows }}
@@ -105,6 +110,7 @@ runs:
           const maxErrorRows = Number(process.env.MAX_ERROR_ROWS) || 10;
           const body = provider.buildCommentBody(summary, {
             artifactName: process.env.VISUAL_DIFF_ARTIFACT_NAME || '',
+            artifactUrl: process.env.VISUAL_DIFF_ARTIFACT_URL || '',
             runUrl,
             maxChangedRows,
             maxErrorRows

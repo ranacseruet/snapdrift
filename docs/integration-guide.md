@@ -281,7 +281,8 @@ The `pr-diff` wrapper composes the following low-level steps. They're still avai
   `error`, while `missing` remains the intentional first-baseline result
 - `actions/stage` — assemble the baseline or diff bundle for upload
 - `actions/enforce` — evaluate the summary against `diff.mode` and fail when required
-- `actions/comment` — upsert a PR comment from a summary (provider-aware)
+- `actions/comment` — upsert a PR comment from a summary (provider-aware); pass
+  `artifact-url` from `upload-artifact` when local diff PNGs are present
 
 The two wrapper actions that orchestrate the full pipeline are `actions/baseline` (publish) and `actions/pr-diff` (drift detection). They are the primary integration points.
 
