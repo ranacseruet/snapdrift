@@ -352,6 +352,23 @@ future runs to return to equal-size comparisons.
 **A route appears in `errors[]`**  
 Capture failed before comparison. Confirm the app is fully ready and reachable before SnapDrift runs.
 
+**`comparison_too_large` or `union canvas ... exceeds the maximum`**
+
+The baseline/current screenshot union is larger than the 33,554,432-pixel
+comparison budget. Because captures are full-page, a short configured viewport
+can still produce an oversized image when the document is tall; the named
+`mobile` preset also renders at device scale factor 3. Inspect the actual image
+dimensions in the capture results or manifest and calculate
+`max(baselineWidth, currentWidth) × max(baselineHeight, currentHeight)`.
+
+If the route does not need mobile device emulation, a custom viewport object uses
+scale factor 1 and can avoid unnecessary raster inflation. Otherwise reduce the
+captured content or fixture height, or split the coverage across routes when
+appropriate. Do not resize/crop images or lower `diff.threshold`; neither changes
+the capture budget and either can hide a layout regression. See the [screenshot
+size budget](contracts.md#screenshot-size-budget) for the preset estimates and
+custom-viewport semantics.
+
 **Playwright install runs even though `provider: "snap"`**  
 That's expected for the Snap local-capture hybrid. Playwright runs locally to render the page, then the resulting screenshot is uploaded to Snap. The hybrid kicks in only when `baseUrl` points to a local address; for remote `baseUrl` Snap's render worker captures directly.
 

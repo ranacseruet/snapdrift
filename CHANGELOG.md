@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Document the full-page screenshot pixel budget, viewport/device-scale
+  estimates, custom-viewport semantics, and remediation for
+  `comparison_too_large` failures.
+
 ## 0.10.0 - 2026-09-10
 
 ### Fixes

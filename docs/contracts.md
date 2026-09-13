@@ -278,6 +278,45 @@ directly, not just for the guarded enforcement step inside `actions/pr-diff`.
 | `desktop` | 1440 | 900 | 1 | No | No |
 | `mobile` | 390 | 844 | 3 | Yes | Yes |
 
+## Screenshot size budget
+
+SnapDrift compares full-page screenshots using their rendered raster dimensions.
+The unequal-dimension comparator bounds the union canvas at `32 × 1024 × 1024`
+pixels (`33,554,432` pixels). A comparison is oversized when:
+
+```text
+max(baselineWidth, currentWidth) × max(baselineHeight, currentHeight) > 33,554,432
+```
+
+This is a raster-pixel limit, not a direct CSS viewport limit. Full-page capture
+height is the document height, and `deviceScaleFactor` increases both raster
+width and raster height. The baseline/current union also means that a dimension
+change can make an otherwise valid image exceed the budget. Leave headroom for
+horizontal overflow or other layout changes that increase the rendered image
+dimensions.
+
+The comparator reports this condition with the stable error code
+`comparison_too_large` and includes the baseline, current, and union-canvas
+dimensions in the error message. Approximate maximum full-page CSS heights below
+assume that the raster width remains equal to the configured CSS width and that
+the document height scales by the same device scale factor:
+
+| Configuration | CSS viewport | Scale factor | Approx. maximum full-page CSS height |
+|:--------------|:-------------|-------------:|-------------------------------------:|
+| `desktop` preset | 1440 × 900 | 1 | 23,301 px |
+| `mobile` preset | 390 × 844 | 3 | 9,559 px |
+| Custom 390 × 844 viewport | 390 × 844 | 1 | 86,037 px |
+
+These are planning estimates, not guarantees. Check the actual `width` and
+`height` recorded in the capture results or screenshot manifest, then apply the
+union-canvas formula above. A custom viewport object currently uses scale factor
+1 with `isMobile: false` and `hasTouch: false`; it is therefore not equivalent
+to the named `mobile` preset. Use it to avoid unnecessary raster inflation only
+when the route does not require mobile device emulation. Otherwise, reduce the
+captured document or fixture height, or split the coverage across routes when
+that matches the product behavior. Do not resize or crop screenshots, or lower
+`diff.threshold`, to work around this limit.
+
 ## Capture defaults
 
 | Setting | Value |
