@@ -249,13 +249,12 @@ When `provider: "snap"` and `baseUrl` points to a local address (localhost, `127
 
 With the Snap provider, the PR comment includes a **"View in dashboard →"** link that points to `${apiUrl}/dashboard/visual/${projectId}/runs/${runId}`. The local provider omits the link.
 
-Seeding the hosted provider from a local checkout is a one-shot CLI command:
+To adopt the hosted provider, seed the project with a hosted baseline. `migrate-baselines --to snap` is **not** the way to do it — Snap cannot accept a pre-built local baseline bundle, because the screenshots it carries are never uploaded to Snap storage and its manifest references local filenames rather than Snap object keys. Use `snapdrift baseline` with `provider: "snap"` instead: it captures each route through Snap so the pixels actually land in storage before the baseline manifest is published. Canonical hosted publication is CI-only — run it from your default-branch job, where GitHub Actions supplies the publication metadata automatically (other CI systems set `SNAPDRIFT_PUBLICATION_WORKFLOW_REF` and `SNAPDRIFT_PUBLICATION_SEQUENCE`); a plain local checkout fails before creating a hosted run.
 
 ```bash
+# In CI, on the default branch, with provider: "snap"
 snapdrift baseline
 ```
-
-It requires `provider: "snap"` in the config, and captures each route through Snap so the pixels actually land in storage before the baseline manifest is published. It replaces `migrate-baselines --to snap`, which is unsupported: Snap cannot accept a pre-built local baseline bundle, because the screenshots it carries are never uploaded to Snap storage and its manifest references local filenames rather than Snap object keys.
 
 Conversely, downloading a Snap baseline back to a local directory (useful for reproducible local debugging) is:
 
@@ -298,9 +297,6 @@ snapdrift capture
 
 # After making changes, compare and open the HTML report
 snapdrift diff --open
-
-# Seed the hosted Snap backend with a baseline (captures through Snap)
-snapdrift baseline
 
 # Translate a snap/github-action workflow into snapdrift.json
 snapdrift init --from-snap-action .github/workflows/snap.yml

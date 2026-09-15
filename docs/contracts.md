@@ -362,7 +362,7 @@ snapdrift migrate-baselines --to snap   # always fails
 ```
 
 - The command exits with an error. Snap cannot accept a pre-built local baseline bundle: the screenshots it carries are never uploaded to Snap storage, and its manifest references local filenames rather than Snap object keys, so the call could only ever create a baseline with no pixels behind it. Snap rejects the request with `400 unsupported_baseline_body` (i2Dev-com/snap#653); the legacy `SnapProvider.migrateBaselineFromLocal()` path was removed in 0.7.0.
-- **Use `snapdrift baseline` instead** — with `provider: "snap"` it captures each route through Snap so the images actually land in storage, then publishes a manifest that references them (and that `--to local --from snap` can export back out).
+- **Use `snapdrift baseline` instead** — with `provider: "snap"` it captures each route through Snap so the images actually land in storage, then publishes a baseline referencing the stored objects. Canonical hosted publication is CI-only (default-branch job); see [`snapdrift baseline`](local-cli.md#snapdrift-baseline).
 
 **Download Snap baselines to local:**
 
