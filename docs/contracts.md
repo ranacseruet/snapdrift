@@ -353,18 +353,16 @@ All three directories can be overridden with `--baseline-dir`, `--current-dir`, 
 
 ### migrate-baselines
 
-Migrate baselines between local storage and Snap. Both directions require a `snap` block in `snapdrift.json` (or `--to local` for the `snap → local` direction, since the export call still talks to Snap first).
+Move baselines between local storage and Snap. Only the `snap → local` direction is supported; it requires a `snap` block in `snapdrift.json` (the export call talks to Snap).
 
-**Upload local baselines to Snap:**
+**Upload local baselines to Snap — not supported:**
 
 ```
-snapdrift migrate-baselines --to snap [--config <path>] [--baseline-dir <dir>]
+snapdrift migrate-baselines --to snap   # always fails
 ```
 
-- Reads `results.json`, `manifest.json`, and `screenshots/*.png` from the local baseline directory.
-- Uploads as the initial accepted baseline on Snap via `POST /v1/visual/projects/:id/baselines`.
-- Idempotent: if a baseline already exists for the same commit SHA (derived from `GITHUB_SHA` or `git rev-parse HEAD`), the upload is skipped.
-- Screenshots are base64-encoded in the request body; very large suites may want to migrate per-route.
+- The command exits with an error. Snap cannot accept a pre-built local baseline bundle: the screenshots it carries are never uploaded to Snap storage, and its manifest references local filenames rather than Snap object keys, so the call could only ever create a baseline with no pixels behind it. Snap rejects the request with `400 unsupported_baseline_body` (i2Dev-com/snap#653); the legacy `SnapProvider.migrateBaselineFromLocal()` path was removed in 0.7.0.
+- **Use `snapdrift baseline` instead** — with `provider: "snap"` it captures each route through Snap so the images actually land in storage, then publishes a manifest that references them (and that `--to local --from snap` can export back out).
 
 **Download Snap baselines to local:**
 

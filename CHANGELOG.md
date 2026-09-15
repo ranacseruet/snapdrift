@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Document that `migrate-baselines --to snap` is unsupported and point to
+  `snapdrift baseline` as the supported way to seed a hosted project. The
+  integration guide still described the retired upload direction as a working
+  one-shot command, and the contracts reference documented its request body,
+  idempotency, and storage behavior as if it succeeded. Both contradicted the
+  CLI, which has failed the direction since 0.7.0 with a pointer to
+  `snapdrift baseline`.
+
 ## 0.11.0 - 2026-09-14
 
 ### Behavior changes

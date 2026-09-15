@@ -249,11 +249,13 @@ When `provider: "snap"` and `baseUrl` points to a local address (localhost, `127
 
 With the Snap provider, the PR comment includes a **"View in dashboard →"** link that points to `${apiUrl}/dashboard/visual/${projectId}/runs/${runId}`. The local provider omits the link.
 
-Migrating an existing local repo to the Snap provider is a one-shot CLI command:
+Seeding the hosted provider from a local checkout is a one-shot CLI command:
 
 ```bash
-snapdrift migrate-baselines --to snap
+snapdrift baseline
 ```
+
+It requires `provider: "snap"` in the config, and captures each route through Snap so the pixels actually land in storage before the baseline manifest is published. It replaces `migrate-baselines --to snap`, which is unsupported: Snap cannot accept a pre-built local baseline bundle, because the screenshots it carries are never uploaded to Snap storage and its manifest references local filenames rather than Snap object keys.
 
 Conversely, downloading a Snap baseline back to a local directory (useful for reproducible local debugging) is:
 
@@ -297,8 +299,8 @@ snapdrift capture
 # After making changes, compare and open the HTML report
 snapdrift diff --open
 
-# Migrate an established local baseline to the hosted Snap backend
-snapdrift migrate-baselines --to snap
+# Seed the hosted Snap backend with a baseline (captures through Snap)
+snapdrift baseline
 
 # Translate a snap/github-action workflow into snapdrift.json
 snapdrift init --from-snap-action .github/workflows/snap.yml
