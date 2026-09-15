@@ -1,21 +1,27 @@
 import { Buffer } from 'node:buffer';
 import { compareBuffers, compareImages, compareWithIgnoreRegions, generateDiffImage } from '@snapdrift/compare-core';
-import type { CompareImagesResult, CompareResult, CompareBuffersResult, CompareImagesOptions, DiffImageOptions, IgnoreRegion } from '@snapdrift/compare-core';
+import type { CompareImagesResult, CompareImagesMetricsResult, CompareResult, CompareBuffersResult, CompareImagesOptions, DiffImageOptions, IgnoreRegion } from '@snapdrift/compare-core';
 
 const image = Buffer.alloc(0);
 const region: IgnoreRegion = { x: 0, y: 0, width: 1, height: 1 };
 const options: DiffImageOptions = { highlightColor: [255, 0, 0, 255], ignoreRegions: [region] };
-const imageOptions: CompareImagesOptions = { ...options, renderDiffImage: false };
+const metricsOptions: CompareImagesOptions & { renderDiffImage: false } = { ...options, renderDiffImage: false };
 const result: CompareBuffersResult = compareBuffers(image, image);
 const imageResult: CompareImagesResult = compareImages(image, image, options);
-const metricsOnly: CompareImagesResult = compareImages(image, image, imageOptions);
+const defaultResult = compareImages(image, image);
+// The default call keeps a required diff buffer (no regression for existing consumers).
+const defaultBuffer: Buffer = defaultResult.diffImageBuffer;
+defaultBuffer.toString('base64');
+const metricsOnly: CompareImagesMetricsResult = compareImages(image, image, metricsOptions);
 const compatible: CompareResult = result;
 compatible.mismatchRatio.toFixed(2);
 result.pct.toFixed();
 result.pixelsChanged.toFixed();
 imageResult.comparison.canvas.width.toFixed();
-imageResult.diffImageBuffer?.toString('base64');
-metricsOnly.diffImageBuffer?.toString('base64');
+imageResult.diffImageBuffer.toString('base64');
+metricsOnly.comparison.canvas.width.toFixed();
+// @ts-expect-error renderDiffImage: false omits the diff buffer
+metricsOnly.diffImageBuffer.toString('base64');
 compareWithIgnoreRegions(image, image, [region]).differentPixels.toFixed();
 const diff: Buffer = generateDiffImage(image, image, options);
 diff.toString('base64');

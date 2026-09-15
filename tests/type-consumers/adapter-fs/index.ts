@@ -17,7 +17,12 @@ api.comparePngs('before.png', 'after.png').then(result => {
 const comparisonPolicy: ComparisonPolicy = { version: 1, threshold: 0.1 };
 api.comparePngs('before.png', 'after.png', { comparisonPolicy }).then(result => {
   result.comparison.dimensionsChanged.valueOf();
-  result.diffImageBuffer?.toString('base64');
+  result.diffImageBuffer.toString('base64');
+});
+api.comparePngs('before.png', 'after.png', { comparisonPolicy, renderDiffImage: false }).then(result => {
+  result.comparison.dimensionsChanged.valueOf();
+  // @ts-expect-error renderDiffImage: false omits the diff buffer
+  result.diffImageBuffer.toString('base64');
 });
 api.resolveImagePath('.', 'image.png').then(path => path.toUpperCase());
 api.loadJson<{ name: string }>('input.json', 'fixture').then(data => data.name.toUpperCase());

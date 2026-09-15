@@ -38,6 +38,13 @@ export class ComparisonTooLargeError extends Error {
 }
 
 /**
+ * @typedef {import('../types/index.d.ts').CompareResult & {
+ *   comparison: import('../types/index.d.ts').ComparisonMetadata,
+ *   diffImageBuffer?: Buffer
+ * }} CompareImagesImplementationResult
+ */
+
+/**
  * Compare two PNG buffers on a top-left-aligned union canvas and generate the
  * corresponding visual diff in the same pass over the decoded pixels.
  *
@@ -47,10 +54,33 @@ export class ComparisonTooLargeError extends Error {
  * When ignore regions cover the whole canvas, `totalPixels` is 0 and
  * `mismatchRatio` is reported as 0, so the comparison is treated as matched.
  *
+ * @overload
+ * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
+ * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
+ * @param {import('../types/index.d.ts').CompareImagesOptions & { renderDiffImage: false }} options
+ * @returns {import('../types/index.d.ts').CompareImagesMetricsResult}
+ */
+/**
+ * Renders and returns the visual diff (default).
+ * @overload
+ * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
+ * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
+ * @param {(import('../types/index.d.ts').CompareImagesOptions & { renderDiffImage?: true })} [options]
+ * @returns {import('../types/index.d.ts').CompareImagesResult}
+ */
+/**
+ * Fallback for a non-literal `renderDiffImage` boolean.
+ * @overload
+ * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
+ * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
+ * @param {import('../types/index.d.ts').CompareImagesOptions} options
+ * @returns {CompareImagesImplementationResult}
+ */
+/**
  * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
  * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
  * @param {import('../types/index.d.ts').CompareImagesOptions} [options]
- * @returns {import('../types/index.d.ts').CompareImagesResult}
+ * @returns {CompareImagesImplementationResult}
  * @throws {ComparisonTooLargeError} If the union canvas exceeds the limit.
  */
 export function compareImages(baselineBuffer, currentBuffer, options = {}) {

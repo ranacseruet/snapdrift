@@ -1,4 +1,4 @@
-import type { CompareBuffersResult, CompareImagesResult } from '@snapdrift/compare-core';
+import type { CompareBuffersResult, CompareImagesResult, CompareImagesMetricsResult } from '@snapdrift/compare-core';
 
 /**
  * Filesystem I/O adapter types for @snapdrift/adapter-fs.
@@ -34,6 +34,12 @@ export function comparePngs(
   options: { comparisonPolicy: ComparisonPolicy }
 ): Promise<CompareImagesResult>;
 
+export function comparePngs(
+  baselinePath: string,
+  currentPath: string,
+  options: { comparisonPolicy: ComparisonPolicy; renderDiffImage: false }
+): Promise<CompareImagesMetricsResult>;
+
 export function resolveImagePath(runDir: string, relativeImagePath: string): Promise<string>;
 
 export function loadJson<T = unknown>(filePath: string, label: string): Promise<T>;
@@ -51,7 +57,7 @@ export interface GenerateDriftReportOptions {
   baselineRunDir?: string;
   currentRunDir?: string;
   diffImagesDir?: string;
-  /** Explicitly selects the v1 union-canvas comparison; omitted direct calls retain strict behavior. */
+  /** Overrides the effective v1 comparison policy; synthesized from `diff.threshold` when omitted. */
   comparisonPolicy?: ComparisonPolicy;
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;

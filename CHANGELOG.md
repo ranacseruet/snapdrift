@@ -31,7 +31,9 @@
 
 - **Workspace packages** — publish `@snapdrift/compare-core` 1.2.0 and
   `@snapdrift/adapter-fs` 1.3.0 with the new comparison options, validation, and
-  performance behavior.
+  performance behavior. The new `renderDiffImage: false` option is surfaced
+  through a separate overload, so existing `compareImages` / `comparePngs`
+  callers keep a non-optional `diffImageBuffer` with no type or runtime change.
 
 ### Documentation
 

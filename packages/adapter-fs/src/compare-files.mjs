@@ -110,13 +110,48 @@ export async function resolveImagePath(runDir, relativeImagePath) {
 
 /**
  * Reads two PNG files from disk and compares them pixel-by-pixel.
- * Delegates strict comparisons to compareBuffers and opted-in comparisons to
+ * Delegates strict comparisons to compareBuffers and policy comparisons to
  * compareImages from @snapdrift/compare-core.
  *
+ * @overload
+ * @param {string} baselinePath
+ * @param {string} currentPath
+ * @returns {Promise<import('@snapdrift/compare-core').CompareBuffersResult>}
+ */
+/**
+ * @overload
+ * @param {string} baselinePath
+ * @param {string} currentPath
+ * @param {{ comparisonPolicy: import('@snapdrift/manifest').ComparisonPolicy }} options
+ * @returns {Promise<import('@snapdrift/compare-core').CompareImagesResult>}
+ */
+/**
+ * @overload
+ * @param {string} baselinePath
+ * @param {string} currentPath
+ * @param {{ comparisonPolicy: import('@snapdrift/manifest').ComparisonPolicy, renderDiffImage: false }} options
+ * @returns {Promise<import('@snapdrift/compare-core').CompareImagesMetricsResult>}
+ */
+/**
+ * @overload
+ * @param {string} baselinePath
+ * @param {string} currentPath
+ * @param {{ comparisonPolicy?: import('@snapdrift/manifest').ComparisonPolicy, renderDiffImage?: boolean }} options
+ * @returns {Promise<
+ *   import('@snapdrift/compare-core').CompareBuffersResult |
+ *   import('@snapdrift/compare-core').CompareImagesResult |
+ *   import('@snapdrift/compare-core').CompareImagesMetricsResult
+ * >}
+ */
+/**
  * @param {string} baselinePath
  * @param {string} currentPath
  * @param {{ comparisonPolicy?: import('@snapdrift/manifest').ComparisonPolicy, renderDiffImage?: boolean }} [options]
- * @returns {Promise<import('@snapdrift/compare-core').CompareBuffersResult | import('@snapdrift/compare-core').CompareImagesResult>}
+ * @returns {Promise<
+ *   import('@snapdrift/compare-core').CompareBuffersResult |
+ *   import('@snapdrift/compare-core').CompareImagesResult |
+ *   import('@snapdrift/compare-core').CompareImagesMetricsResult
+ * >}
  */
 export async function comparePngs(baselinePath, currentPath, options = {}) {
   const [baselineBuffer, currentBuffer] = await Promise.all([
