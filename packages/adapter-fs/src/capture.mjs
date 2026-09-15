@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import pngjs from 'pngjs';
 
 import { loadSnapdriftConfig, readFirstDefinedEnv, SNAPDRIFT_CAPTURE_CONCURRENCY } from './config.mjs';
+import { createConcurrencyLimiter } from './concurrency.mjs';
 import {
   selectConfiguredRoutes,
   splitCommaList,
@@ -193,30 +194,6 @@ async function captureRoute(context, route, baseUrl, screenshotsRoot) {
 }
 
 const CAPTURE_MAX_RETRIES = 1;
-
-/**
- * Returns a function that schedules async tasks with at most `limit` running concurrently.
- * @param {number} limit
- * @returns {<T>(fn: () => Promise<T>) => Promise<T>}
- */
-function createConcurrencyLimiter(limit) {
-  let active = 0;
-  /** @type {Array<() => void>} */
-  const queue = [];
-  return function run(fn) {
-    return new Promise((resolve, reject) => {
-      const execute = () => {
-        active++;
-        fn().then(resolve, reject).finally(() => {
-          active--;
-          if (queue.length > 0) queue.shift()();
-        });
-      };
-      if (active < limit) execute();
-      else queue.push(execute);
-    });
-  };
-}
 
 /**
  * @param {import('playwright').BrowserContext} context

@@ -40,7 +40,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.apiKey` | `string` | Inline API key with `${VAR}` interpolation (mutually exclusive with `snap.apiKeyEnv`) |
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
-| `diff.comparisonPolicy` | `{ "version": 1, "threshold": number }` | Optional local opt-in to top-left-aligned unequal-dimension comparison; absent preserves strict legacy dimension handling |
+| `diff.comparisonPolicy` | `{ "version": 1, "threshold": number }` | Accepted for compatibility; comparison policy v1 is always applied when absent. `threshold` must match `diff.threshold` |
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 
@@ -210,9 +210,9 @@ The pull request drift bundle contains:
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
-| `comparisonPolicy` | `{ "version": 1, "threshold": number }?` | Exact v1 comparison policy used by the local adapter when opted in |
+| `comparisonPolicy` | `{ "version": 1, "threshold": number }?` | Effective v1 comparison policy used by the local adapter (synthesized from `diff.threshold` when not configured) |
 
-When v1 comparison is enabled, each affected `changed[]` item may also contain
+When v1 comparison is applied, each affected `changed[]` item may also contain
 `comparison` with `baseline`, `current`, and `canvas` `{ width, height }`
 objects, `dimensionsChanged`, and the effective `totalPixels` denominator. A
 local changed item with a generated image contains `diffImagePath`, relative to
@@ -229,7 +229,7 @@ path as a GitHub-hosted image URL.
 |:-------|:--------|
 | `clean` | All captures matched within threshold |
 | `changes-detected` | One or more captures exceeded threshold |
-| `incomplete` | Missing captures, dimension shifts, or comparison errors occurred |
+| `incomplete` | Missing captures or comparison errors occurred |
 | `skipped` | The report was intentionally skipped |
 
 ### Skipped summary
@@ -251,9 +251,9 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 - Mismatch ratio is `different_pixels / total_pixels`
 - `diff.threshold` applies per screenshot
 - Missing captures are counted separately from drift signals
-- Without `diff.comparisonPolicy`, dimension mismatches skip pixel comparison and land in `dimensionChanges[]`.
-- With the exact v1 policy `{ "version": 1, "threshold": number }`, images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator. Dimension changes land in `changed[]` with comparison metadata and a generated local diff image.
-- For v1, `diff.comparisonPolicy.threshold` is applied after pixel aggregation. A mismatch exactly equal to the threshold is matched; a dimension change is still a changed signal independent of ratio.
+- Comparison policy v1 `{ "version": 1, "threshold": number }` is always applied. When `diff.comparisonPolicy` is absent, SnapDrift synthesizes it from `diff.threshold`. Images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator. Dimension changes land in `changed[]` with comparison metadata and a generated local diff image.
+- `dimensionChanges[]` remains part of the summary contract but is empty for local comparisons in v1. Strict same-dimension comparison (`compareBuffers`) remains available to direct `@snapdrift/compare-core`/`comparePngs` callers that pass no policy.
+- Threshold is applied after pixel aggregation. A mismatch exactly equal to the threshold is matched; a dimension change is still a changed signal independent of ratio.
 - `diff.mode` controls enforcement, not summary generation
 
 ## Drift modes

@@ -1,6 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-09-14
+
+### Behavior changes
+
+- **Local comparisons now always use comparison policy v1.** `generateDriftReport`
+  synthesizes `{ "version": 1, "threshold": diff.threshold }` when neither the
+  caller nor `diff.comparisonPolicy` supplies a policy, matching the CLI and both
+  providers. Dimension mismatches are now `changed[]` signals with union-canvas
+  metadata instead of `dimensionChanges[]` (which stays in the summary contract
+  but is empty for local comparisons). The strict same-dimension comparator
+  remains available to direct `@snapdrift/compare-core` / `comparePngs` callers
+  that pass no policy.
+
+### Performance
+
+- `compareImages` short-circuits byte-identical buffers and can skip rendering
+  the diff PNG via `renderDiffImage: false`; drift reports only render diff
+  images for changed routes and resolve/read route PNGs concurrently.
+- Union-canvas size limits are now checked against the PNG IHDR header before
+  decoding, so oversized images are rejected before allocating decoded buffers.
+
+### Fixes
+
+- `compareImages`, `generateDiffImage`, and `compareWithIgnoreRegions` now reject
+  malformed ignore regions and highlight colors instead of silently masking
+  nothing or coercing `undefined` channels.
+
+### Features
+
+- **Workspace packages** — publish `@snapdrift/compare-core` 1.2.0 and
+  `@snapdrift/adapter-fs` 1.3.0 with the new comparison options, validation, and
+  performance behavior.
 
 ### Documentation
 

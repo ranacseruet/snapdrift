@@ -225,7 +225,7 @@ After running `capture` and `diff` with default paths:
     summary.json          # structured drift summary
     summary.md            # human-readable markdown report
     report.html           # self-contained HTML report with side-by-side images
-    diffs/                # v1 generated diff PNGs, when comparisonPolicy is enabled
+    diffs/                # generated diff PNGs for changed routes
 ```
 
 Add `.snapdrift/` to your `.gitignore` to keep local run output out of version control.
@@ -272,7 +272,7 @@ Comparing against baseline ...
 Report: .snapdrift/diff/report.html
 ```
 
-**Incomplete run** (errors, missing captures, or legacy dimension shifts):
+**Incomplete run** (errors or missing captures):
 
 ```
 ❌  SnapDrift — incomplete
@@ -281,7 +281,7 @@ Report: .snapdrift/diff/report.html
    Changed:   0
    Missing:   1
    Errors:    1
-   Dim diff:  1
+   Dim diff:  0
 
 Report: .snapdrift/diff/report.html
 ```
@@ -290,14 +290,15 @@ The `Missing`, `Errors`, and `Dim diff` lines only print when their count is gre
 
 The `report.html` path is printed whenever the status is anything other than `clean`; pass `--open` to also launch it in your default browser.
 
-To compare unequal local screenshot dimensions, add the exact opt-in policy to
-`diff`:
+SnapDrift always applies comparison policy v1. It synthesizes the policy from
+`diff.threshold` when `diff` does not declare one, so the explicit opt-in is only
+needed to pin a non-default threshold:
 
 ```json
 "comparisonPolicy": { "version": 1, "threshold": 0.01 }
 ```
 
-The v1 report includes the baseline, current, and union-canvas dimensions in
+The report includes the baseline, current, and union-canvas dimensions in
 `summary.md` and `report.html`, and stores changed-route diff PNGs under
 `.snapdrift/diff/diffs/`. A completed dimension comparison is a normal changed
 signal, so `fail-on-incomplete` does not fail solely because its dimensions
@@ -309,7 +310,7 @@ differ; `fail-on-changes` and `strict` still enforce it.
 
 | Variable | Applies to | Description |
 |:---------|:-----------|:------------|
-| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture`, `diff` | Max concurrent route captures per viewport context (positive integer, default `5`). Set to `1` to restore serial behavior for apps with shared session or auth state. |
+| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture`, `diff` | Max concurrent route operations (positive integer, default `5`): route captures per viewport context, and per-route resolve/compare during `diff`. Set to `1` to restore serial behavior for apps with shared session or auth state. |
 | `SNAPDRIFT_CONFIG_PATH` | `capture`, `diff`, `migrate-baselines` | Override the config file path. Equivalent to `--config`. |
 | `SNAPDRIFT_ROUTE_IDS` | `capture`, `baseline`, `diff` | Comma-separated route ids to scope to. Equivalent to `--routes`; it may not reduce a hosted baseline's complete route set. |
 

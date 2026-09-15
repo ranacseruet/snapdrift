@@ -2,6 +2,8 @@
 
 import pngjs from 'pngjs';
 
+import { createDimensionMismatchError } from './shared.mjs';
+
 const { PNG } = pngjs;
 
 /**
@@ -18,9 +20,21 @@ export function compareBuffers(baselineBuffer, currentBuffer) {
   const currentPng = PNG.sync.read(currentBuffer);
 
   if (baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height) {
-    throw new Error(
-      `Dimension mismatch: baseline ${baselinePng.width}x${baselinePng.height}, current ${currentPng.width}x${currentPng.height}.`
-    );
+    throw createDimensionMismatchError(baselinePng, currentPng);
+  }
+
+  const totalPixels = baselinePng.width * baselinePng.height;
+
+  if (baselinePng.data.equals(currentPng.data)) {
+    return {
+      width: baselinePng.width,
+      height: baselinePng.height,
+      differentPixels: 0,
+      totalPixels,
+      mismatchRatio: 0,
+      pct: 0,
+      pixelsChanged: 0
+    };
   }
 
   let differentPixels = 0;
@@ -35,7 +49,6 @@ export function compareBuffers(baselineBuffer, currentBuffer) {
     }
   }
 
-  const totalPixels = baselinePng.width * baselinePng.height;
   const mismatchRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
 
   return {

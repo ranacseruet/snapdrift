@@ -464,14 +464,16 @@ describe('generateDriftReport', () => {
     expect(summary.changed[0].status).toBe('changed');
   });
 
-  it('records dimension-changed and skips PNG comparison when manifest dimensions differ', async () => {
+  it('treats manifest dimension differences as a changed signal under the default v1 comparison', async () => {
     const routeId = 'root-index-desktop';
+    const imagePath = 'screenshots/r.png';
 
     const opts = await setupFixtures(tempDir, {
       routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
-      baselineEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 1440, 1266)],
-      currentEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 1440, 1092)]
-      // No PNG files created — dimension check happens before any PNG read.
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 2)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 1)],
+      baselinePngs: [{ relPath: imagePath, width: 4, height: 2, r: 0, g: 0, b: 0 }],
+      currentPngs: [{ relPath: imagePath, width: 4, height: 1, r: 0, g: 0, b: 0 }]
     });
 
     const { summary } = await generateDriftReport({
@@ -479,20 +481,25 @@ describe('generateDriftReport', () => {
       routeIds: [routeId]
     });
 
-    expect(summary.status).toBe('incomplete');
-    expect(summary.dimensionChanges).toHaveLength(1);
-    expect(summary.dimensionChanges[0]).toMatchObject({
+    expect(summary.status).toBe('changes-detected');
+    expect(summary.comparisonPolicy).toEqual({ version: 1, threshold: 0.01 });
+    expect(summary.dimensionChanges).toHaveLength(0);
+    expect(summary.changedScreenshots).toBe(1);
+    expect(summary.changed[0]).toMatchObject({
       id: routeId,
-      viewport: 'desktop',
-      baselineWidth: 1440,
-      baselineHeight: 1266,
-      currentWidth: 1440,
-      currentHeight: 1092,
-      status: 'dimension-changed'
+      differentPixels: 4,
+      totalPixels: 8,
+      mismatchRatio: 0.5,
+      comparison: {
+        baseline: { width: 4, height: 2 },
+        current: { width: 4, height: 1 },
+        canvas: { width: 4, height: 2 },
+        dimensionsChanged: true,
+        totalPixels: 8
+      }
     });
     expect(summary.errors).toHaveLength(0);
     expect(summary.matchedScreenshots).toBe(0);
-    expect(summary.changedScreenshots).toBe(0);
   });
 
   it('classifies v1 dimension changes as changed and preserves comparison metadata and diff path', async () => {
@@ -540,6 +547,29 @@ describe('generateDriftReport', () => {
     expect([...diffPng.data.slice(8, 12)]).toEqual([255, 0, 0, 255]);
   });
 
+  it('falls back to diff.threshold when a programmatic policy omits threshold', async () => {
+    const routeId = 'root-index-desktop';
+    const imagePath = 'screenshots/r.png';
+
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 2)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 2, 2)],
+      baselinePngs: [{ relPath: imagePath, width: 2, height: 2, r: 0, g: 0, b: 0 }],
+      currentPngs: [{ relPath: imagePath, width: 2, height: 2, r: 0, g: 0, b: 0 }],
+      threshold: 0.5
+    });
+
+    const { summary } = await generateDriftReport({
+      ...opts,
+      routeIds: [routeId],
+      comparisonPolicy: /** @type {any} */ ({ version: 1 })
+    });
+
+    expect(summary.threshold).toBe(0.5);
+    expect(summary.comparisonPolicy).toEqual({ version: 1, threshold: 0.5 });
+  });
+
   it('uses <= threshold for equal-size v1 comparisons while dimensions remain an independent signal', async () => {
     const routeId = 'threshold-route';
     const imagePath = 'screenshots/threshold.png';
@@ -577,6 +607,47 @@ describe('generateDriftReport', () => {
     });
     expect(aboveThreshold.summary.status).toBe('changes-detected');
     expect(aboveThreshold.summary.changed[0].mismatchRatio).toBe(0.5);
+  });
+
+  it('writes diff images only for changed routes when diffImagesDir is provided', async () => {
+    const diffImagesDir = path.join(tempDir, 'out', 'diffs');
+    const routes = [
+      { id: 'matched', path: '/matched', viewport: 'desktop' },
+      { id: 'changed', path: '/changed', viewport: 'desktop' }
+    ];
+
+    const opts = await setupFixtures(tempDir, {
+      routes,
+      baselineEntries: [
+        makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 4, 4),
+        makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 4, 4)
+      ],
+      currentEntries: [
+        makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 4, 4),
+        makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 4, 4)
+      ],
+      baselinePngs: [
+        { relPath: 'screenshots/matched.png', width: 4, height: 4, r: 10, g: 10, b: 10 },
+        { relPath: 'screenshots/changed.png', width: 4, height: 4, r: 255, g: 255, b: 255 }
+      ],
+      currentPngs: [
+        { relPath: 'screenshots/matched.png', width: 4, height: 4, r: 10, g: 10, b: 10 },
+        { relPath: 'screenshots/changed.png', width: 4, height: 4, r: 0, g: 0, b: 0 }
+      ]
+    });
+
+    const { summary } = await generateDriftReport({
+      ...opts,
+      routeIds: routes.map((route) => route.id),
+      diffImagesDir
+    });
+
+    expect(summary.matchedScreenshots).toBe(1);
+    expect(summary.changedScreenshots).toBe(1);
+    expect(summary.changed[0].diffImagePath).toBe('diffs/changed.png');
+
+    const written = (await fs.readdir(diffImagesDir)).sort();
+    expect(written).toEqual(['changed.png']);
   });
 
   it('records missingInCurrent when a route is absent from the current manifest', async () => {
@@ -776,50 +847,24 @@ describe('generateDriftReport', () => {
       baselineEntries: [
         makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 10, 10),
         makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 10, 10),
-        makeManifestEntry('dim-changed', 'mobile', 'screenshots/dim-changed.png', 1170, 6315),
+        makeManifestEntry('dim-changed', 'mobile', 'screenshots/dim-changed.png', 4, 2),
         makeManifestEntry('no-current', 'desktop', 'screenshots/no-current.png', 10, 10)
       ],
       currentEntries: [
         makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 10, 10),
         makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 10, 10),
-        makeManifestEntry('dim-changed', 'mobile', 'screenshots/dim-changed.png', 1170, 5853),
+        makeManifestEntry('dim-changed', 'mobile', 'screenshots/dim-changed.png', 4, 1),
         makeManifestEntry('no-baseline', 'desktop', 'screenshots/no-baseline.png', 10, 10)
       ],
       baselinePngs: [
-        {
-          relPath: 'screenshots/matched.png',
-          width: 10,
-          height: 10,
-          r: 200,
-          g: 200,
-          b: 200
-        },
-        {
-          relPath: 'screenshots/changed.png',
-          width: 10,
-          height: 10,
-          r: 255,
-          g: 255,
-          b: 255
-        }
+        { relPath: 'screenshots/matched.png', width: 10, height: 10, r: 200, g: 200, b: 200 },
+        { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 255, g: 255, b: 255 },
+        { relPath: 'screenshots/dim-changed.png', width: 4, height: 2, r: 100, g: 100, b: 100 }
       ],
       currentPngs: [
-        {
-          relPath: 'screenshots/matched.png',
-          width: 10,
-          height: 10,
-          r: 200,
-          g: 200,
-          b: 200
-        },
-        {
-          relPath: 'screenshots/changed.png',
-          width: 10,
-          height: 10,
-          r: 0,
-          g: 0,
-          b: 0
-        }
+        { relPath: 'screenshots/matched.png', width: 10, height: 10, r: 200, g: 200, b: 200 },
+        { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 0, g: 0, b: 0 },
+        { relPath: 'screenshots/dim-changed.png', width: 4, height: 1, r: 100, g: 100, b: 100 }
       ]
     });
 
@@ -829,9 +874,12 @@ describe('generateDriftReport', () => {
     });
 
     expect(summary.matchedScreenshots).toBe(1);
-    expect(summary.changedScreenshots).toBe(1);
-    expect(summary.dimensionChanges).toHaveLength(1);
-    expect(summary.dimensionChanges[0].id).toBe('dim-changed');
+    expect(summary.changedScreenshots).toBe(2);
+    expect(summary.dimensionChanges).toHaveLength(0);
+    expect(summary.changed.map((item) => item.id).sort()).toEqual(['changed', 'dim-changed']);
+    expect(summary.changed.find((item) => item.id === 'dim-changed').comparison).toMatchObject({
+      dimensionsChanged: true
+    });
     expect(summary.missingInBaseline).toBe(1);
     expect(summary.missing.find((m) => m.id === 'no-baseline')).toMatchObject({
       location: 'baseline'
@@ -1026,9 +1074,9 @@ describe('generateDriftReport', () => {
     expect(summary.errors).toHaveLength(0);
   });
 
-  it('records an error when actual PNG dimensions differ even though manifest dimensions match', async () => {
+  it('compares using actual PNG dimensions when they differ from the manifest', async () => {
     // Manifest says both are 10x10, but the actual current PNG is 10x20.
-    // The manifest pre-check passes, comparePngs reads the files and throws.
+    // The v1 comparator uses the decoded dimensions, not the manifest metadata.
     const routeId = 'root-index-desktop';
     const imagePath = 'screenshots/r.png';
 
@@ -1045,8 +1093,14 @@ describe('generateDriftReport', () => {
       routeIds: [routeId]
     });
 
-    expect(summary.errors).toHaveLength(1);
-    expect(summary.errors[0].message).toMatch(/Dimension mismatch/);
+    expect(summary.errors).toHaveLength(0);
+    expect(summary.changedScreenshots).toBe(1);
+    expect(summary.changed[0].comparison).toMatchObject({
+      baseline: { width: 10, height: 10 },
+      current: { width: 10, height: 20 },
+      canvas: { width: 10, height: 20 },
+      dimensionsChanged: true
+    });
   });
 
   it('throws when there are duplicate screenshot ids in a manifest', async () => {
@@ -1138,13 +1192,16 @@ describe('generateDriftReport', () => {
       expect(markdown).toContain('Mismatch');
     });
 
-    it('describes dimension changes with baseline/current dimensions and next-step guidance', async () => {
+    it('describes comparison dimension changes with baseline/current/canvas dimensions', async () => {
       const routeId = 'root-index-desktop';
+      const imagePath = 'screenshots/r.png';
 
       const opts = await setupFixtures(tempDir, {
         routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
-        baselineEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 1440, 1266)],
-        currentEntries: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 1440, 1092)]
+        baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 2)],
+        currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 1)],
+        baselinePngs: [{ relPath: imagePath, width: 4, height: 2, r: 0, g: 0, b: 0 }],
+        currentPngs: [{ relPath: imagePath, width: 4, height: 1, r: 0, g: 0, b: 0 }]
       });
 
       const { markdown } = await generateDriftReport({
@@ -1152,10 +1209,9 @@ describe('generateDriftReport', () => {
         routeIds: [routeId]
       });
 
-      expect(markdown).toContain('1440×1266');
-      expect(markdown).toContain('1440×1092');
-      expect(markdown).toMatch(/Next step/i);
-      expect(markdown).toMatch(/refresh the baseline/i);
+      expect(markdown).toContain('union canvas');
+      expect(markdown).toContain('4×2');
+      expect(markdown).toContain('4×1');
     });
 
     it('includes baseline artifact name and SHA when provided', async () => {

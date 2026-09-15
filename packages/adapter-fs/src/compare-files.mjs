@@ -115,7 +115,7 @@ export async function resolveImagePath(runDir, relativeImagePath) {
  *
  * @param {string} baselinePath
  * @param {string} currentPath
- * @param {{ comparisonPolicy?: import('@snapdrift/manifest').ComparisonPolicy }} [options]
+ * @param {{ comparisonPolicy?: import('@snapdrift/manifest').ComparisonPolicy, renderDiffImage?: boolean }} [options]
  * @returns {Promise<import('@snapdrift/compare-core').CompareBuffersResult | import('@snapdrift/compare-core').CompareImagesResult>}
  */
 export async function comparePngs(baselinePath, currentPath, options = {}) {
@@ -123,9 +123,12 @@ export async function comparePngs(baselinePath, currentPath, options = {}) {
     fs.readFile(baselinePath),
     fs.readFile(currentPath)
   ]);
-  return options.comparisonPolicy
-    ? compareImages(baselineBuffer, currentBuffer, {})
-    : compareBuffers(baselineBuffer, currentBuffer);
+  if (!options.comparisonPolicy) {
+    return compareBuffers(baselineBuffer, currentBuffer);
+  }
+  return compareImages(baselineBuffer, currentBuffer, {
+    ...(options.renderDiffImage === undefined ? {} : { renderDiffImage: options.renderDiffImage })
+  });
 }
 
 /**

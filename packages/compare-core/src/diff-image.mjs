@@ -2,6 +2,8 @@
 
 import pngjs from 'pngjs';
 
+import { buildIgnoreMask, createDimensionMismatchError, parseHighlightColor, validateIgnoreRegions } from './shared.mjs';
+
 const { PNG } = pngjs;
 
 const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
@@ -11,7 +13,7 @@ const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
  * Generate a visual diff PNG buffer from two image buffers.
  * Changed pixels are highlighted with the specified color;
  * unchanged pixels retain their original color.
- * Pixels inside ignore regions are overlaid with a neutral semi-transparent gray.
+ * Pixels inside ignore regions are painted with a neutral semi-transparent gray.
  *
  * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
  * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
@@ -24,31 +26,15 @@ export function generateDiffImage(baselineBuffer, currentBuffer, options = {}) {
   const currentPng = PNG.sync.read(currentBuffer);
 
   if (baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height) {
-    throw new Error(
-      `Dimension mismatch: baseline ${baselinePng.width}x${baselinePng.height}, current ${currentPng.width}x${currentPng.height}.`
-    );
+    throw createDimensionMismatchError(baselinePng, currentPng);
   }
 
-  const [r, g, b, a] = options.highlightColor || DEFAULT_HIGHLIGHT_COLOR;
+  const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
   const width = baselinePng.width;
   const height = baselinePng.height;
   const ignoreRegions = options.ignoreRegions || [];
-
-  let ignored;
-  if (ignoreRegions.length > 0) {
-    ignored = new Uint8Array(width * height);
-    for (const region of ignoreRegions) {
-      const xStart = Math.max(0, region.x);
-      const yStart = Math.max(0, region.y);
-      const xEnd = Math.min(width, region.x + region.width);
-      const yEnd = Math.min(height, region.y + region.height);
-      for (let y = yStart; y < yEnd; y++) {
-        for (let x = xStart; x < xEnd; x++) {
-          ignored[y * width + x] = 1;
-        }
-      }
-    }
-  }
+  validateIgnoreRegions(ignoreRegions);
+  const ignored = buildIgnoreMask(width, height, ignoreRegions);
 
   const diffPng = new PNG({ width, height });
 

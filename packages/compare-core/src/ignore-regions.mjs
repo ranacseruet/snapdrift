@@ -2,6 +2,8 @@
 
 import pngjs from 'pngjs';
 
+import { buildIgnoreMask, createDimensionMismatchError, validateIgnoreRegions } from './shared.mjs';
+
 const { PNG } = pngjs;
 
 /**
@@ -15,39 +17,25 @@ const { PNG } = pngjs;
  * @throws {Error} If image dimensions differ.
  */
 export function compareWithIgnoreRegions(baselineBuffer, currentBuffer, regions) {
+  validateIgnoreRegions(regions);
+
   const baselinePng = PNG.sync.read(baselineBuffer);
   const currentPng = PNG.sync.read(currentBuffer);
 
   if (baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height) {
-    throw new Error(
-      `Dimension mismatch: baseline ${baselinePng.width}x${baselinePng.height}, current ${currentPng.width}x${currentPng.height}.`
-    );
+    throw createDimensionMismatchError(baselinePng, currentPng);
   }
 
-  // Build a boolean mask: true means the pixel is in an ignore region.
   const width = baselinePng.width;
   const height = baselinePng.height;
-  const ignored = new Uint8Array(width * height);
-
-  for (const region of regions) {
-    const xStart = Math.max(0, region.x);
-    const yStart = Math.max(0, region.y);
-    const xEnd = Math.min(width, region.x + region.width);
-    const yEnd = Math.min(height, region.y + region.height);
-
-    for (let y = yStart; y < yEnd; y++) {
-      for (let x = xStart; x < xEnd; x++) {
-        ignored[y * width + x] = 1;
-      }
-    }
-  }
+  const ignored = buildIgnoreMask(width, height, regions);
 
   let differentPixels = 0;
   let totalPixels = 0;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (ignored[y * width + x]) {
+      if (ignored && ignored[y * width + x]) {
         continue;
       }
       totalPixels += 1;

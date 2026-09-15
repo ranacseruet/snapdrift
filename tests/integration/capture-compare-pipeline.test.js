@@ -243,30 +243,35 @@ describe('capture → compare → stage pipeline', () => {
             baselineEntries: [
                 makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 10, 10),
                 makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 10, 10),
-                makeManifestEntry('dim-shift', 'mobile', 'screenshots/dim-shift.png', 390, 844)
+                makeManifestEntry('dim-shift', 'mobile', 'screenshots/dim-shift.png', 8, 8)
             ],
             currentEntries: [
                 makeManifestEntry('matched', 'desktop', 'screenshots/matched.png', 10, 10),
                 makeManifestEntry('changed', 'desktop', 'screenshots/changed.png', 10, 10),
-                makeManifestEntry('dim-shift', 'mobile', 'screenshots/dim-shift.png', 390, 600)
+                makeManifestEntry('dim-shift', 'mobile', 'screenshots/dim-shift.png', 8, 6)
             ],
             baselinePngs: [
                 { relPath: 'screenshots/matched.png', width: 10, height: 10, r: 100, g: 100, b: 100 },
-                { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 255, g: 255, b: 255 }
+                { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 255, g: 255, b: 255 },
+                { relPath: 'screenshots/dim-shift.png', width: 8, height: 8, r: 10, g: 10, b: 10 }
             ],
             currentPngs: [
                 { relPath: 'screenshots/matched.png', width: 10, height: 10, r: 100, g: 100, b: 100 },
-                { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 0, g: 0, b: 0 }
+                { relPath: 'screenshots/changed.png', width: 10, height: 10, r: 0, g: 0, b: 0 },
+                { relPath: 'screenshots/dim-shift.png', width: 8, height: 6, r: 10, g: 10, b: 10 }
             ]
         });
 
         const { summary, markdown } = await generateDriftReport({ ...opts, routeIds: routes.map((r) => r.id) });
 
         expect(summary.matchedScreenshots).toBe(1);
-        expect(summary.changedScreenshots).toBe(1);
-        expect(summary.dimensionChanges).toHaveLength(1);
-        expect(summary.dimensionChanges[0].id).toBe('dim-shift');
-        expect(summary.status).toBe('incomplete');
+        expect(summary.changedScreenshots).toBe(2);
+        expect(summary.dimensionChanges).toHaveLength(0);
+        expect(summary.changed.map((item) => item.id).sort()).toEqual(['changed', 'dim-shift']);
+        expect(summary.changed.find((item) => item.id === 'dim-shift').comparison).toMatchObject({
+            dimensionsChanged: true
+        });
+        expect(summary.status).toBe('changes-detected');
 
         const summaryJsonPath = path.join(tempDir, 'drift', 'summary.json');
         const summaryMarkdownPath = path.join(tempDir, 'drift', 'summary.md');
@@ -290,13 +295,13 @@ describe('capture → compare → stage pipeline', () => {
 
         const stagedSummary = JSON.parse(await fs.readFile(path.join(bundleDir, 'summary.json'), 'utf8'));
         expect(stagedSummary.matchedScreenshots).toBe(1);
-        expect(stagedSummary.changedScreenshots).toBe(1);
-        expect(stagedSummary.dimensionChanges).toHaveLength(1);
-        expect(stagedSummary.status).toBe('incomplete');
+        expect(stagedSummary.changedScreenshots).toBe(2);
+        expect(stagedSummary.dimensionChanges).toHaveLength(0);
+        expect(stagedSummary.status).toBe('changes-detected');
 
         const stagedMarkdown = await fs.readFile(path.join(bundleDir, 'summary.md'), 'utf8');
-        expect(stagedMarkdown).toContain('Incomplete');
-        expect(stagedMarkdown).toContain('390\u00d7600');
+        expect(stagedMarkdown).toContain('Drift detected');
+        expect(stagedMarkdown).toContain('dim-shift');
     });
 
     it('produces a correct baseline bundle when staging a baseline capture', async () => {

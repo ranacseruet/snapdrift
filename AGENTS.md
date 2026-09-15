@@ -27,10 +27,10 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
 ### Three integration layers
 
 1. **`packages/`** — Workspace packages. The actual implementation lives here. Each package is a standalone npm package with its own `package.json` and `tests/`. The root `snapdrift` package depends on these.
-   - `@snapdrift/manifest` — Schema, validation, route-selection logic, viewport presets. Pure, zero I/O. (v1.3.0)
-   - `@snapdrift/compare-core` — Pure pixel-comparison engine using `pngjs`. No I/O. (v1.0.0)
-   - `@snapdrift/adapter-fs` — Filesystem I/O: config loading, capture, compare, staging, drift report generation, image resolution. (v1.1.0)
-   - `@snapdrift/adapter-report-md` — Pure markdown and HTML report generators. Depends on `@snapdrift/manifest`. (v1.1.0)
+   - `@snapdrift/manifest` — Schema, validation, route-selection logic, viewport presets. Pure, zero I/O. (v1.4.0)
+   - `@snapdrift/compare-core` — Pure pixel-comparison engine using `pngjs`. No I/O. Exports strict `compareBuffers` plus union-canvas `compareImages` (byte-equality fast path, optional `renderDiffImage`, input validation), `generateDiffImage`, and `compareWithIgnoreRegions`. (v1.2.0)
+   - `@snapdrift/adapter-fs` — Filesystem I/O: config loading, capture, compare, staging, drift report generation, image resolution. (v1.3.0)
+   - `@snapdrift/adapter-report-md` — Pure markdown and HTML report generators. Depends on `@snapdrift/manifest`. (v1.2.0)
 
 2. **`lib/`** — Thin re-export shims over the workspace packages. Preserved for backward compatibility with downstream callers that import `lib/capture-routes.mjs` etc. directly. New consumers should import from the workspace packages or from the `package.json` `exports` map.
    - `snapdrift-config.mjs` — Re-exports from `@snapdrift/manifest` and `@snapdrift/adapter-fs`

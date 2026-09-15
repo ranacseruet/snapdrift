@@ -389,4 +389,45 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.differentPixels).toBe(2);
     expect(result.mismatchRatio).toBe(1);
   });
+
+  test('short-circuits identical buffers and reuses the baseline buffer as the diff image', () => {
+    const baseline = solidPng(4, 3, [12, 34, 56, 255]);
+    const result = compareImages(baseline, baseline);
+
+    expect(result.differentPixels).toBe(0);
+    expect(result.totalPixels).toBe(12);
+    expect(result.mismatchRatio).toBe(0);
+    expect(result.diffImageBuffer).toBe(baseline);
+
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+    expect(diffPng.width).toBe(4);
+    expect(diffPng.height).toBe(3);
+    expect(diffPng.data[0]).toBe(12);
+  });
+
+  test('skips the diff image when renderDiffImage is false', () => {
+    const baseline = solidPng(4, 3, [12, 34, 56, 255]);
+    const changed = solidPng(4, 3, [0, 0, 0, 255]);
+
+    const identical = compareImages(baseline, baseline, { renderDiffImage: false });
+    expect(identical.diffImageBuffer).toBeUndefined();
+    expect(identical.mismatchRatio).toBe(0);
+
+    const different = compareImages(baseline, changed, { renderDiffImage: false });
+    expect(different.diffImageBuffer).toBeUndefined();
+    expect(different.differentPixels).toBe(12);
+    expect(different.mismatchRatio).toBe(1);
+  });
+
+  test('rejects malformed ignore regions and highlight colors', () => {
+    const baseline = solidPng(2, 1, [0, 0, 0, 255]);
+
+    expect(() => compareImages(baseline, baseline, { ignoreRegions: [/** @type {any} */ ({ x: 0.5, y: 0, width: 1, height: 1 })] })).toThrow(
+      /ignoreRegions\[0\]\.x must be a safe integer/
+    );
+    expect(() => compareImages(baseline, baseline, { ignoreRegions: [/** @type {any} */ ({ x: 0, y: 0, width: -1, height: 1 })] })).toThrow(
+      /width and .height must be non-negative/
+    );
+    expect(() => compareImages(baseline, baseline, { highlightColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
+  });
 });

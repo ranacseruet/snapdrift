@@ -2,6 +2,8 @@
 
 import pngjs from 'pngjs';
 
+import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
+
 const { PNG } = pngjs;
 
 /** Maximum union-canvas size accepted by the unequal-dimension comparator. */
@@ -36,35 +38,14 @@ export class ComparisonTooLargeError extends Error {
 }
 
 /**
- * @param {number} width
- * @param {number} height
- * @param {import('../types/index.d.ts').IgnoreRegion[]} regions
- * @returns {Uint8Array | undefined}
- */
-function buildIgnoreMask(width, height, regions) {
-  if (regions.length === 0) return undefined;
-
-  const ignored = new Uint8Array(width * height);
-  for (const region of regions) {
-    const xStart = Math.max(0, region.x);
-    const yStart = Math.max(0, region.y);
-    const xEnd = Math.min(width, region.x + region.width);
-    const yEnd = Math.min(height, region.y + region.height);
-    for (let y = yStart; y < yEnd; y++) {
-      for (let x = xStart; x < xEnd; x++) {
-        ignored[y * width + x] = 1;
-      }
-    }
-  }
-  return ignored;
-}
-
-/**
  * Compare two PNG buffers on a top-left-aligned union canvas and generate the
  * corresponding visual diff in the same pass over the decoded pixels.
  *
  * No threshold is applied here. Callers decide whether `mismatchRatio` is
  * actionable after aggregating the returned comparison metrics.
+ *
+ * When ignore regions cover the whole canvas, `totalPixels` is 0 and
+ * `mismatchRatio` is reported as 0, so the comparison is treated as matched.
  *
  * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
  * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.
@@ -73,6 +54,30 @@ function buildIgnoreMask(width, height, regions) {
  * @throws {ComparisonTooLargeError} If the union canvas exceeds the limit.
  */
 export function compareImages(baselineBuffer, currentBuffer, options = {}) {
+  const ignoreRegions = options.ignoreRegions || [];
+  validateIgnoreRegions(ignoreRegions);
+  const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
+  const renderDiffImage = options.renderDiffImage !== false;
+
+  // Best-effort pre-decode guard: reject oversized unions before allocating the
+  // decoded RGBA buffers, which are the largest allocations in this path.
+  const baselineHeader = readPngDimensions(baselineBuffer);
+  const currentHeader = readPngDimensions(currentBuffer);
+  if (baselineHeader && currentHeader) {
+    const headerCanvasWidth = Math.max(baselineHeader.width, currentHeader.width);
+    const headerCanvasHeight = Math.max(baselineHeader.height, currentHeader.height);
+    if (headerCanvasWidth * headerCanvasHeight > MAX_COMPARISON_PIXELS) {
+      throw new ComparisonTooLargeError(
+        baselineHeader.width,
+        baselineHeader.height,
+        currentHeader.width,
+        currentHeader.height,
+        headerCanvasWidth,
+        headerCanvasHeight
+      );
+    }
+  }
+
   const baselinePng = PNG.sync.read(baselineBuffer);
   const currentPng = PNG.sync.read(currentBuffer);
 
@@ -90,26 +95,55 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
     );
   }
 
-  const [r, g, b, a] = options.highlightColor || DEFAULT_HIGHLIGHT_COLOR;
-  const ignored = buildIgnoreMask(canvasWidth, canvasHeight, options.ignoreRegions || []);
-  const diffPng = new PNG({ width: canvasWidth, height: canvasHeight });
+  const dimensionsChanged = baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height;
+  const comparison = {
+    baseline: { width: baselinePng.width, height: baselinePng.height },
+    current: { width: currentPng.width, height: currentPng.height },
+    canvas: { width: canvasWidth, height: canvasHeight },
+    dimensionsChanged,
+    totalPixels: 0
+  };
+
+  // Fast path: identical dimensions and decoded pixels. The visual diff of an
+  // unchanged image is the image itself, so the baseline buffer can be reused.
+  if (!dimensionsChanged && ignoreRegions.length === 0 && baselinePng.data.equals(currentPng.data)) {
+    const totalPixels = canvasWidth * canvasHeight;
+    comparison.totalPixels = totalPixels;
+    return {
+      width: canvasWidth,
+      height: canvasHeight,
+      differentPixels: 0,
+      totalPixels,
+      mismatchRatio: 0,
+      pct: 0,
+      pixelsChanged: 0,
+      ...(renderDiffImage ? { diffImageBuffer: baselineBuffer } : {}),
+      comparison
+    };
+  }
+
+  const ignored = buildIgnoreMask(canvasWidth, canvasHeight, ignoreRegions);
+  const diffPng = renderDiffImage ? new PNG({ width: canvasWidth, height: canvasHeight }) : undefined;
   let differentPixels = 0;
   let totalPixels = 0;
 
   for (let y = 0; y < canvasHeight; y++) {
     for (let x = 0; x < canvasWidth; x++) {
-      const diffIndex = (y * canvasWidth + x) * 4;
+      const pixelIndex = y * canvasWidth + x;
+      const diffIndex = pixelIndex * 4;
       const inBaseline = x < baselinePng.width && y < baselinePng.height;
       const inCurrent = x < currentPng.width && y < currentPng.height;
       if (!inBaseline && !inCurrent) {
         continue;
       }
 
-      if (ignored && ignored[y * canvasWidth + x]) {
-        diffPng.data[diffIndex] = IGNORE_REGION_COLOR[0];
-        diffPng.data[diffIndex + 1] = IGNORE_REGION_COLOR[1];
-        diffPng.data[diffIndex + 2] = IGNORE_REGION_COLOR[2];
-        diffPng.data[diffIndex + 3] = IGNORE_REGION_COLOR[3];
+      if (ignored && ignored[pixelIndex]) {
+        if (diffPng) {
+          diffPng.data[diffIndex] = IGNORE_REGION_COLOR[0];
+          diffPng.data[diffIndex + 1] = IGNORE_REGION_COLOR[1];
+          diffPng.data[diffIndex + 2] = IGNORE_REGION_COLOR[2];
+          diffPng.data[diffIndex + 3] = IGNORE_REGION_COLOR[3];
+        }
         continue;
       }
 
@@ -127,7 +161,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
           baselinePng.data[baselineIndex + 2] !== currentPng.data[currentIndex + 2] ||
           baselinePng.data[baselineIndex + 3] !== currentPng.data[currentIndex + 3];
 
-        if (!changed) {
+        if (!changed && diffPng) {
           diffPng.data[diffIndex] = baselinePng.data[baselineIndex];
           diffPng.data[diffIndex + 1] = baselinePng.data[baselineIndex + 1];
           diffPng.data[diffIndex + 2] = baselinePng.data[baselineIndex + 2];
@@ -137,16 +171,18 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
 
       if (changed) {
         differentPixels += 1;
-        diffPng.data[diffIndex] = r;
-        diffPng.data[diffIndex + 1] = g;
-        diffPng.data[diffIndex + 2] = b;
-        diffPng.data[diffIndex + 3] = a;
+        if (diffPng) {
+          diffPng.data[diffIndex] = r;
+          diffPng.data[diffIndex + 1] = g;
+          diffPng.data[diffIndex + 2] = b;
+          diffPng.data[diffIndex + 3] = a;
+        }
       }
     }
   }
 
   const mismatchRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
-  const dimensionsChanged = baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height;
+  comparison.totalPixels = totalPixels;
 
   return {
     width: canvasWidth,
@@ -156,13 +192,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
     mismatchRatio,
     pct: mismatchRatio,
     pixelsChanged: differentPixels,
-    diffImageBuffer: PNG.sync.write(diffPng),
-    comparison: {
-      baseline: { width: baselinePng.width, height: baselinePng.height },
-      current: { width: currentPng.width, height: currentPng.height },
-      canvas: { width: canvasWidth, height: canvasHeight },
-      dimensionsChanged,
-      totalPixels
-    }
+    ...(diffPng ? { diffImageBuffer: PNG.sync.write(diffPng) } : {}),
+    comparison
   };
 }

@@ -48,7 +48,7 @@ You keep ownership of checkout, build, startup, readiness, and teardown. SnapDri
 
 ```yaml
 - name: SnapDrift Baseline
-  uses: ranacseruet/snapdrift@v0.10.0
+  uses: ranacseruet/snapdrift@v0.11.0
   with:
     mode: baseline
     repo-config-path: .github/snapdrift.json
@@ -60,7 +60,7 @@ With `provider: "snap"`, baseline publication is a complete, fail-closed snapsho
 
 ```yaml
 - name: SnapDrift Report
-  uses: ranacseruet/snapdrift@v0.10.0
+  uses: ranacseruet/snapdrift@v0.11.0
   with:
     mode: pr-diff
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +107,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 |------|--------------------|
 | `report-only` | Never |
 | `fail-on-changes` | Any capture exceeds threshold |
-| `fail-on-incomplete` | Captures are missing, dimensions shift, or comparison errors occur |
+| `fail-on-incomplete` | Captures are missing or comparison errors occur |
 | `strict` | Any drift signal or incomplete comparison appears |
 
 ## Current constraints
@@ -117,7 +117,7 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 - Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - Full-page comparisons are bounded to a 32 Mi-pixel union canvas; see the [screenshot size budget](docs/contracts.md#screenshot-size-budget) for viewport, device-scale, and remediation guidance
 - One global `diff.threshold`
-- Unequal dimensions remain strict by default; local updated clients may opt in with `diff.comparisonPolicy: { "version": 1, "threshold": number }`
+- Unequal dimensions compare on a top-left-aligned union canvas via comparison policy v1, which is always applied (synthesized from `diff.threshold` when `diff.comparisonPolicy` is absent)
 - Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
 - Hosted Snap baselines publish only from the default branch and always include the complete configured route set
 

@@ -48,11 +48,20 @@ export interface CompareResult {
 
 export type CompareBuffersResult = CompareResult;
 
-export interface CompareImagesOptions extends DiffImageOptions {}
+export interface CompareImagesOptions extends DiffImageOptions {
+  /**
+   * Whether to render and return `diffImageBuffer`. Default: `true`.
+   * Set to `false` to skip the PNG encode for callers that only need metrics.
+   */
+  renderDiffImage?: boolean;
+}
 
 export interface CompareImagesResult extends CompareResult {
-  /** Visual diff generated from the same decoded images as the metrics. */
-  diffImageBuffer: Buffer;
+  /**
+   * Visual diff generated from the same decoded images as the metrics.
+   * Absent when `renderDiffImage: false` was passed.
+   */
+  diffImageBuffer?: Buffer;
   /** Dimensions and effective denominator used by the union-canvas comparison. */
   comparison: ComparisonMetadata;
 }
