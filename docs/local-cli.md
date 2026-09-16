@@ -310,7 +310,7 @@ differ; `fail-on-changes` and `strict` still enforce it.
 
 | Variable | Applies to | Description |
 |:---------|:-----------|:------------|
-| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture`, `diff` | Max concurrent route operations (positive integer, default `5`): route captures per viewport context, and per-route resolve/compare during `diff`. Set to `1` to restore serial behavior for apps with shared session or auth state. |
+| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture`, `diff` | Max concurrent route operations (positive integer, default `5`): route captures per viewport group, and per-route resolve/compare during `diff`. Each local capture attempt uses isolated browser storage. Set to `1` to serialize captures within each viewport group, without sharing storage. |
 | `SNAPDRIFT_CONFIG_PATH` | `capture`, `diff`, `migrate-baselines` | Override the config file path. Equivalent to `--config`. |
 | `SNAPDRIFT_ROUTE_IDS` | `capture`, `baseline`, `diff` | Comma-separated route ids to scope to. Equivalent to `--routes`; it may not reduce a hosted baseline's complete route set. |
 

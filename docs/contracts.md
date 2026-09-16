@@ -349,6 +349,14 @@ that matches the product behavior. Do not resize or crop screenshots, or lower
 | Screenshot animations | `disabled` (Playwright finishes/cancels CSS animations before capture) |
 | Capture concurrency | 5 routes per viewport (overridable via `SNAPDRIFT_CAPTURE_CONCURRENCY`)|
 
+Local Playwright captures use a fresh browser context for every route attempt,
+including retries. Cookies and browser storage are not shared between routes,
+even when routes share a viewport or run serially. This also applies to Snap's
+local-capture hybrid, not to rendering performed by the hosted service. Viewport
+groups still run concurrently, with the configured limit applied per group.
+Previously leaked storage may have affected existing baselines; recapture them
+after upgrading if storage-dependent UI produces a one-time change.
+
 ## Local CLI directory layout
 
 When using the `snapdrift` CLI, outputs are written to `.snapdrift/` by default:
@@ -567,7 +575,7 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 | `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-results.mjs` | Baseline artifact label to embed in the report |
 | `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
 | `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
-| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures per viewport context (positive integer, default `5`). Set to `1` to restore serial behaviour for apps with shared session/auth state. |
+| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures per viewport group (positive integer, default `5`). Each local attempt uses a fresh browser context. Set to `1` to serialize each group without sharing storage. |
 
 ## PR comment markdown shape
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Isolate each local route capture and retry in a fresh browser context, preventing
+  cookies and browser storage from leaking between routes sharing a viewport.
+  Per-viewport concurrency and result ordering are preserved. This also fixes
+  Snap local-capture hybrid runs; recapture baselines affected by leaked storage.
+
 ## 0.12.0 - 2026-09-16
 
 ### Fixes

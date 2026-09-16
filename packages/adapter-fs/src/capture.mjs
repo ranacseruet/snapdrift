@@ -110,37 +110,18 @@ function viewportContextOptions(viewport) {
 
 /**
  * @param {import('playwright').Browser} browser
- * @returns {Promise<Map<'desktop' | 'mobile', import('playwright').BrowserContext>>}
- */
-async function createViewportContexts(browser) {
-  return new Map([
-    ['desktop', await browser.newContext({
-      viewport: { width: VIEWPORT_PRESETS.desktop.width, height: VIEWPORT_PRESETS.desktop.height },
-      deviceScaleFactor: VIEWPORT_PRESETS.desktop.deviceScaleFactor,
-      isMobile: VIEWPORT_PRESETS.desktop.isMobile,
-      hasTouch: VIEWPORT_PRESETS.desktop.hasTouch
-    })],
-    ['mobile', await browser.newContext({
-      viewport: { width: VIEWPORT_PRESETS.mobile.width, height: VIEWPORT_PRESETS.mobile.height },
-      deviceScaleFactor: VIEWPORT_PRESETS.mobile.deviceScaleFactor,
-      isMobile: VIEWPORT_PRESETS.mobile.isMobile,
-      hasTouch: VIEWPORT_PRESETS.mobile.hasTouch
-    })]
-  ]);
-}
-
-/**
- * @param {import('playwright').BrowserContext} context
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
  * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
  */
-async function captureRoute(context, route, baseUrl, screenshotsRoot) {
+async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
   const startedAt = Date.now();
+  let context;
 
-  const page = await context.newPage();
   try {
+    context = await browser.newContext(viewportContextOptions(route.viewport));
+    const page = await context.newPage();
     const targetUrl = new URL(route.path, baseUrl).toString();
     const response = await page.goto(targetUrl, {
       waitUntil: 'load',
@@ -189,33 +170,30 @@ async function captureRoute(context, route, baseUrl, screenshotsRoot) {
       error: error instanceof Error ? error.message : String(error)
     };
   } finally {
-    await page.close();
+    await context?.close();
   }
 }
 
 const CAPTURE_MAX_RETRIES = 1;
 
 /**
- * @param {import('playwright').BrowserContext} context
+ * @param {import('playwright').Browser} browser
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
  * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
  */
-async function captureRouteWithRetry(context, route, baseUrl, screenshotsRoot) {
-  let result = await captureRoute(context, route, baseUrl, screenshotsRoot);
+async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
+  let result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
   for (let attempt = 1; attempt <= CAPTURE_MAX_RETRIES && result.status !== 'passed'; attempt++) {
     console.log(`[SnapDrift] Retrying route ${route.id} (attempt ${attempt + 1}/${CAPTURE_MAX_RETRIES + 1})...`);
-    result = await captureRoute(context, route, baseUrl, screenshotsRoot);
+    result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
   }
   return result;
 }
 
 /**
- * Captures all routes for a single viewport context concurrently (up to SNAPDRIFT_CAPTURE_CONCURRENCY
- * at a time), logging progress. Results are written to `out` by original route index to preserve order.
- *
- * @param {import('playwright').BrowserContext} context
+ * @param {import('playwright').Browser} browser
  * @param {Array<{ route: SnapdriftRouteConfig, originalIndex: number }>} entries
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
@@ -223,7 +201,7 @@ async function captureRouteWithRetry(context, route, baseUrl, screenshotsRoot) {
  * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
  * @returns {Promise<void>}
  */
-async function captureViewportRoutes(context, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
+async function captureViewportRoutes(browser, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
   const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
   await Promise.all(entries.map(({ route, originalIndex }) =>
     limit(async () => {
@@ -238,7 +216,7 @@ async function captureViewportRoutes(context, entries, baseUrl, screenshotsRoot,
         targetUrl = new URL(route.path, baseUrl).toString();
       } catch { /* keep the raw path for the log line */ }
       console.log(`[SnapDrift] Capturing route ${originalIndex + 1}/${totalRoutes}: ${route.id} (${viewportLabel(route.viewport)}) -> ${targetUrl}`);
-      out[originalIndex] = await captureRouteWithRetry(context, route, baseUrl, screenshotsRoot);
+      out[originalIndex] = await captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot);
     })
   ));
 }
@@ -296,10 +274,6 @@ export async function runBaselineCapture(options = {}) {
   };
 
   const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'] });
-  // Pre-create contexts for the two standard presets; custom viewports are created on demand below.
-  const presetContexts = await createViewportContexts(browser);
-  /** @type {Map<string, import('playwright').BrowserContext>} */
-  const allContexts = new Map(presetContexts);
   let failures = 0;
 
   try {
@@ -316,34 +290,13 @@ export async function runBaselineCapture(options = {}) {
       }
     }
 
-    // Create browser contexts for any custom viewports not covered by presets.
-    for (const [key, entries] of byViewport) {
-      if (!allContexts.has(key)) {
-        try {
-          allContexts.set(key, await browser.newContext(viewportContextOptions(entries[0].route.viewport)));
-        } catch (err) {
-          const message = `Failed to create browser context: ${err instanceof Error ? err.message : String(err)}`;
-          for (const { route } of entries) {
-            results.routes.push({ id: route.id, path: route.path, viewport: route.viewport, status: 'failed', durationMs: 0, error: message });
-            failures += 1;
-          }
-          throw err;
-        }
-      }
-    }
-
     // Pre-allocate results array; captureViewportRoutes fills slots by originalIndex.
     /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} */
     const captureResults = new Array(routes.length);
 
-    // Run each viewport group concurrently; routes within a group stay sequential.
-    await Promise.all([...byViewport.entries()].map(([key, entries]) => {
-      const context = allContexts.get(key);
-      if (!context) {
-        throw new Error(`No browser context for viewport: ${key}`);
-      }
-      return captureViewportRoutes(context, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults);
-    }));
+    await Promise.all([...byViewport.values()].map((entries) =>
+      captureViewportRoutes(browser, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults)
+    ));
 
     // Merge results in original route order.
     for (const capture of captureResults) {
@@ -366,7 +319,6 @@ export async function runBaselineCapture(options = {}) {
       }
     }
   } finally {
-    await Promise.all([...allContexts.values()].map((context) => context.close()));
     await browser.close();
     results.finishedAt = new Date().toISOString();
     results.passed = failures === 0;
