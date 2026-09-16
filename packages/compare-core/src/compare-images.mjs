@@ -10,11 +10,16 @@ const { PNG } = pngjs;
  * Default maximum union-canvas size accepted by the unequal-dimension
  * comparator.
  *
- * This is a *process memory* bound, not a property of the algorithm: a decoded
- * RGBA union canvas plus the diff canvas costs roughly 8 bytes per union pixel,
- * so 32 Mi pixels peaks near 1.3 GB. Callers running in a larger memory envelope
+ * This is a *process memory* bound, not a property of the algorithm. The
+ * comparison holds both decoded RGBA inputs (4 bytes per pixel each) plus, when
+ * `renderDiffImage` is enabled (the default), a union-sized diff canvas —
+ * at least ~12 bytes per union pixel when both inputs approach the union
+ * dimensions, before PNG decode/encode overhead. End-to-end RSS measured on
+ * real full-page captures runs ~32-35 bytes per union pixel: ~1.16 GB at 33.8 M
+ * pixels and ~3.37 GB at 103.9 M. Callers running in a larger memory envelope
  * (e.g. a dedicated diff Lambda) may pass a higher `maxPixels`; callers sharing a
- * small host must keep this default. See `CompareImagesOptions.maxPixels`.
+ * small host must keep this default and should size against their own
+ * measurement, not this arithmetic. See `CompareImagesOptions.maxPixels`.
  */
 export const MAX_COMPARISON_PIXELS = 32 * 1024 * 1024;
 const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);

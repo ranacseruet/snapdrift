@@ -57,9 +57,13 @@ export interface CompareImagesOptions extends DiffImageOptions {
   /**
    * Maximum union-canvas pixels this comparison may allocate. Defaults to
    * `MAX_COMPARISON_PIXELS` (32 Mi). Raise it only when the calling process has a
-   * memory envelope large enough for the decoded union plus diff canvases
-   * (roughly 8 bytes per union pixel); a missing or non-positive value falls back
-   * to the default so the guard cannot be removed accidentally.
+   * memory envelope large enough for both decoded inputs plus the optional diff
+   * canvas — at least ~12 bytes per union pixel when both inputs approach the
+   * union dimensions, and measured end-to-end at ~32-35 bytes per union pixel on
+   * real full-page captures. Size against your own measurement, not the
+   * arithmetic: this is a process-memory bound, not an algorithm property. A
+   * missing, non-positive, or non-finite value falls back to the default so the
+   * guard cannot be removed accidentally.
    */
   maxPixels?: number;
 }

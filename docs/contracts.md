@@ -300,14 +300,22 @@ The comparator reports this condition with the stable error code
 dimensions in the error message. The ceiling that was exceeded is included too,
 since a caller may raise it per call.
 
-`32 × 1024 × 1024` is the *default* ceiling, not an algorithm property: a decoded
-RGBA union canvas plus the diff canvas costs roughly 8 bytes per union pixel, so
-the default bounds a comparison to a process with around 1.3 GB of headroom.
+`32 × 1024 × 1024` is the *default* ceiling, not an algorithm property. The cost
+is dominated by the decoded images: both RGBA inputs (4 bytes per pixel each) are
+retained plus, when the diff image is rendered (the default), a union-sized diff
+canvas — at least ~12 bytes per union pixel when both inputs approach the union
+dimensions, before PNG decode/encode overhead. Measured end-to-end RSS on real
+full-page captures is ~32-35 bytes per union pixel (~1.16 GB at 33.8 M pixels,
+~3.37 GB at 103.9 M), so the default bounds a comparison to a process with a few
+GB of headroom.
+
 Direct `@snapdrift/compare-core` callers running in a larger memory envelope can
-pass `compareImages(..., { maxPixels })` to raise it for that call. A missing,
-non-positive, or non-finite `maxPixels` falls back to the default. SnapDrift's own
-local and hosted paths keep the default, because the host process — not the image
-— decides how much memory is actually safe.
+pass `compareImages(..., { maxPixels })` to raise it for that call. **Size
+`maxPixels` against your own measured peak**, not against the byte-per-pixel
+arithmetic: PNG decode and encode overhead, GC, and concurrency all add to it. A
+missing, non-positive, or non-finite `maxPixels` falls back to the default.
+SnapDrift's own local and hosted paths keep the default, because the host process
+— not the image — decides how much memory is actually safe.
 
 Approximate maximum full-page CSS heights below
 assume that the raster width remains equal to the configured CSS width and that
