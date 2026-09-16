@@ -28,18 +28,21 @@ const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
 /**
  * Resolve the effective union-canvas ceiling for a comparison.
  *
- * A missing, non-finite, or non-positive override falls back to the default so a
+ * A missing, non-finite, or sub-1 override falls back to the default so a
  * misconfigured caller cannot accidentally remove the guard (which would let a
- * single tall image OOM the process).
+ * single tall image OOM the process) or set a ceiling that rejects every
+ * comparison. The value is floored *before* the check: a positive fraction such
+ * as `0.5` floors to `0`, which would otherwise pass a `<= 0` guard.
  *
  * @param {number | undefined} maxPixels
  * @returns {number}
  */
 function resolveMaxPixels(maxPixels) {
-  if (typeof maxPixels !== 'number' || !Number.isFinite(maxPixels) || maxPixels <= 0) {
+  if (typeof maxPixels !== 'number' || !Number.isFinite(maxPixels)) {
     return MAX_COMPARISON_PIXELS;
   }
-  return Math.floor(maxPixels);
+  const floored = Math.floor(maxPixels);
+  return floored >= 1 ? floored : MAX_COMPARISON_PIXELS;
 }
 
 /**

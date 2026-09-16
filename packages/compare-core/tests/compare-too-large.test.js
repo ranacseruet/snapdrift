@@ -107,4 +107,37 @@ describe('@snapdrift/compare-core — comparison size limit', () => {
       expect(error.message).toContain(`exceeds the maximum of ${MAX_COMPARISON_PIXELS} pixels`);
     }
   });
+
+  test('does not turn a positive sub-1 maxPixels into a reject-everything ceiling', () => {
+    // Regression: flooring after the positivity check made `0.5` floor to a `0`
+    // ceiling, which rejected every comparison instead of falling back.
+    const pixels = Buffer.alloc(0);
+
+    for (const maxPixels of [0.5, 0.9, 0.999]) {
+      readPng.mockReset();
+      readPng
+        .mockReturnValueOnce({ width: 4, height: 4, data: pixels })
+        .mockReturnValueOnce({ width: 4, height: 4, data: pixels });
+
+      const result = compareImages(Buffer.alloc(0), Buffer.alloc(0), {
+        maxPixels,
+        renderDiffImage: false
+      });
+      expect(result.comparison.canvas).toEqual({ width: 4, height: 4 });
+    }
+  });
+
+  test('floors a fractional maxPixels before applying it', () => {
+    const pixels = Buffer.alloc(0);
+    readPng
+      .mockReturnValueOnce({ width: 16, height: 1, data: pixels })
+      .mockReturnValueOnce({ width: 16, height: 1, data: pixels });
+
+    // 16.9 floors to 16, which still admits a 16-pixel union.
+    const result = compareImages(Buffer.alloc(0), Buffer.alloc(0), {
+      maxPixels: 16.9,
+      renderDiffImage: false
+    });
+    expect(result.comparison.canvas).toEqual({ width: 16, height: 1 });
+  });
 });

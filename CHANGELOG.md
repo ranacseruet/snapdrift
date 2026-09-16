@@ -30,9 +30,11 @@
   idempotency, and storage behavior as if it succeeded. Both contradicted the
   CLI, which has failed the direction since 0.7.0 with a pointer to
   `snapdrift baseline`.
-- Correct the screenshot size budget's memory estimate: the comparison retains both
-  decoded RGBA inputs plus the optional diff canvas, so the floor is roughly 12
-  bytes per union pixel before PNG overhead (~32-35 measured end to end), not 8.
+- Document the screenshot size budget's memory cost for `maxPixels` callers: the
+  comparison retains both decoded RGBA inputs plus the optional diff canvas, so the
+  floor is roughly 12 bytes per union pixel before PNG overhead (~32-35 measured end
+  to end), and the ceiling should be sized against a measured peak rather than that
+  arithmetic.
 
 ### Workspace packages
 

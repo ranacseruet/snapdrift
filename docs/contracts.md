@@ -313,7 +313,9 @@ Direct `@snapdrift/compare-core` callers running in a larger memory envelope can
 pass `compareImages(..., { maxPixels })` to raise it for that call. **Size
 `maxPixels` against your own measured peak**, not against the byte-per-pixel
 arithmetic: PNG decode and encode overhead, GC, and concurrency all add to it. A
-missing, non-positive, or non-finite `maxPixels` falls back to the default.
+missing, non-finite, or sub-1 `maxPixels` falls back to the default; fractions are
+floored (`16.9` becomes `16`). The sub-1 rule matters because a positive fraction
+such as `0.5` floors to `0`, which would otherwise reject every comparison.
 SnapDrift's own local and hosted paths keep the default, because the host process
 — not the image — decides how much memory is actually safe.
 

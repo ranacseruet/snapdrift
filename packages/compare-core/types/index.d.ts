@@ -62,8 +62,9 @@ export interface CompareImagesOptions extends DiffImageOptions {
    * union dimensions, and measured end-to-end at ~32-35 bytes per union pixel on
    * real full-page captures. Size against your own measurement, not the
    * arithmetic: this is a process-memory bound, not an algorithm property. A
-   * missing, non-positive, or non-finite value falls back to the default so the
-   * guard cannot be removed accidentally.
+   * missing, non-finite, or sub-1 value falls back to the default so the guard
+   * cannot be removed accidentally or reduced to a ceiling that rejects every
+   * comparison. Fractions are floored (`16.9` becomes `16`).
    */
   maxPixels?: number;
 }
