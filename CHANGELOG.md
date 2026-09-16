@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-09-16
 
 ### Fixes
 
@@ -30,6 +30,16 @@
   idempotency, and storage behavior as if it succeeded. Both contradicted the
   CLI, which has failed the direction since 0.7.0 with a pointer to
   `snapdrift baseline`.
+- Correct the screenshot size budget's memory estimate: the comparison retains both
+  decoded RGBA inputs plus the optional diff canvas, so the floor is roughly 12
+  bytes per union pixel before PNG overhead (~32-35 measured end to end), not 8.
+
+### Workspace packages
+
+- `@snapdrift/adapter-report-md` 1.2.1 publishes the `[object Object]` viewport fix;
+  `@snapdrift/compare-core` 1.3.0 publishes the per-call `maxPixels` option and the
+  corrected size-budget guidance. The root `snapdrift` package's dependency ranges
+  are updated to match.
 
 ## 0.11.0 - 2026-09-14
 
