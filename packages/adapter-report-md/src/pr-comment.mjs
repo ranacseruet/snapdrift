@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
 
 export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
 export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
@@ -105,7 +105,7 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('| Route | Viewport | Error |');
     lines.push('|:------|:---------|:------|');
     for (const item of errors.slice(0, maxErrorRows)) {
-      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${escapeMarkdown(item.message)} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${escapeMarkdown(item.message)} |`);
     }
     if (errorCount > maxErrorRows) {
       lines.push('');
@@ -133,9 +133,9 @@ export function buildReportCommentBody(summary, meta = {}) {
     for (const item of changed.slice(0, maxChangedRows)) {
       const percentChanged = typeof item.mismatchRatio === 'number' ? formatPercentage(item.mismatchRatio) : 'n/a';
       if (comparisonDetails) {
-        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${percentChanged} | ${item.differentPixels ?? '—'}/${item.totalPixels ?? '—'} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
+        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${percentChanged} | ${item.differentPixels ?? '—'}/${item.totalPixels ?? '—'} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
       } else {
-        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${percentChanged} |`);
+        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${percentChanged} |`);
       }
     }
     if (changed.length > maxChangedRows) {
@@ -160,7 +160,7 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('| Route | Viewport | Baseline | Current |');
     lines.push('|:------|:---------|:---------|:--------|');
     for (const item of dimensionChanges) {
-      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} |`);
     }
     lines.push('');
     lines.push('</details>');
@@ -173,10 +173,10 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('| Route | Viewport | Baseline | Current | Canvas | Diff image |');
     lines.push('|:------|:---------|:---------|:--------|:-------|:-----------|');
     for (const item of dimensionChanges) {
-      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} | — | — |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} | — | — |`);
     }
     for (const item of comparisonDimensionChanges) {
-      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatDiffImage(item.diffImagePath, meta.artifactUrl, meta.runUrl)} |`);
     }
     lines.push('');
     lines.push('</details>');

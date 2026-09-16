@@ -54,6 +54,14 @@ export interface CompareImagesOptions extends DiffImageOptions {
    * Set to `false` to skip the PNG encode for callers that only need metrics.
    */
   renderDiffImage?: boolean;
+  /**
+   * Maximum union-canvas pixels this comparison may allocate. Defaults to
+   * `MAX_COMPARISON_PIXELS` (32 Mi). Raise it only when the calling process has a
+   * memory envelope large enough for the decoded union plus diff canvases
+   * (roughly 8 bytes per union pixel); a missing or non-positive value falls back
+   * to the default so the guard cannot be removed accidentally.
+   */
+  maxPixels?: number;
 }
 
 export interface CompareImagesResult extends CompareResult {

@@ -297,7 +297,19 @@ dimensions.
 
 The comparator reports this condition with the stable error code
 `comparison_too_large` and includes the baseline, current, and union-canvas
-dimensions in the error message. Approximate maximum full-page CSS heights below
+dimensions in the error message. The ceiling that was exceeded is included too,
+since a caller may raise it per call.
+
+`32 × 1024 × 1024` is the *default* ceiling, not an algorithm property: a decoded
+RGBA union canvas plus the diff canvas costs roughly 8 bytes per union pixel, so
+the default bounds a comparison to a process with around 1.3 GB of headroom.
+Direct `@snapdrift/compare-core` callers running in a larger memory envelope can
+pass `compareImages(..., { maxPixels })` to raise it for that call. A missing,
+non-positive, or non-finite `maxPixels` falls back to the default. SnapDrift's own
+local and hosted paths keep the default, because the host process — not the image
+— decides how much memory is actually safe.
+
+Approximate maximum full-page CSS heights below
 assume that the raster width remains equal to the configured CSS width and that
 the document height scales by the same device scale factor:
 

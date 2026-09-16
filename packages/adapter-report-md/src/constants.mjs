@@ -6,6 +6,21 @@ export const STATUS_ICONS = { clean: '✅', 'changes-detected': '🟡', incomple
 export const STATUS_LABELS = { clean: 'Clean', 'changes-detected': 'Drift detected', incomplete: 'Incomplete', skipped: 'Skipped' };
 
 /**
+ * Format a viewport for human-facing reports.
+ *
+ * A viewport is either a preset name or a `{ width, height }` object, so callers
+ * must not stringify it directly — `String({ width, height })` renders the
+ * useless `[object Object]` in every report.
+ *
+ * @param {import('../../manifest/types/index').VisualViewport | undefined} viewport
+ * @returns {string}
+ */
+export function formatViewport(viewport) {
+  if (!viewport) return '';
+  return typeof viewport === 'string' ? viewport : `${viewport.width}x${viewport.height}`;
+}
+
+/**
  * Format an internal 0–1 ratio for human-facing reports.
  * @param {number} ratio
  * @returns {string}

@@ -184,6 +184,72 @@ describe('buildReportCommentBody', () => {
     expect(body).toContain('| home-desktop | desktop | Current capture failed: Navigation timeout |');
   });
 
+  it('formats an object viewport as WxH in the error table instead of [object Object]', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'incomplete',
+      errors: [{
+        id: 'base64-converter-mobile',
+        viewport: { width: 390, height: 844 },
+        message: 'comparison_too_large'
+      }]
+    });
+    expect(body).not.toContain('[object Object]');
+    expect(body).toContain('| base64-converter-mobile | 390x844 | comparison_too_large |');
+  });
+
+  it('formats an object viewport as WxH in the drift signals table', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'changes-detected',
+      changedScreenshots: 1,
+      changed: [{ id: 'home-mobile', viewport: { width: 390, height: 844 }, mismatchRatio: 0.42 }]
+    });
+    expect(body).not.toContain('[object Object]');
+    expect(body).toContain('| home-mobile | 390x844 |');
+  });
+
+  it('formats an object viewport as WxH in the dimension shifts table', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'incomplete',
+      dimensionChanges: [{
+        id: 'home-mobile',
+        viewport: { width: 390, height: 844 },
+        baselineWidth: 1170,
+        baselineHeight: 23520,
+        currentWidth: 1170,
+        currentHeight: 23631
+      }]
+    });
+    expect(body).not.toContain('[object Object]');
+    expect(body).toContain('| home-mobile | 390x844 |');
+  });
+
+  it('formats an object viewport in the opted-in unequal-dimension shifts table', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'changes-detected',
+      changedScreenshots: 1,
+      changed: [{
+        id: 'home-mobile',
+        viewport: { width: 390, height: 844 },
+        mismatchRatio: 0.4,
+        differentPixels: 1,
+        totalPixels: 2,
+        comparison: {
+          baseline: { width: 1170, height: 23520 },
+          current: { width: 1170, height: 23631 },
+          canvas: { width: 1170, height: 23631 },
+          dimensionsChanged: true,
+          totalPixels: 27648270
+        }
+      }]
+    });
+    expect(body).not.toContain('[object Object]');
+    expect(body).toContain('| home-mobile | 390x844 |');
+  });
+
   it('includes a branded metadata footer with artifact name, baseline info, and run link', () => {
     const body = buildReportCommentBody(
       { ...cleanSummary, baselineArtifactName: 'my-baseline', baselineSourceSha: 'abc1234def' },

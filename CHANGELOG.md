@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Fixes
+
+- **PR comments no longer render `[object Object]` for a viewport.** A viewport is
+  either a preset name or a `{ width, height }` object, and the PR-comment renderer
+  stringified it directly. Hosted diff runs always build the object form, so every
+  hosted report printed the useless placeholder in its Error, Drift signals, and
+  Dimension shifts tables. All three report renderers now share one
+  `formatViewport` helper (exported from `@snapdrift/adapter-report-md`).
+
+### Features
+
+- **`compareImages` accepts a per-call `maxPixels` union-canvas ceiling.**
+  `MAX_COMPARISON_PIXELS` (32 Mi) is a *process memory* bound, not an algorithm
+  property, so callers with a larger envelope — a dedicated diff Lambda — can raise
+  it while callers sharing a small host keep the default. A missing, non-positive,
+  or non-finite value falls back to the default, so the guard cannot be removed by
+  accident. The `ComparisonTooLargeError` message now reports the ceiling that was
+  actually exceeded.
+
 ### Documentation
 
 - Document that `migrate-baselines --to snap` is unsupported and point to

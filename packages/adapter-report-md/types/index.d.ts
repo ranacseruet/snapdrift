@@ -16,10 +16,10 @@ export const DEFAULT_SNAPDRIFT_ICON_URL: string;
 export const STATUS_ICONS: Readonly<Record<string, string>>;
 export const STATUS_LABELS: Readonly<Record<string, string>>;
 export function formatPercentage(ratio: number): string;
+export function formatViewport(viewport: VisualViewport | undefined): string;
 
 // --- markdown.mjs ---
 
-export function formatViewport(viewport: VisualViewport | undefined): string;
 export function makeMarkdown(summaryData: VisualDiffSummary): string;
 export function formatDriftFailureMessage(
   diffMode: VisualDiffSummary['diffMode'],

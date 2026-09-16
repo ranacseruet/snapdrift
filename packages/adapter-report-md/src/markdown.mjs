@@ -1,18 +1,11 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary['diffMode']} DriftMode */
 
-/**
- * @param {import('../../manifest/types/index').VisualViewport | undefined} viewport
- * @returns {string}
- */
-export function formatViewport(viewport) {
-  if (!viewport) return '';
-  return typeof viewport === 'string' ? viewport : `${viewport.width}x${viewport.height}`;
-}
+export { formatViewport };
 
 /**
  * @param {{ width: number, height: number } | undefined} dimensions

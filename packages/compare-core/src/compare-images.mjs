@@ -6,10 +6,36 @@ import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnore
 
 const { PNG } = pngjs;
 
-/** Maximum union-canvas size accepted by the unequal-dimension comparator. */
+/**
+ * Default maximum union-canvas size accepted by the unequal-dimension
+ * comparator.
+ *
+ * This is a *process memory* bound, not a property of the algorithm: a decoded
+ * RGBA union canvas plus the diff canvas costs roughly 8 bytes per union pixel,
+ * so 32 Mi pixels peaks near 1.3 GB. Callers running in a larger memory envelope
+ * (e.g. a dedicated diff Lambda) may pass a higher `maxPixels`; callers sharing a
+ * small host must keep this default. See `CompareImagesOptions.maxPixels`.
+ */
 export const MAX_COMPARISON_PIXELS = 32 * 1024 * 1024;
 const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
 const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
+
+/**
+ * Resolve the effective union-canvas ceiling for a comparison.
+ *
+ * A missing, non-finite, or non-positive override falls back to the default so a
+ * misconfigured caller cannot accidentally remove the guard (which would let a
+ * single tall image OOM the process).
+ *
+ * @param {number | undefined} maxPixels
+ * @returns {number}
+ */
+function resolveMaxPixels(maxPixels) {
+  if (typeof maxPixels !== 'number' || !Number.isFinite(maxPixels) || maxPixels <= 0) {
+    return MAX_COMPARISON_PIXELS;
+  }
+  return Math.floor(maxPixels);
+}
 
 /**
  * Error raised when an unequal-dimension comparison would exceed the bounded
@@ -26,11 +52,12 @@ export class ComparisonTooLargeError extends Error {
    * @param {number} currentHeight
    * @param {number} canvasWidth
    * @param {number} canvasHeight
+   * @param {number} [maxPixels] - The ceiling that was exceeded.
    */
-  constructor(baselineWidth, baselineHeight, currentWidth, currentHeight, canvasWidth, canvasHeight) {
+  constructor(baselineWidth, baselineHeight, currentWidth, currentHeight, canvasWidth, canvasHeight, maxPixels = MAX_COMPARISON_PIXELS) {
     super(
       `comparison_too_large: union canvas ${canvasWidth}x${canvasHeight} ` +
-      `(${canvasWidth * canvasHeight} pixels) exceeds the maximum of ${MAX_COMPARISON_PIXELS} pixels ` +
+      `(${canvasWidth * canvasHeight} pixels) exceeds the maximum of ${maxPixels} pixels ` +
       `(baseline ${baselineWidth}x${baselineHeight}, current ${currentWidth}x${currentHeight}).`
     );
     this.name = 'ComparisonTooLargeError';
@@ -88,6 +115,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   validateIgnoreRegions(ignoreRegions);
   const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
   const renderDiffImage = options.renderDiffImage !== false;
+  const maxPixels = resolveMaxPixels(options.maxPixels);
 
   // Best-effort pre-decode guard: reject oversized unions before allocating the
   // decoded RGBA buffers, which are the largest allocations in this path.
@@ -96,14 +124,15 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   if (baselineHeader && currentHeader) {
     const headerCanvasWidth = Math.max(baselineHeader.width, currentHeader.width);
     const headerCanvasHeight = Math.max(baselineHeader.height, currentHeader.height);
-    if (headerCanvasWidth * headerCanvasHeight > MAX_COMPARISON_PIXELS) {
+    if (headerCanvasWidth * headerCanvasHeight > maxPixels) {
       throw new ComparisonTooLargeError(
         baselineHeader.width,
         baselineHeader.height,
         currentHeader.width,
         currentHeader.height,
         headerCanvasWidth,
-        headerCanvasHeight
+        headerCanvasHeight,
+        maxPixels
       );
     }
   }
@@ -114,14 +143,15 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const canvasWidth = Math.max(baselinePng.width, currentPng.width);
   const canvasHeight = Math.max(baselinePng.height, currentPng.height);
   const unionPixels = canvasWidth * canvasHeight;
-  if (unionPixels > MAX_COMPARISON_PIXELS) {
+  if (unionPixels > maxPixels) {
     throw new ComparisonTooLargeError(
       baselinePng.width,
       baselinePng.height,
       currentPng.width,
       currentPng.height,
       canvasWidth,
-      canvasHeight
+      canvasHeight,
+      maxPixels
     );
   }
 
