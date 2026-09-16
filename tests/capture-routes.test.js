@@ -14,7 +14,14 @@ jest.unstable_mockModule('playwright', () => ({
     }
 }));
 
+const originalConcurrency = process.env.SNAPDRIFT_CAPTURE_CONCURRENCY;
+process.env.SNAPDRIFT_CAPTURE_CONCURRENCY = '5';
 const { runBaselineCapture } = await import('../lib/capture-routes.mjs');
+if (originalConcurrency === undefined) {
+    delete process.env.SNAPDRIFT_CAPTURE_CONCURRENCY;
+} else {
+    process.env.SNAPDRIFT_CAPTURE_CONCURRENCY = originalConcurrency;
+}
 const {
     SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
     SNAPDRIFT_SETTLE_DELAY_MS,
