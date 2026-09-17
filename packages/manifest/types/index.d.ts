@@ -320,6 +320,7 @@ export interface ProviderCaptureResult {
   manifestPath: string;
   screenshotsRoot: string;
   selectedRouteIds: string[];
+  artifacts?: { localScreenshots: boolean; artifactsRoot?: string };
 }
 
 export interface ProviderDiffOptions {

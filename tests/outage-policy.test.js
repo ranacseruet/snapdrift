@@ -78,6 +78,17 @@ describe('hasLocalScreenshots', () => {
 });
 
 describe('captureWithPolicy', () => {
+  it('prefers provider-returned artifacts over contradictory provider and config inference', async () => {
+    const artifacts = { localScreenshots: true, artifactsRoot: CAPTURE_RESULT.screenshotsRoot };
+    const captureResult = { ...CAPTURE_RESULT, artifacts };
+    const result = await captureWithPolicy({
+      provider: makeProvider({ captureResult }), providerName: 'snap',
+      config: { baseUrl: 'https://example.com' }, captureOptions: {}
+    });
+    expect(result.artifacts).toEqual(artifacts);
+    expect(result.localScreenshots).toBe(true);
+  });
+
   it.each([
     ['local', 'https://example.com', true],
     ['snap', 'https://example.com', false],
@@ -246,6 +257,53 @@ describe('diffWithPolicy', () => {
       currentResultsPath: CAPTURE_RESULT.resultsPath,
       currentManifestPath: CAPTURE_RESULT.manifestPath,
       currentRunDir: CAPTURE_RESULT.screenshotsRoot
+    } : diffOptions);
+  });
+
+  it.each([undefined, CAPTURE_RESULT])('defaults to local diff without recapture for legacy Snap callers with no capabilities or config (captureResult: %j)', async (captureResult) => {
+    const localProvider = makeProvider();
+    const onRecapture = jest.fn();
+    const result = await diffWithPolicy({
+      provider: makeProvider({ diffError: new SnapFallbackError('unavailable') }),
+      providerName: 'snap', diffOptions, captureResult,
+      baselineAvailable: true, createLocalProvider: () => localProvider, onRecapture
+    });
+    expect(result).toMatchObject({ outcome: 'diffed', providerName: 'local', localScreenshots: true });
+    expect(result.recapture).toBeUndefined();
+    expect(localProvider.capture).not.toHaveBeenCalled();
+    expect(onRecapture).not.toHaveBeenCalled();
+    expect(localProvider.diff).toHaveBeenCalledWith(diffOptions);
+  });
+
+  it.each([
+    ['result local overrides remote config', true, 'https://example.com', undefined, undefined, false],
+    ['result remote overrides hybrid config', false, 'http://localhost:3000', undefined, undefined, true],
+    ['result remote overrides no-config default', false, undefined, undefined, undefined, true],
+    ['artifacts override result local', true, undefined, { localScreenshots: false }, undefined, true],
+    ['artifacts override result remote', false, undefined, { localScreenshots: true, artifactsRoot: '/tmp/override' }, undefined, false],
+    ['legacy boolean overrides result local', true, undefined, undefined, false, true],
+    ['legacy boolean overrides result remote', false, undefined, undefined, true, false]
+  ])('prefers explicit capabilities before inference and legacy defaults: %s', async (_name, localScreenshots, baseUrl, artifacts, legacy, recaptures) => {
+    const localProvider = makeProvider();
+    const captureResult = {
+      ...CAPTURE_RESULT,
+      artifacts: { localScreenshots, artifactsRoot: localScreenshots ? CAPTURE_RESULT.screenshotsRoot : undefined }
+    };
+    const result = await diffWithPolicy({
+      provider: makeProvider({ diffError: new SnapFallbackError('unavailable') }),
+      providerName: 'snap', diffOptions, captureResult,
+      config: baseUrl ? { baseUrl } : undefined,
+      artifacts, localScreenshots: legacy, captureOptions: {}, createLocalProvider: () => localProvider
+    });
+    expect(localProvider.capture).toHaveBeenCalledTimes(recaptures ? 1 : 0);
+    expect(result.localScreenshots).toBe(true);
+    expect(result.recapture).toBe(recaptures ? CAPTURE_RESULT : undefined);
+    expect(result.artifacts.artifactsRoot).toBe(recaptures
+      ? CAPTURE_RESULT.screenshotsRoot
+      : (artifacts || captureResult.artifacts).artifactsRoot);
+    expect(localProvider.diff).toHaveBeenCalledWith(recaptures ? {
+      ...diffOptions, currentResultsPath: CAPTURE_RESULT.resultsPath,
+      currentManifestPath: CAPTURE_RESULT.manifestPath, currentRunDir: CAPTURE_RESULT.screenshotsRoot
     } : diffOptions);
   });
 

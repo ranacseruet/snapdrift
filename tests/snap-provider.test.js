@@ -290,6 +290,7 @@ describe('SnapProvider.capture()', () => {
       expect(result.selectedRouteIds).toEqual(['home']);
       expect(result.resultsPath).toBeTruthy();
       expect(result.manifestPath).toBeTruthy();
+      expect(result.artifacts).toEqual({ localScreenshots: false, artifactsRoot: undefined });
 
       const runMetadata = JSON.parse(await fs.readFile(result.resultsPath, 'utf-8'));
       expect(runMetadata).toMatchObject({
@@ -1004,6 +1005,7 @@ describe('SnapProvider.capture()', () => {
     try {
       const result = await provider.capture({ configPath, routeIds: ['home'] });
       expect(result.selectedRouteIds).toEqual(['home']);
+      expect(result.artifacts).toEqual({ localScreenshots: true, artifactsRoot: result.screenshotsRoot });
 
       const runPost = requests.find((r) => r.url.includes('/runs') && !r.url.includes('/captures'));
       expect(runPost.body.baseUrl).toBe('http://127.0.0.1:3000');

@@ -3,6 +3,11 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { jest } from '@jest/globals';
+
+const adapterFs = await import('@snapdrift/adapter-fs');
+const runBaselineCapture = jest.fn();
+jest.unstable_mockModule('@snapdrift/adapter-fs', () => ({ ...adapterFs, runBaselineCapture }));
 
 const { createProvider, LocalProvider, providerSupports, PROVIDER_CAPABILITIES } = await import('../lib/provider.mjs');
 const { SnapProvider } = await import('../lib/snap-provider.mjs');
@@ -84,6 +89,21 @@ describe('createProvider', () => {
 // ---------------------------------------------------------------------------
 
 describe('LocalProvider', () => {
+  it('returns local artifact capabilities without mutating the adapter capture result', async () => {
+    const captured = Object.freeze({
+      resultsPath: '/tmp/local/results.json', manifestPath: '/tmp/local/manifest.json',
+      screenshotsRoot: '/tmp/local', selectedRouteIds: ['home']
+    });
+    runBaselineCapture.mockResolvedValueOnce(captured);
+    const options = { configPath: '/tmp/config.json', routeIds: ['home'] };
+    const result = await new LocalProvider().capture(options);
+    expect(runBaselineCapture).toHaveBeenCalledWith(options);
+    expect(result).toEqual({
+      ...captured, artifacts: { localScreenshots: true, artifactsRoot: captured.screenshotsRoot }
+    });
+    expect(captured).not.toHaveProperty('artifacts');
+  });
+
   it('exposes capture, diff, publishBaseline, fetchLatestBaseline, buildCommentBody methods', () => {
     const provider = new LocalProvider();
     expect(typeof provider.capture).toBe('function');

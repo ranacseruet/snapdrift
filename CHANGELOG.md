@@ -11,10 +11,13 @@
   selection and comment-upsert behavior is defined once and exercised by unit and
   real-YAML parity tests. Outputs, reasons, warnings, markers, and fallback bodies
   are byte-for-byte identical.
-- `captureWithPolicy`/`diffWithPolicy` results now include an explicit `artifacts`
-  descriptor (`describeCaptureArtifacts`: `localScreenshots` plus `artifactsRoot`
-  for local or hosted local-capture hybrid runs) so fallback decisions stop relying
-  on provider-name/URL inference; `localScreenshots` remains, and
+- Providers and `captureWithPolicy`/`diffWithPolicy` results now include an explicit
+  `artifacts` descriptor (`describeCaptureArtifacts`: `localScreenshots` plus
+  `artifactsRoot` for local or hosted local-capture hybrid runs). Fallback decisions
+  prefer provider-returned capabilities, with provider-name/URL inference retained
+  for legacy results and explicit caller overrides taking precedence. Diff callers
+  without capability information or config retain the no-recapture legacy default.
+  `localScreenshots` remains, and
   `hasLocalScreenshots` is kept as a thin wrapper. `lib/provider.mjs` exports
   `PROVIDER_CAPABILITIES` and `providerSupports(provider, capability)` so the
   unavailable `LocalProvider.fetchLatestBaseline` baseline-store capability is

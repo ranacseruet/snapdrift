@@ -76,14 +76,35 @@ describe.each(['comment', 'pr-diff'])('%s report adapter', (action) => {
     ]);
   });
 
-  it('preserves configurable report truncation', async () => {
-    const suppliedSummary = { ...summary, status: 'changed', errors: [
-      { routeId: 'home', viewport: 'desktop', error: 'one' }, { routeId: 'about', viewport: 'desktop', error: 'two' }
-    ] };
-    const result = await runReport(action, { suppliedSummary, env: { MAX_CHANGED_ROWS: '1', MAX_ERROR_ROWS: '1' } });
-    expect(result.operations[0][1].body).toBe(new LocalProvider().buildCommentBody(suppliedSummary, {
-      ...meta, maxChangedRows: 1, maxErrorRows: 1
+  it.each([
+    ['default', {}, 20, 10],
+    ['configurable', { MAX_CHANGED_ROWS: '2', MAX_ERROR_ROWS: '1' }, 2, 1]
+  ])('truncates changed and error rows at %s limits', async (_name, env, maxChangedRows, maxErrorRows) => {
+    const suppliedSummary = {
+      ...summary, status: 'changes-detected', changedScreenshots: 25,
+      changed: Array.from({ length: 25 }, (_, index) => ({
+        id: `changed-${index}`, viewport: 'desktop', mismatchRatio: 0.05
+      })),
+      errors: Array.from({ length: 13 }, (_, index) => ({
+        id: `error-${index}`, viewport: 'desktop', message: `failure-${index}`
+      }))
+    };
+    const result = await runReport(action, { suppliedSummary, env });
+    const body = result.operations[0][1].body;
+    expect(body).toBe(new LocalProvider().buildCommentBody(suppliedSummary, {
+      ...meta, maxChangedRows, maxErrorRows
     }));
+    for (const [rows, limit, heading] of [
+      [suppliedSummary.changed, maxChangedRows, 'Drift signals'],
+      [suppliedSummary.errors, maxErrorRows, 'Error details']
+    ]) {
+      const section = body.split(`<details><summary>${heading}</summary>`)[1].split('</details>')[0];
+      rows.forEach((row, index) => {
+        if (index < limit) expect(section).toContain(`| ${row.id} | desktop |`);
+        else expect(section).not.toContain(`| ${row.id} |`);
+      });
+      expect(section).toContain(`*...and ${rows.length - limit} more* — [View full report →](${meta.runUrl})`);
+    }
   });
 
   it('retains local rendering and the diagnostic on invalid config', async () => {

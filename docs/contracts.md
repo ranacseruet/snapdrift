@@ -646,6 +646,25 @@ inputs, and map the returned decision to step outputs:
 The baseline resolver keeps its own module (`lib/resolve-baseline-artifact.mjs`)
 because both actions already share it verbatim.
 
+### Capture artifact capabilities
+
+Providers now return `artifacts` on capture results, attached in the provider layer
+rather than adapter-fs:
+
+- `localScreenshots`: whether PNGs are available locally for pixel comparison.
+- `artifactsRoot`: the capture's `screenshotsRoot` for local and Snap hybrid
+  captures (`localScreenshots: true`); `undefined` for hosted remote captures
+  (`localScreenshots: false`), even though their metadata has a local path.
+
+`captureWithPolicy` prefers `result.artifacts` over provider-name/base-URL inference.
+For `diffWithPolicy`, pass the capture as `captureResult` or forward its `artifacts`.
+Precedence is the legacy `options.localScreenshots` boolean (if supplied), then
+`options.artifacts`, then `captureResult.artifacts`, then provider/config inference.
+The boolean overrides only `localScreenshots`; false clears `artifactsRoot`.
+Inference remains for legacy results without a descriptor when config is supplied.
+If no capability arguments, result descriptor, or config are supplied to
+`diffWithPolicy`, it preserves the legacy local-screenshots default without recapture.
+
 ## Primary entrypoints
 
 - `actions/baseline`
