@@ -12,6 +12,8 @@ import {
   splitCommaList,
   resolveFromWorkingDirectory,
   validateManifest,
+  checkCaptureProfileCompatibility,
+  normalizedViewportIdentity,
   indexManifestEntries,
   indexRouteResults,
   sanitizeRouteId,
@@ -82,6 +84,7 @@ export async function generateDriftReport(options = {}) {
 
   const validatedBaselineManifest = validateManifest(baselineManifest, 'baseline screenshot manifest');
   const validatedCurrentManifest = validateManifest(currentManifest, 'current screenshot manifest');
+  const captureCompatibility = checkCaptureProfileCompatibility(validatedBaselineManifest.captureProfile, validatedCurrentManifest.captureProfile);
   const baselineRouteResults = indexRouteResults(/** @type {BaselineResults} */ (baselineResults));
   const currentRouteResults = indexRouteResults(/** @type {BaselineResults} */ (currentResults));
   const baselineEntries = indexManifestEntries(validatedBaselineManifest, selectedRouteIds, 'baseline screenshot manifest');
@@ -112,7 +115,9 @@ export async function generateDriftReport(options = {}) {
     comparisonPolicy: { ...comparisonPolicy },
     baselineArtifactName: options.baselineArtifactName || envBaselineArtifactName || undefined,
     baselineSourceSha: options.baselineSourceSha || envBaselineSourceSha || undefined,
-    baselineAvailable: true
+    baselineAvailable: true,
+    captureCompatibility,
+    message: captureCompatibility.status === 'unverified' ? captureCompatibility.reason : undefined
   };
 
   /** @type {{ routeId: string, routeConfig: import('@snapdrift/manifest').VisualRegressionRouteConfig | undefined, baselineEntry: ScreenshotManifestEntry, currentEntry: ScreenshotManifestEntry }[]} */
@@ -164,6 +169,29 @@ export async function generateDriftReport(options = {}) {
         viewport: baselineEntry.viewport || routeConfig?.viewport,
         location: 'current',
         reason: 'missing current capture'
+      });
+      continue;
+    }
+
+    let incompatibility = captureCompatibility.status === 'incompatible' ? captureCompatibility.reason : undefined;
+    for (const { location, entry } of [{ location: 'baseline', entry: baselineEntry }, { location: 'current', entry: currentEntry }]) {
+      if (entry.path !== routeConfig.path) {
+        incompatibility = `${location} route path differs from configured path "${routeConfig.path}"`;
+        break;
+      }
+      if (normalizedViewportIdentity(entry.viewport) !== normalizedViewportIdentity(routeConfig.viewport)) {
+        incompatibility = `${location} normalized viewport differs from configured viewport`;
+        break;
+      }
+    }
+    if (incompatibility) {
+      summary.errors.push({
+        id: routeId,
+        path: routeConfig.path,
+        viewport: routeConfig.viewport,
+        status: 'error',
+        code: 'incompatible_capture',
+        message: `Incompatible capture: ${incompatibility}. Refresh the baseline in the current capture environment. Use report-only for intentional nonblocking inspection; incompatible pixels are not compared.`
       });
       continue;
     }

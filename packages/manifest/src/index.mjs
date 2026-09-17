@@ -2,6 +2,7 @@
 
 export { validateManifest, indexManifestEntries, indexRouteResults, CURRENT_SCHEMA_VERSION } from './schema.mjs';
 export { viewportKey, viewportHash, VIEWPORT_PRESETS } from './viewport.mjs';
+export { CAPTURE_PROFILE_SCHEMA_VERSION, validateCaptureProfile, checkCaptureProfileCompatibility, normalizedViewportIdentity } from './capture-profile.mjs';
 export { sanitizeRouteId, assertUniqueRouteIdFilenames } from './route-filenames.mjs';
 export { determineDriftStatus, shouldFailDriftCheck } from './drift-status.mjs';
 export {

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Features
+
+- Local manifests now persist capture profile v2: engine, browser/Playwright, OS,
+  locale/timezone, and rendering settings. Local comparison validates manifests,
+  requires exact v2 profile equality, and checks configured route paths and
+  normalized viewports before reading PNGs. Incompatibilities are
+  `incompatible_capture` errors, not product drift from changed image dimensions;
+  the summary's `captureCompatibility` status describes profiles only.
+- Legacy missing/v1 profiles remain unverified and pixel-comparable after route
+  checks unless shared metadata conflicts or an explicit foreign engine is found.
+  Malformed or unsupported profiles are rejected. Refresh using `snapdrift baseline`
+  (`provider: "local"`) or the existing baseline action; `report-only` acknowledges
+  incompatibility nonblockingly but never bypasses it to compare pixels.
+
+### Behavior changes
+
+- Local capture explicitly sets `en-US` / `UTC`; localized text/date changes may
+  require baseline recapture. Fonts are not fingerprinted. See the
+  [capture profile contract](docs/contracts.md#local-capture-profile-v2) and
+  [baseline refresh guide](docs/local-cli.md#refreshing-or-acknowledging-local-baselines).
+
 ### Fixes
 
 - Isolate each local route capture and retry in a fresh browser context, preventing

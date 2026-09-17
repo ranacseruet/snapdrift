@@ -1,4 +1,4 @@
-import { validateManifest, indexManifestEntries, indexRouteResults, CURRENT_SCHEMA_VERSION } from '../src/index.mjs';
+import { validateManifest, indexManifestEntries, indexRouteResults, CURRENT_SCHEMA_VERSION, checkCaptureProfileCompatibility, normalizedViewportIdentity } from '../src/index.mjs';
 
 const VALID_MANIFEST = {
   generatedAt: '2024-01-01T00:00:00.000Z',
@@ -208,6 +208,81 @@ describe('@snapdrift/manifest — indexRouteResults', () => {
   test('handles empty routes', () => {
     const indexed = indexRouteResults({ startedAt: '', routes: [] });
     expect(indexed.size).toBe(0);
+  });
+});
+
+const LOCAL_PROFILE = {
+  schemaVersion: 2,
+  engine: { name: 'snapdrift-local', version: '1.3.0' }, engineVersion: '1.3.0',
+  browser: 'chromium', browserRevision: '149.0.0.1', playwrightVersion: '1.59.1',
+  platform: { name: 'linux', architecture: 'x64', release: '6.8', version: 'Ubuntu 24.04' },
+  locale: 'en-US', timezone: 'UTC',
+  settings: {
+    screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+    readiness: { waitUntil: 'load', settleDelayMs: 500 },
+    context: { isolation: 'fresh-context-per-attempt', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' },
+    launch: { headless: true, args: ['--disable-gpu'] }
+  }
+};
+
+describe('capture compatibility', () => {
+  test('validates complete local profiles and compares independent of object key order', () => {
+    const reordered = Object.fromEntries(Object.entries(LOCAL_PROFILE).reverse());
+    expect(validateManifest({ ...VALID_MANIFEST, captureProfile: LOCAL_PROFILE }).captureProfile).toEqual(LOCAL_PROFILE);
+    expect(checkCaptureProfileCompatibility(LOCAL_PROFILE, reordered)).toEqual({ status: 'verified' });
+  });
+
+  test.each([
+    ['browserRevision', '150.0.0.0'], ['playwrightVersion', '1.60.0'], ['locale', 'fr-FR'], ['timezone', 'Europe/Paris'],
+    ['platform.architecture', 'arm64'], ['platform.release', '6.9'], ['platform.version', 'Ubuntu 26.04'],
+    ['settings.screenshot.fullPage', false], ['settings.screenshot.animations', 'allow'],
+    ['settings.readiness.settleDelayMs', 1000], ['settings.readiness.waitUntil', 'domcontentloaded'],
+    ['settings.context.isolation', 'shared-context'], ['settings.context.colorScheme', 'dark'],
+    ['settings.launch.headless', false], ['settings.launch.args', []]
+  ])('rejects changed rendering setting %s', (field, value) => {
+    const current = structuredClone(LOCAL_PROFILE);
+    const keys = field.split('.');
+    const key = keys.pop();
+    keys.reduce((object, part) => object[part], current)[key] = value;
+    expect(checkCaptureProfileCompatibility(LOCAL_PROFILE, current)).toEqual({ status: 'incompatible', reason: expect.stringContaining(field) });
+  });
+
+  test.each([null, [], 'bad', {}, { engine: null }, { engine: { name: '' } }, { engineVersion: 1 },
+    { ...LOCAL_PROFILE, schemaVersion: 3 }, { ...LOCAL_PROFILE, browserRevision: '' },
+    { ...LOCAL_PROFILE, engineVersion: 'different' }, { ...LOCAL_PROFILE, platform: {} },
+    { ...LOCAL_PROFILE, settings: null }, { ...LOCAL_PROFILE, locale: null },
+    { ...LOCAL_PROFILE, settings: { ...LOCAL_PROFILE.settings, screenshot: { ...LOCAL_PROFILE.settings.screenshot, animations: 'bad' } } }
+  ])('rejects malformed or unsupported capture profile %j', (captureProfile) => {
+    expect(() => validateManifest({ ...VALID_MANIFEST, captureProfile })).toThrow(/captureProfile/);
+  });
+
+  test.each([undefined, { engineVersion: 'v0' }, { engine: { name: 'snapdrift-local' } },
+    { schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }
+  ])('keeps legacy profiles unverified rather than claiming compatibility: %j', (captureProfile) => {
+    expect(() => validateManifest({ ...VALID_MANIFEST, captureProfile })).not.toThrow();
+    expect(checkCaptureProfileCompatibility(captureProfile, LOCAL_PROFILE)).toMatchObject({ status: 'unverified' });
+    expect(checkCaptureProfileCompatibility(LOCAL_PROFILE, captureProfile)).toMatchObject({ status: 'unverified' });
+  });
+
+  test('accepts hosted export metadata but never silently compares a known foreign engine', () => {
+    const hosted = { schemaVersion: 1, engine: { name: 'snap-hosted', version: 'unknown' } };
+    expect(() => validateManifest({ ...VALID_MANIFEST, captureProfile: hosted })).not.toThrow();
+    expect(checkCaptureProfileCompatibility(hosted, undefined)).toMatchObject({ status: 'incompatible' });
+    expect(checkCaptureProfileCompatibility(undefined, hosted)).toMatchObject({ status: 'incompatible' });
+    expect(checkCaptureProfileCompatibility(hosted, LOCAL_PROFILE)).toMatchObject({ status: 'incompatible' });
+  });
+
+  test('compares known legacy rendering settings', () => {
+    expect(checkCaptureProfileCompatibility({ engineVersion: 'v0', locale: 'fr-FR' }, LOCAL_PROFILE)).toMatchObject({ status: 'incompatible' });
+  });
+
+  test('normalizes desktop but preserves mobile device characteristics', () => {
+    expect(normalizedViewportIdentity('desktop')).toBe(normalizedViewportIdentity({ width: 1440, height: 900 }));
+    expect(normalizedViewportIdentity('mobile')).not.toBe(normalizedViewportIdentity({ width: 390, height: 844 }));
+  });
+
+  test.each(['tablet', { width: 0, height: 900 }, { width: Infinity, height: 900 }, { width: 1440, height: 0 }, { width: 1.5, height: 2 }])('rejects malformed viewport %j', (viewport) => {
+    expect(() => validateManifest({ ...VALID_MANIFEST, screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport }] })).toThrow(/viewport/);
   });
 });
 

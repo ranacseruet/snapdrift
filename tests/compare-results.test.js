@@ -99,12 +99,12 @@ async function setupFixtures(tempDir, { routes, baselineEntries, currentEntries,
   await writeJson(baselineManifestPath, {
     generatedAt: new Date().toISOString(),
     baseUrl: 'http://localhost',
-    screenshots: baselineEntries
+    screenshots: baselineEntries.map((entry) => ({ ...entry, path: routes.find((route) => route.id === entry.id)?.path ?? entry.path }))
   });
   await writeJson(currentManifestPath, {
     generatedAt: new Date().toISOString(),
     baseUrl: 'http://localhost',
-    screenshots: currentEntries
+    screenshots: currentEntries.map((entry) => ({ ...entry, path: routes.find((route) => route.id === entry.id)?.path ?? entry.path }))
   });
 
   for (const { relPath, width, height, r, g, b } of baselinePngs) {
@@ -335,6 +335,27 @@ describe('formatDriftFailureMessage', () => {
 // generateDriftReport integration tests
 // ---------------------------------------------------------------------------
 
+function makeCaptureProfile() {
+  return {
+    schemaVersion: 2, engineVersion: '1.3.0', engine: { name: 'snapdrift-local', version: '1.3.0' },
+    browser: 'chromium', browserRevision: '149.0.0.1', playwrightVersion: '1.59.1',
+    locale: 'en-US', timezone: 'UTC',
+    platform: { name: 'linux', architecture: 'x64', release: '6.8', version: 'Ubuntu 24.04' },
+    settings: {
+      screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+      readiness: { waitUntil: 'load', settleDelayMs: 500 },
+      context: { isolation: 'fresh-context-per-attempt', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' },
+      launch: { headless: true, args: ['--disable-gpu'] }
+    }
+  };
+}
+
+async function updateManifest(filePath, update) {
+  const manifest = JSON.parse(await fs.readFile(filePath, 'utf8'));
+  update(manifest);
+  await writeJson(filePath, manifest);
+}
+
 describe('generateDriftReport', () => {
   let generateDriftReport;
   let tempDir;
@@ -349,6 +370,96 @@ describe('generateDriftReport', () => {
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it.each(['baseline', 'current', 'both'])('bypasses missing PNG resolution when %s route paths differ from selected config', async (side) => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }], baselineEntries: [entry], currentEntries: [entry]
+    });
+    for (const location of side === 'both' ? ['baseline', 'current'] : [side]) {
+      await updateManifest(opts[`${location}ManifestPath`], (manifest) => { manifest.screenshots[0].path = '/old'; });
+    }
+    const { summary, markdown } = await generateDriftReport(opts);
+    expect(summary).toMatchObject({ status: 'incomplete', changedScreenshots: 0, matchedScreenshots: 0 });
+    expect(summary.errors).toEqual([expect.objectContaining({ code: 'incompatible_capture', message: expect.stringMatching(/route path.*Refresh the baseline/) })]);
+    expect(markdown).toContain('Incompatible capture');
+    expect(markdown).not.toContain('Unable to locate');
+  });
+
+  it.each(['baseline', 'current', 'both'])('checks %s normalized viewport against configured identity before missing PNGs', async (side) => {
+    const entry = makeManifestEntry('home', 'mobile', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'mobile' }], baselineEntries: [entry], currentEntries: [entry]
+    });
+    for (const location of side === 'both' ? ['baseline', 'current'] : [side]) {
+      await updateManifest(opts[`${location}ManifestPath`], (manifest) => { manifest.screenshots[0].viewport = { width: 390, height: 844 }; });
+    }
+    const { summary } = await generateDriftReport(opts);
+    expect(summary.errors).toEqual([expect.objectContaining({ code: 'incompatible_capture', message: expect.stringContaining('normalized viewport') })]);
+    expect(summary.changedScreenshots).toBe(0);
+  });
+
+  it.each(['settings', 'browser', 'foreign'])('bypasses missing PNGs for incompatible %s profiles', async (change) => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }], baselineEntries: [entry], currentEntries: [entry]
+    });
+    const baseline = makeCaptureProfile();
+    if (change === 'settings') baseline.settings.screenshot.fullPage = false;
+    if (change === 'browser') baseline.browserRevision = '148.0.0.1';
+    if (change === 'foreign') baseline.engine.name = 'snap-hosted';
+    await updateManifest(opts.baselineManifestPath, (manifest) => { manifest.captureProfile = baseline; });
+    await updateManifest(opts.currentManifestPath, (manifest) => { manifest.captureProfile = makeCaptureProfile(); });
+    const { summary, markdown } = await generateDriftReport(opts);
+    expect(summary).toMatchObject({ status: 'incomplete', changedScreenshots: 0, matchedScreenshots: 0, captureCompatibility: { status: 'incompatible' } });
+    expect(summary.errors).toEqual([expect.objectContaining({ code: 'incompatible_capture', message: expect.stringContaining('Refresh the baseline') })]);
+    expect(markdown).toContain('report-only');
+    expect(markdown).not.toContain('Unable to locate');
+  });
+
+  it.each(['baseline', 'current'])('validates malformed %s profiles before comparison', async (side) => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }], baselineEntries: [entry], currentEntries: [entry]
+    });
+    await updateManifest(opts[`${side}ManifestPath`], (manifest) => { manifest.captureProfile = null; });
+    await expect(generateDriftReport(opts)).rejects.toThrow(`${side} screenshot manifest.captureProfile`);
+  });
+
+  it.each([undefined, { schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }])('compares legacy baseline pixels with a new local profile as unverified: %j', async (profile) => {
+    const imagePath = 'screenshots/home.png';
+    const entry = makeManifestEntry('home', 'desktop', imagePath, 2, 2);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }], baselineEntries: [entry], currentEntries: [entry],
+      baselinePngs: [{ relPath: imagePath, width: 2, height: 2, r: 0 }],
+      currentPngs: [{ relPath: imagePath, width: 2, height: 2, r: 255 }]
+    });
+    await updateManifest(opts.baselineManifestPath, (manifest) => { manifest.captureProfile = profile; });
+    await updateManifest(opts.currentManifestPath, (manifest) => { manifest.captureProfile = makeCaptureProfile(); });
+    const { summary } = await generateDriftReport(opts);
+    expect(summary.captureCompatibility.status).toBe('unverified');
+    expect(summary.errors).toEqual([]);
+    expect(summary.changedScreenshots).toBe(1);
+  });
+
+  it.each([false, true])('matching profiles normalize desktop identity and retain full-page size drift (growth=%s)', async (growth) => {
+    const imagePath = 'screenshots/home.png';
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry('home', { width: 1440, height: 900 }, imagePath, 2, 2)],
+      currentEntries: [makeManifestEntry('home', 'desktop', imagePath, 2, growth ? 3 : 2)],
+      baselinePngs: [{ relPath: imagePath, width: 2, height: 2 }],
+      currentPngs: [{ relPath: imagePath, width: 2, height: growth ? 3 : 2 }]
+    });
+    for (const manifestPath of [opts.baselineManifestPath, opts.currentManifestPath]) {
+      await updateManifest(manifestPath, (manifest) => { manifest.captureProfile = makeCaptureProfile(); });
+    }
+    const { summary } = await generateDriftReport(opts);
+    expect(summary.captureCompatibility.status).toBe('verified');
+    expect(summary.errors).toEqual([]);
+    expect(summary.status).toBe(growth ? 'changes-detected' : 'clean');
+    expect(summary.changedScreenshots).toBe(growth ? 1 : 0);
   });
 
   it('returns clean status when all screenshots are identical', async () => {
@@ -375,6 +486,8 @@ describe('generateDriftReport', () => {
     expect(summary.dimensionChanges).toHaveLength(0);
     expect(summary.completed).toBe(true);
     expect(summary.finishedAt).toBeDefined();
+    expect(summary.captureCompatibility.status).toBe('unverified');
+    expect(summary.message).toContain('legacy manifest');
   });
 
   it('matches screenshots whose pixel difference is at or below the threshold', async () => {
@@ -414,12 +527,12 @@ describe('generateDriftReport', () => {
     await writeJson(baselineManifestPath, {
       generatedAt: new Date().toISOString(),
       baseUrl: 'http://localhost',
-      screenshots: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10)]
+      screenshots: [{ ...makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10), path: '/' }]
     });
     await writeJson(currentManifestPath, {
       generatedAt: new Date().toISOString(),
       baseUrl: 'http://localhost',
-      screenshots: [makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10)]
+      screenshots: [{ ...makeManifestEntry(routeId, 'desktop', 'screenshots/r.png', 10, 10), path: '/' }]
     });
 
     const { summary } = await generateDriftReport({
@@ -1397,6 +1510,29 @@ describe('runDriftCheckCli', () => {
     const opts = await buildCleanOpts('fail-on-changes');
 
     await expect(runDriftCheckCli({ ...opts, enforceOutcome: true })).resolves.toBeUndefined();
+  });
+
+  it.each(['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'])('enforces incompatible captures as incomplete in %s mode', async (mode) => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const fixtures = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }], baselineEntries: [entry], currentEntries: [entry], diffMode: mode
+    });
+    await updateManifest(fixtures.baselineManifestPath, (manifest) => { manifest.captureProfile = makeCaptureProfile(); });
+    await updateManifest(fixtures.currentManifestPath, (manifest) => {
+      manifest.captureProfile = makeCaptureProfile();
+      manifest.captureProfile.settings.readiness.settleDelayMs += 1;
+    });
+    const output = cliOutputPaths(path.join(tempDir, 'out'));
+    const run = runDriftCheckCli({ ...fixtures, ...output, enforceOutcome: true });
+    if (mode === 'strict' || mode === 'fail-on-incomplete') {
+      await expect(run).rejects.toThrow(/incomplete|strict/);
+    } else {
+      await expect(run).resolves.toBeUndefined();
+    }
+    const summary = JSON.parse(await fs.readFile(output.summaryPath, 'utf8'));
+    expect(summary).toMatchObject({ status: 'incomplete', changedScreenshots: 0, matchedScreenshots: 0 });
+    expect(summary.errors[0].code).toBe('incompatible_capture');
+    await expect(fs.access(path.join(output.outDir, 'diffs'))).rejects.toThrow();
   });
 
   it('enforces v1 dimension changes as changed, except in report-only and fail-on-incomplete modes', async () => {

@@ -81,12 +81,12 @@ async function setupPipelineFixtures(tempDir, { routes, baselineEntries, current
     await writeJson(baselineManifestPath, {
         generatedAt: new Date().toISOString(),
         baseUrl: 'http://localhost',
-        screenshots: baselineEntries
+        screenshots: baselineEntries.map((entry) => ({ ...entry, path: routes.find((route) => route.id === entry.id)?.path ?? entry.path }))
     });
     await writeJson(currentManifestPath, {
         generatedAt: new Date().toISOString(),
         baseUrl: 'http://localhost',
-        screenshots: currentEntries
+        screenshots: currentEntries.map((entry) => ({ ...entry, path: routes.find((route) => route.id === entry.id)?.path ?? entry.path }))
     });
 
     for (const { relPath, width, height, r, g, b } of baselinePngs) {

@@ -110,6 +110,10 @@ Start with `report-only` while baselines settle. Move to `fail-on-changes` or st
 | `fail-on-incomplete` | Captures are missing or comparison errors occur |
 | `strict` | Any drift signal or incomplete comparison appears |
 
+Local comparisons check capture profiles and configured route/path/viewport identity
+before pixels. Incompatible captures produce incomplete errors, not product drift;
+`report-only` never bypasses these checks. See [compatibility and baseline refresh](docs/local-cli.md#refreshing-or-acknowledging-local-baselines).
+
 ## Current constraints
 
 - Ubuntu runners only (local CLI works on any OS Node 22+ supports)

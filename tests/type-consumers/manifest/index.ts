@@ -4,7 +4,7 @@ import type {
   VisualDiffSummary, VisualDriftSkippedSummary, VisualProvider, SnapConfig,
   ProviderCaptureOptions, ProviderDiffOptions, ProviderPublishBaselineOptions,
   ProviderFetchBaselineOptions, ProviderBaselineData, ProviderCommentMeta,
-  ComparisonPolicy, ComparisonMetadata
+  ComparisonPolicy, ComparisonMetadata, CaptureProfile, LocalCaptureProfile, CaptureCompatibility
 } from '@snapdrift/manifest';
 
 const snap: SnapConfig = { projectId: 'test', onUnavailable: 'fail', apiKeyEnv: 'SNAP_KEY' };
@@ -35,6 +35,18 @@ const manifest: VisualScreenshotManifest = api.validateManifest({
   generatedAt: new Date().toISOString(), baseUrl: 'https://example.com',
   screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'home.png', width: 1, height: 1 }]
 });
+const legacyProfile: CaptureProfile = { engineVersion: 'v0' };
+declare const localProfile: LocalCaptureProfile;
+const genericProfile: CaptureProfile = localProfile;
+manifest.captureProfile = localProfile;
+manifest.captureProfile = legacyProfile;
+manifest.captureProfile = { schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } };
+const compatibility: CaptureCompatibility = api.checkCaptureProfileCompatibility(localProfile, genericProfile);
+compatibility.status.toUpperCase();
+api.validateCaptureProfile(localProfile);
+api.normalizedViewportIdentity({ width: 1440, height: 900 }).toUpperCase();
+const profileVersion: 2 = api.CAPTURE_PROFILE_SCHEMA_VERSION;
+localProfile.settings.screenshot.fullPage.valueOf();
 api.indexManifestEntries(manifest, ['home']).get('home')?.width.toFixed();
 const results: VisualBaselineResults = { startedAt: '', baseUrl: '', suite: '', routes: [] };
 api.indexRouteResults(results).get('home')?.status.toUpperCase();

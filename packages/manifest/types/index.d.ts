@@ -123,6 +123,7 @@ export interface VisualScreenshotManifest {
   generatedAt: string;
   baseUrl: string;
   screenshots: VisualScreenshotManifestEntry[];
+  captureProfile?: ManifestCaptureProfile;
 }
 
 export interface VisualBaselineResults {
@@ -150,6 +151,38 @@ export interface CaptureProfile {
   locale?: string;
 }
 
+export interface LegacyEngineCaptureProfile extends Partial<CaptureProfile> {
+  schemaVersion?: number;
+  engine: { name: string; version?: string };
+}
+
+export interface LocalCaptureProfile extends CaptureProfile {
+  schemaVersion: 2;
+  engine: { name: 'snapdrift-local'; version: string };
+  browser: string;
+  browserRevision: string;
+  playwrightVersion: string;
+  locale: string;
+  timezone: string;
+  platform: { name: string; architecture: string; release: string; version: string };
+  settings: {
+    screenshot: { fullPage: boolean; animations: 'disabled' | 'allow'; caret: 'hide' | 'initial'; scale: 'css' | 'device'; omitBackground: boolean; type: 'png' };
+    readiness: { waitUntil: 'load' | 'domcontentloaded' | 'networkidle' | 'commit'; settleDelayMs: number };
+    context: { isolation: string; colorScheme: 'light' | 'dark' | 'no-preference'; reducedMotion: 'reduce' | 'no-preference'; forcedColors: 'active' | 'none'; javaScriptEnabled: boolean; serviceWorkers: 'allow' | 'block' };
+    launch: { headless: boolean; args: string[] };
+  };
+}
+
+export type ManifestCaptureProfile = CaptureProfile | LegacyEngineCaptureProfile | LocalCaptureProfile;
+export interface CaptureCompatibility {
+  status: 'verified' | 'unverified' | 'incompatible';
+  reason?: string;
+}
+export const CAPTURE_PROFILE_SCHEMA_VERSION: 2;
+export function validateCaptureProfile(value: unknown, sourceLabel?: string): ManifestCaptureProfile | undefined;
+export function checkCaptureProfileCompatibility(baseline?: ManifestCaptureProfile, current?: ManifestCaptureProfile): CaptureCompatibility;
+export function normalizedViewportIdentity(viewport: VisualViewport): string;
+
 export interface VisualDiffMissingItem {
   id: string;
   reason: string;
@@ -163,6 +196,7 @@ export interface VisualDiffErrorItem {
   path?: string;
   viewport?: VisualViewport;
   status: 'error';
+  code?: 'incompatible_capture';
   message: string;
 }
 
@@ -218,6 +252,7 @@ export interface VisualDiffSummary {
   changed: VisualDiffChangedItem[];
   missing: VisualDiffMissingItem[];
   errors: VisualDiffErrorItem[];
+  captureCompatibility?: CaptureCompatibility;
   dimensionChanges: VisualDiffDimensionItem[];
   /** The exact policy used for v1 local comparisons, when opted in. */
   comparisonPolicy?: ComparisonPolicy;

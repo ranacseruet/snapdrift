@@ -7,6 +7,10 @@ import { jest } from '@jest/globals';
 import { PNG } from 'pngjs';
 
 const launchMock = jest.fn();
+const expectedContextSettings = {
+    locale: 'en-US', timezoneId: 'UTC', colorScheme: 'light', reducedMotion: 'no-preference',
+    forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow'
+};
 
 jest.unstable_mockModule('playwright', () => ({
     chromium: {
@@ -78,6 +82,7 @@ function createPage(behavior = {}, imageSize = { width: 10, height: 10 }) {
 function createHarness({ desktopPage, mobilePage, customPage, pageFactory } = {}) {
     const contexts = [];
     const browser = {
+        version: () => '149.0.0.1',
         newContext: jest.fn(async (options) => {
             const storage = new Map();
             const pages = [];
@@ -168,6 +173,7 @@ describe('runBaselineCapture', () => {
 
         expect(launchMock).toHaveBeenCalledWith({ headless: true, args: ['--disable-gpu'] });
         expect(browser.newContext).toHaveBeenNthCalledWith(1, {
+            ...expectedContextSettings,
             viewport: {
                 width: SNAPDRIFT_VIEWPORT_PRESETS.desktop.width,
                 height: SNAPDRIFT_VIEWPORT_PRESETS.desktop.height
@@ -177,6 +183,7 @@ describe('runBaselineCapture', () => {
             hasTouch: SNAPDRIFT_VIEWPORT_PRESETS.desktop.hasTouch
         });
         expect(browser.newContext).toHaveBeenNthCalledWith(2, {
+            ...expectedContextSettings,
             viewport: {
                 width: SNAPDRIFT_VIEWPORT_PRESETS.mobile.width,
                 height: SNAPDRIFT_VIEWPORT_PRESETS.mobile.height
@@ -202,6 +209,24 @@ describe('runBaselineCapture', () => {
             expect.objectContaining({ id: 'home-desktop', width: 144, height: 126 }),
             expect.objectContaining({ id: 'home-mobile', width: 39, height: 132 })
         ]));
+        expect(manifest.captureProfile).toMatchObject({
+            schemaVersion: 2,
+            engine: { name: 'snapdrift-local', version: expect.any(String) },
+            engineVersion: expect.any(String),
+            browser: 'chromium',
+            browserRevision: '149.0.0.1',
+            playwrightVersion: expect.stringMatching(/^\d+\./),
+            platform: { name: os.platform(), architecture: os.arch(), release: os.release(), version: os.version() },
+            locale: 'en-US', timezone: 'UTC',
+            settings: {
+                screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+                readiness: { waitUntil: 'load', settleDelayMs: SNAPDRIFT_SETTLE_DELAY_MS },
+                context: { isolation: 'fresh-context-per-attempt' },
+                launch: { headless: true, args: ['--disable-gpu'] }
+            }
+        });
+        expect(manifest.captureProfile.engineVersion).toBe(manifest.captureProfile.engine.version);
+        expect(desktopPage.screenshot).toHaveBeenCalledWith({ path: desktopShot, ...manifest.captureProfile.settings.screenshot });
         expect(manifest.screenshots.map((entry) => entry.id)).toEqual(['home-desktop', 'home-mobile']);
         expect(manifest.screenshots).toEqual(expect.arrayContaining([
             expect.objectContaining({ id: 'home-desktop', width: 144, height: 126 }),
@@ -291,6 +316,7 @@ describe('runBaselineCapture', () => {
             { id: 'home-desktop', path: '/', viewport: 'desktop' }
         ]);
         const browser = {
+            version: () => '149.0.0.1',
             newContext: jest.fn().mockRejectedValue(new Error('context quota exceeded')),
             close: jest.fn().mockResolvedValue(undefined)
         };
@@ -462,6 +488,7 @@ describe('runBaselineCapture', () => {
 
         expect(browser.newContext).toHaveBeenCalledTimes(1);
         expect(browser.newContext).toHaveBeenCalledWith({
+            ...expectedContextSettings,
             viewport: { width: 800, height: 600 },
             deviceScaleFactor: 1,
             isMobile: false,
@@ -480,6 +507,26 @@ describe('runBaselineCapture', () => {
             id: 'tablet-view',
             viewport: { width: 800, height: 600 }
         }));
+    });
+
+    it('preserves profiles through capture, baseline staging, and comparison with full-page growth', async () => {
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
+        const { generateDriftReport } = await import('../lib/compare-results.mjs');
+        const configPath = await writeConfig(tempDir, [{ id: 'home', path: '/', viewport: 'desktop' }]);
+        createHarness({ desktopPage: createPage({}, { width: 10, height: 10 }) });
+        const baseline = await runBaselineCapture({ configPath, outDir: path.join(tempDir, 'baseline') });
+        const bundleDir = path.join(tempDir, 'bundle');
+        await stageArtifacts({ artifactType: 'baseline', bundleDir, resultsPath: baseline.resultsPath, manifestPath: baseline.manifestPath, screenshotsDir: path.join(baseline.screenshotsRoot, 'screenshots') });
+        createHarness({ desktopPage: createPage({}, { width: 10, height: 20 }) });
+        const current = await runBaselineCapture({ configPath, outDir: path.join(tempDir, 'current') });
+        const { summary } = await generateDriftReport({
+            configPath, baselineResultsPath: path.join(bundleDir, 'results.json'), baselineManifestPath: path.join(bundleDir, 'manifest.json'),
+            currentResultsPath: current.resultsPath, currentManifestPath: current.manifestPath, baselineRunDir: bundleDir, currentRunDir: current.screenshotsRoot
+        });
+        expect(summary.captureCompatibility).toEqual({ status: 'verified' });
+        expect(summary.errors).toEqual([]);
+        expect(summary.status).toBe('changes-detected');
+        expect(summary.changed[0].comparison.dimensionsChanged).toBe(true);
     });
 
     it('writes outputs into outDir when outDir is provided', async () => {

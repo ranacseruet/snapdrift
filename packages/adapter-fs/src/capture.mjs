@@ -2,6 +2,8 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import pngjs from 'pngjs';
@@ -15,10 +17,18 @@ import {
   VIEWPORT_PRESETS,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS,
-  sanitizeRouteId
+  sanitizeRouteId,
+  CAPTURE_PROFILE_SCHEMA_VERSION,
+  validateCaptureProfile
 } from '@snapdrift/manifest';
 
 const { PNG } = pngjs;
+const require = createRequire(import.meta.url);
+const engineVersion = require('../package.json').version;
+const playwrightVersion = require('playwright/package.json').version;
+const launchSettings = { headless: true, args: ['--disable-gpu'] };
+const screenshotSettings = Object.freeze({ fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' });
+const contextSettings = Object.freeze({ locale: 'en-US', timezoneId: 'UTC', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' });
 
 /** @typedef {import('../../manifest/types/index').VisualBaselineResults} BaselineResults */
 /** @typedef {import('../../manifest/types/index').VisualBaselineRouteResult} BaselineRouteResult */
@@ -120,7 +130,7 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
   let context;
 
   try {
-    context = await browser.newContext(viewportContextOptions(route.viewport));
+    context = await browser.newContext({ ...viewportContextOptions(route.viewport), ...contextSettings });
     const page = await context.newPage();
     const targetUrl = new URL(route.path, baseUrl).toString();
     const response = await page.goto(targetUrl, {
@@ -137,8 +147,7 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
     await ensureParentDirectory(absoluteImagePath);
     const screenshotBuffer = await page.screenshot({
       path: absoluteImagePath,
-      fullPage: true,
-      animations: 'disabled'
+      ...screenshotSettings
     });
     const screenshot = PNG.sync.read(screenshotBuffer);
 
@@ -273,10 +282,34 @@ export async function runBaselineCapture(options = {}) {
     screenshots: []
   };
 
-  const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'] });
+  const browser = await chromium.launch(launchSettings);
   let failures = 0;
 
   try {
+    manifest.captureProfile = validateCaptureProfile({
+      schemaVersion: CAPTURE_PROFILE_SCHEMA_VERSION,
+      engineVersion,
+      engine: { name: 'snapdrift-local', version: engineVersion },
+      browser: 'chromium',
+      browserRevision: browser.version(),
+      playwrightVersion,
+      platform: { name: os.platform(), architecture: os.arch(), release: os.release(), version: os.version() },
+      locale: contextSettings.locale,
+      timezone: contextSettings.timezoneId,
+      settings: {
+        screenshot: { ...screenshotSettings },
+        readiness: { waitUntil: 'load', settleDelayMs: SNAPDRIFT_SETTLE_DELAY_MS },
+        context: {
+          isolation: 'fresh-context-per-attempt',
+          colorScheme: contextSettings.colorScheme,
+          reducedMotion: contextSettings.reducedMotion,
+          forcedColors: contextSettings.forcedColors,
+          javaScriptEnabled: contextSettings.javaScriptEnabled,
+          serviceWorkers: contextSettings.serviceWorkers
+        },
+        launch: { ...launchSettings }
+      }
+    });
     // Group routes by viewport key, preserving each route's original index for result ordering.
     /** @type {Map<string, Array<{ route: SnapdriftRouteConfig, originalIndex: number }>>} */
     const byViewport = new Map();

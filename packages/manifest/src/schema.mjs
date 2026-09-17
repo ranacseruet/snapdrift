@@ -4,6 +4,8 @@
 /** @typedef {import('../types/index.d.ts').VisualScreenshotManifestEntry} ScreenshotManifestEntry */
 /** @typedef {import('../types/index.d.ts').VisualBaselineResults} BaselineResults */
 
+import { validateCaptureProfile, normalizedViewportIdentity } from './capture-profile.mjs';
+
 const CURRENT_SCHEMA_VERSION = 1;
 
 /**
@@ -86,6 +88,8 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     throw new Error('manifest.screenshots must be an array.');
   }
 
+  validateCaptureProfile(candidate.captureProfile, sourceLabel);
+
   const ids = new Set();
   const imagePaths = new Map();
   for (const [index, entry] of candidate.screenshots.entries()) {
@@ -114,6 +118,7 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
       if (!isPreset && !isCustom) {
         throw new Error(`manifest.screenshots[${index}].viewport must be a preset string or an object with width and height.`);
       }
+      normalizedViewportIdentity(vp);
     } else {
       throw new Error(`manifest.screenshots[${index}].viewport is required.`);
     }

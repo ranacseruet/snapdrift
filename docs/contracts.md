@@ -159,6 +159,8 @@ The pull request drift bundle contains:
 
 ## Screenshot manifest shape
 
+Minimal legacy example (new local captures also write `captureProfile`):
+
 ```json
 {
   "generatedAt": "2024-01-01T00:00:00.000Z",
@@ -175,6 +177,75 @@ The pull request drift bundle contains:
   ]
 }
 ```
+
+### Local capture profile v2
+
+New local captures persist `captureProfile` with `schemaVersion: 2`. This version
+is independent of the outer manifest schema (which defaults to 1 when omitted)
+and comparison policy v1. The profile records:
+
+| Field | Local capture value |
+|:------|:--------------------|
+| `engine`, `engineVersion` | `{ "name": "snapdrift-local", "version": "<adapter-fs version>" }`; `engineVersion` equals `engine.version` |
+| `browser`, `browserRevision`, `playwrightVersion` | `chromium`, the running browser's `browser.version()` string, and the installed Playwright version |
+| `platform` | `name`, `architecture`, `release`, `version` from Node's OS APIs |
+| `locale`, `timezone` | `en-US`, `UTC` |
+| `settings.screenshot` | `fullPage: true`, `animations: "disabled"`, `caret: "hide"`, `scale: "device"`, `omitBackground: false`, `type: "png"` |
+| `settings.readiness` | `waitUntil: "load"`, `settleDelayMs: 300` |
+| `settings.context` | `isolation: "fresh-context-per-attempt"`, `colorScheme: "light"`, `reducedMotion: "no-preference"`, `forcedColors: "none"`, `javaScriptEnabled: true`, `serviceWorkers: "allow"` |
+| `settings.launch` | `headless: true`, `args: ["--disable-gpu"]` |
+
+These are persisted metadata, not new configuration knobs. Local v2 requires
+all listed fields with valid types/settings and matching engine version fields.
+Fonts are **not fingerprinted**: local capture does not populate the optional
+`fontsHash`, so a verified profile is not proof of identical installed fonts.
+Explicit `en-US` / `UTC` replaces environment-dependent defaults and may change
+localized text or dates; recapture affected baselines after upgrading.
+
+### Local compatibility before pixels
+
+Both manifests are validated after loading and before manifest entries are
+indexed and PNGs are resolved.
+Malformed manifests/profiles and unsupported profile schema versions (anything
+other than omitted, 1, or 2) throw before a comparison summary is generated;
+`report-only` does not suppress these input errors.
+
+- Two local v2 profiles must match exactly across the full profile, including
+  extra fields. Object key order is ignored; array order and values matter.
+  There is no version tolerance: adapter, Playwright, browser, or OS updates can
+  require a baseline refresh. The reason identifies the first differing field.
+- For each selected configured route id present in both manifests, both entries
+  must have the exact configured `path` and the same normalized viewport as the
+  config: width, height, device scale factor, mobile, and touch. Paths are not
+  URL-normalized; `baseUrl` and timestamps are not compared. Custom viewports use
+  scale 1, mobile false, touch false: 1440×900 equals `desktop`, but 390×844 does
+  not equal `mobile`. Missing entries retain their missing/error classification.
+- A profile or route-identity mismatch adds an `errors[]` item with
+  `status: "error"` and `code: "incompatible_capture"`. That route's PNGs are
+  not resolved, read, or pixel-compared, even if they would be byte-identical.
+  The summary is `incomplete`, not product drift. With compatible identity,
+  changed full-page raster dimensions remain normal union-canvas `changed[]`
+  signals, independent of threshold.
+- Missing profiles or profiles with omitted/v1 schema remain usable but
+  `unverified`, with a warning in `summary.message`; pixels can still be compared
+  after route checks. If both profiles provide `browser`, `browserRevision`,
+  `fontsHash`, `timezone`, or `locale`, a difference in any shared field is
+  incompatible. An explicit foreign `engine.name` on either side is incompatible
+  even when the other profile is absent. Legacy engine versions alone do not
+  establish verified compatibility.
+
+`summary.captureCompatibility` contains profile-level `status` (`verified`,
+`unverified`, or `incompatible`) and an optional `reason`. It is **not** an
+aggregate route status: profiles can be `verified` while route path/viewport
+checks produce `incompatible_capture` errors. Unverified alone does not make a
+run incomplete or fail enforcement.
+
+Refresh the baseline using the [existing CLI or baseline action](local-cli.md#refreshing-or-acknowledging-local-baselines)
+in the intended capture environment. For intentional nonblocking acknowledgement,
+set `diff.mode` to `report-only`: it preserves incompatibility errors and never
+overrides compatibility to compare pixels. `fail-on-incomplete` and `strict`
+fail on those errors; `fail-on-changes` does not fail on incompatibility alone
+but still fails if other comparable routes changed.
 
 ## Summary shape
 
@@ -209,6 +280,7 @@ The pull request drift bundle contains:
 
 | Field | Type | Description |
 |:------|:-----|:------------|
+| `captureCompatibility` | `{ status, reason? }?` | Local profile-level compatibility: `verified`, `unverified`, or `incompatible`; route identity errors are separate |
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
 | `comparisonPolicy` | `{ "version": 1, "threshold": number }?` | Effective v1 comparison policy used by the local adapter (synthesized from `diff.threshold` when not configured) |
 
@@ -247,7 +319,7 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 
 ## Drift semantics
 
-- Screenshots are matched by `id`
+- Screenshots are matched by `id`; local profile and configured path/normalized viewport compatibility are checked before pixels (see [Local compatibility before pixels](#local-compatibility-before-pixels))
 - Mismatch ratio is `different_pixels / total_pixels`
 - `diff.threshold` applies per screenshot
 - Missing captures are counted separately from drift signals
@@ -260,7 +332,7 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 
 | Mode | Stops the run when |
 |:-----|:-------------------|
-| `report-only` | Never |
+| `report-only` | Never from summary enforcement; validation/capture failures still fail |
 | `fail-on-changes` | `changedScreenshots > 0` |
 | `fail-on-incomplete` | Errors or missing captures occur; a completed v1 dimension comparison alone does not fail |
 | `strict` | Any drift or incomplete comparison appears |
