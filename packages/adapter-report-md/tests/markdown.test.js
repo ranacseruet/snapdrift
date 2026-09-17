@@ -59,6 +59,28 @@ describe('makeMarkdown', () => {
       expect(md).toContain('<img src="https://raw.githubusercontent.com/ranacseruet/snapdrift/main/assets/snapdrift-logo-icon.png"');
     });
 
+    it('renders the unverified capture diagnostic once with Markdown escaping', () => {
+      const message = 'Capture compatibility is unverified: <legacy> & [profile] | `v1`.';
+      const md = makeMarkdown(makeSummary({
+        captureCompatibility: { status: 'unverified', reason: message },
+        message
+      }));
+      const escaped = 'Capture compatibility is unverified: &lt;legacy&gt; &amp; \\[profile\\] \\| \\`v1\\`.';
+      expect(md.split(escaped)).toHaveLength(2);
+      expect(md).not.toContain(message);
+    });
+
+    it('does not render unrelated summary messages or empty diagnostics', () => {
+      for (const status of [undefined, 'verified', 'incompatible', 'unverified']) {
+        const md = makeMarkdown(makeSummary({
+          captureCompatibility: status ? { status } : undefined,
+          message: status === 'unverified' ? undefined : 'Unrelated note'
+        }));
+        expect(md).not.toContain('Unrelated note');
+        expect(md).not.toContain('**Note:**');
+      }
+    });
+
     it('renders the stats table with correct values', () => {
       const md = makeMarkdown(makeSummary());
       expect(md).toContain('| 2 | 2 | `report-only` | 1% |');

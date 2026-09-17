@@ -44,6 +44,28 @@ describe('generateHtmlReport', () => {
     expect(html).toContain('>Comparison errors<');
   });
 
+  it('renders the unverified capture diagnostic once with HTML escaping', async () => {
+    const message = 'Capture compatibility is unverified: <legacy> & "v1".';
+    const html = await generateHtmlReport(makeSummary({
+      captureCompatibility: { status: 'unverified', reason: message },
+      message
+    }));
+    const escaped = 'Capture compatibility is unverified: &lt;legacy&gt; &amp; &quot;v1&quot;.';
+    expect(html.split(escaped)).toHaveLength(2);
+    expect(html).not.toContain(message);
+  });
+
+  it('does not render unrelated summary messages or empty diagnostics', async () => {
+    for (const status of [undefined, 'verified', 'incompatible', 'unverified']) {
+      const html = await generateHtmlReport(makeSummary({
+        captureCompatibility: status ? { status } : undefined,
+        message: status === 'unverified' ? undefined : 'Unrelated note'
+      }));
+      expect(html).not.toContain('Unrelated note');
+      expect(html).not.toContain('<strong>Note:</strong>');
+    }
+  });
+
   it('shows drift-detected status class and label', async () => {
     const html = await generateHtmlReport(makeSummary({ status: 'changes-detected' }));
     expect(html).toContain('status-changes');

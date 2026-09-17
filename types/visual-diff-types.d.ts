@@ -192,6 +192,7 @@ export interface VisualDiffSummary {
   changed: VisualDiffChangedItem[];
   missing: VisualDiffMissingItem[];
   errors: VisualDiffErrorItem[];
+  captureCompatibility?: import('@snapdrift/manifest').CaptureCompatibility;
   dimensionChanges: VisualDiffDimensionItem[];
   comparisonPolicy?: ComparisonPolicy;
   message?: string;

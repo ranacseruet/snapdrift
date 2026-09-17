@@ -154,6 +154,27 @@ describe('printSummary', () => {
         expect(output).toContain('Matched:  3');
     });
 
+    it('prints the unverified capture diagnostic exactly once', () => {
+        const message = 'Capture compatibility is unverified: legacy manifest.';
+        printSummary({
+            status: 'clean',
+            captureCompatibility: { status: 'unverified', reason: message },
+            message
+        });
+        expect(output.split(message)).toHaveLength(2);
+        expect(output).toContain('Clean');
+    });
+
+    it('does not print unrelated summary messages or empty diagnostics', () => {
+        for (const status of [undefined, 'verified', 'incompatible']) {
+            printSummary({ captureCompatibility: status ? { status } : undefined, message: 'Unrelated note' });
+        }
+        printSummary({ captureCompatibility: { status: 'unverified' } });
+        expect(output).not.toContain('Unrelated note');
+        expect(output).not.toContain('Note:');
+        expect(output).not.toContain('undefined');
+    });
+
     it('prints changes-detected status with yellow circle', () => {
         printSummary({
             status: 'changes-detected',

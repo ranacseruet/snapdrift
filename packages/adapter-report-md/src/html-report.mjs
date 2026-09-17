@@ -215,6 +215,9 @@ export async function generateHtmlReport(summary, options = {}) {
   metaParts.push(`Diff mode: <code>${escapeHtml(summary.diffMode)}</code>`);
   metaParts.push(`Threshold: <code>${formatPercentage(summary.threshold)}</code>`);
 
+  const diagnosticHtml = summary.captureCompatibility?.status === 'unverified' && summary.message
+    ? `<p><strong>Note:</strong> ${escapeHtml(summary.message)}</p>`
+    : '';
   const generatedAt = escapeHtml(summary.finishedAt || summary.startedAt);
 
   return `<!DOCTYPE html>
@@ -260,7 +263,7 @@ export async function generateHtmlReport(summary, options = {}) {
 <body>
   <div class="header">
     <h1>SnapDrift Visual Diff Report</h1>
-    <span class="status ${statusClass}">${statusLabel}</span>
+    <span class="status ${statusClass}">${statusLabel}</span>${diagnosticHtml}
     <div class="stats">
       <div class="stat"><strong>${summary.changedScreenshots}</strong><span>Drift signals</span></div>
       <div class="stat"><strong>${summary.matchedScreenshots}</strong><span>Stable captures</span></div>

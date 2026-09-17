@@ -12,7 +12,9 @@
   the summary's `captureCompatibility` status describes profiles only.
 - Legacy missing/v1 profiles remain unverified and pixel-comparable after route
   checks unless shared metadata conflicts or an explicit foreign engine is found.
-  Malformed or unsupported profiles are rejected. Refresh using `snapdrift baseline`
+  The unverified diagnostic appears in CLI, Markdown, and HTML reports as well as
+  JSON summaries and PR comments. Malformed or unsupported profiles are rejected.
+  Refresh using `snapdrift baseline`
   (`provider: "local"`) or the existing baseline action; `report-only` acknowledges
   incompatibility nonblockingly but never bypasses it to compare pixels.
 

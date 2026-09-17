@@ -1,6 +1,7 @@
 // @ts-check
 
 import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
+import { escapeMarkdown } from './pr-comment.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary['diffMode']} DriftMode */
@@ -70,6 +71,11 @@ export function makeMarkdown(summaryData) {
     `| Errors | ${summaryData.errors.length} |`,
     ''
   ];
+
+  if (summaryData.captureCompatibility?.status === 'unverified' && summaryData.message) {
+    lines.push(`> **Note:** ${escapeMarkdown(summaryData.message)}`);
+    lines.push('');
+  }
 
   const metaItems = [];
   if (summaryData.baselineArtifactName) {

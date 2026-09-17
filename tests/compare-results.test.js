@@ -474,7 +474,7 @@ describe('generateDriftReport', () => {
       currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 200, g: 200, b: 200 }]
     });
 
-    const { summary } = await generateDriftReport({
+    const { summary, markdown } = await generateDriftReport({
       ...opts,
       routeIds: [routeId]
     });
@@ -488,6 +488,7 @@ describe('generateDriftReport', () => {
     expect(summary.finishedAt).toBeDefined();
     expect(summary.captureCompatibility.status).toBe('unverified');
     expect(summary.message).toContain('legacy manifest');
+    expect(markdown).toContain(summary.message);
   });
 
   it('matches screenshots whose pixel difference is at or below the threshold', async () => {
