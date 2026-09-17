@@ -67,77 +67,19 @@ runs:
           const { pathToFileURL } = require('url');
 
           const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-          const { loadSnapdriftConfig, selectRoutesForChangedFiles } = await import(pathToFileURL(configModulePath));
+          const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+          const requestsModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/github-requests.mjs');
+          const { resolvePullRequestScope } = await import(pathToFileURL(requestsModulePath));
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-
-          const allRouteIds = (config.routes || []).map((route) => route.id);
-          const resolvedPrNumber = Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || '');
-
-          function setOutputs(scope) {
-            core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
-            core.setOutput('reason', scope.reason);
-            core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));
-          }
-
-          if (process.env.FORCE_RUN === 'true') {
-            setOutputs({
-              shouldRun: true,
-              reason: process.env.FORCE_RUN_REASON || 'forced',
-              selectedRouteIds: allRouteIds
-            });
-            return;
-          }
-
-          if (!Number.isFinite(resolvedPrNumber) || resolvedPrNumber <= 0) {
-            setOutputs({
-              shouldRun: true,
-              reason: 'missing_pr_number',
-              selectedRouteIds: allRouteIds
-            });
-            return;
-          }
-
-          try {
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: resolvedPrNumber,
-              per_page: 100
-            });
-
-            if (!Array.isArray(files)) {
-              throw new Error('Malformed GitHub changed-file response: expected an array of file records.');
-            }
-            for (const [index, file] of files.entries()) {
-              if (!file || typeof file !== 'object' || typeof file.filename !== 'string' || file.filename.length === 0) {
-                throw new Error(`Malformed GitHub changed-file response: file record ${index} must include a non-empty string filename.`);
-              }
-            }
-            if (files.length >= 3000) {
-              core.warning('GitHub returned the maximum 3000 changed-file records; the list may be truncated, so running all configured captures.');
-              setOutputs({
-                shouldRun: true,
-                reason: 'changed_files_truncated',
-                selectedRouteIds: allRouteIds
-              });
-              return;
-            }
-            const changedFiles = [...new Set(files.flatMap((file) => [
-              file.filename,
-              ...(file.status === 'renamed' && typeof file.previous_filename === 'string' && file.previous_filename
-                ? [file.previous_filename]
-                : [])
-            ]))];
-            const scope = selectRoutesForChangedFiles(
-              config,
-              changedFiles
-            );
-            setOutputs(scope);
-          } catch (error) {
-            core.warning(`Unable to inspect PR files for SnapDrift scope; running all configured captures instead. ${error.message}`);
-            setOutputs({
-              shouldRun: true,
-              reason: 'snapdrift_scope_check_failed',
-              selectedRouteIds: allRouteIds
-            });
-          }
+          const scope = await resolvePullRequestScope({
+            github,
+            ...context.repo,
+            config,
+            pullNumber: Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || ''),
+            forceRun: process.env.FORCE_RUN === 'true',
+            forceRunReason: process.env.FORCE_RUN_REASON || 'forced',
+            warning: (message) => core.warning(message)
+          });
+          core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
+          core.setOutput('reason', scope.reason);
+          core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));

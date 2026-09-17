@@ -116,41 +116,12 @@ runs:
             maxErrorRows
           });
 
-          const comments = await github.paginate(github.rest.issues.listComments, {
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: issueNumber,
-            per_page: 100
+          const requestsModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/github-requests.mjs');
+          const { upsertPullRequestReportComment } = await import(pathToFileURL(requestsModulePath));
+          await upsertPullRequestReportComment({
+            github,
+            ...context.repo,
+            issueNumber,
+            body,
+            markers: PR_COMMENT_MARKERS
           });
-          const matchingComments = comments
-            .filter((comment) => comment.body && PR_COMMENT_MARKERS.some((marker) => comment.body.includes(marker)))
-            .sort((left, right) => {
-              const leftTime = new Date(left.updated_at || left.created_at).getTime();
-              const rightTime = new Date(right.updated_at || right.created_at).getTime();
-              return rightTime - leftTime;
-            });
-          const existing = matchingComments[0];
-
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body
-            });
-          }
-
-          for (const duplicate of matchingComments.slice(1)) {
-            await github.rest.issues.deleteComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: duplicate.id
-            });
-          }

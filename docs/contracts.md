@@ -621,6 +621,31 @@ The wrapper actions (`actions/baseline`, `actions/pr-diff`) and the CLI both han
 request or response body is being bounded. It is not an additional public
 error class; callers should handle the exported error classes above.
 
+## Shared orchestration
+
+GitHub-facing request handling is shared between the wrapper and standalone
+actions through `lib/github-requests.mjs`. The github-script steps stay as thin
+adapters that load the module, inject `{ github, owner, repo, context }`-style
+inputs, and map the returned decision to step outputs:
+
+- `fetchPullRequestFiles` paginates `pulls.listFiles` (100 per page) and
+  validates each record's `filename` before any scope decision is made.
+- `resolveScopeDecision` is pure: renamed files contribute
+  `previous_filename`, paths are deduplicated, 3000+ records short-circuit to
+  running all routes (`changed_files_truncated`), and an empty list maps to
+  `no_changed_files`. Other reasons come from
+  `selectRoutesForChangedFiles`.
+- `resolvePullRequestScope` composes the above with the
+  explicit-route/force-run/missing-PR shortcuts and the
+  `snapdrift_scope_check_failed` fallback warning.
+- `upsertPullRequestReportComment` performs the marker-filtered, newest-first
+  comment upsert with duplicate deletion used by `actions/comment` and the
+  `actions/pr-diff` report step. The create-only "Capture Failed" /
+  "Baseline Lookup Failed" fallback body remains inline in `actions/pr-diff`.
+
+The baseline resolver keeps its own module (`lib/resolve-baseline-artifact.mjs`)
+because both actions already share it verbatim.
+
 ## Primary entrypoints
 
 - `actions/baseline`

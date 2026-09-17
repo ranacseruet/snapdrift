@@ -137,91 +137,23 @@ runs:
           const { pathToFileURL } = require('url');
 
           const configModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
-          const { loadSnapdriftConfig, selectConfiguredRoutes, selectRoutesForChangedFiles, splitCommaList } = await import(pathToFileURL(configModulePath));
+          const { loadSnapdriftConfig } = await import(pathToFileURL(configModulePath));
+          const requestsModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/github-requests.mjs');
+          const { resolvePullRequestScope } = await import(pathToFileURL(requestsModulePath));
           const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
-          const allRouteIds = (config.routes || []).map((route) => route.id);
-          const explicitRouteIds = splitCommaList(process.env.ROUTE_IDS);
-
-          function setOutputs(scope) {
-            core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
-            core.setOutput('reason', scope.reason);
-            core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));
-          }
-
-          if (explicitRouteIds.length > 0) {
-            const selected = selectConfiguredRoutes(config, explicitRouteIds);
-            setOutputs({
-              shouldRun: true,
-              reason: 'explicit_route_ids',
-              selectedRouteIds: selected.selectedRouteIds
-            });
-            return;
-          }
-
-          if (process.env.FORCE_RUN === 'true') {
-            setOutputs({
-              shouldRun: true,
-              reason: process.env.FORCE_RUN_REASON || 'forced',
-              selectedRouteIds: allRouteIds
-            });
-            return;
-          }
-
-          const prNumber = Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || '');
-          if (!Number.isFinite(prNumber) || prNumber <= 0) {
-            setOutputs({
-              shouldRun: true,
-              reason: 'missing_pr_number',
-              selectedRouteIds: allRouteIds
-            });
-            return;
-          }
-
-          try {
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100
-            });
-
-            if (!Array.isArray(files)) {
-              throw new Error('Malformed GitHub changed-file response: expected an array of file records.');
-            }
-            for (const [index, file] of files.entries()) {
-              if (!file || typeof file !== 'object' || typeof file.filename !== 'string' || file.filename.length === 0) {
-                throw new Error(`Malformed GitHub changed-file response: file record ${index} must include a non-empty string filename.`);
-              }
-            }
-            if (files.length >= 3000) {
-              core.warning('GitHub returned the maximum 3000 changed-file records; the list may be truncated, so running all configured captures.');
-              setOutputs({
-                shouldRun: true,
-                reason: 'changed_files_truncated',
-                selectedRouteIds: allRouteIds
-              });
-              return;
-            }
-            const changedFiles = [...new Set(files.flatMap((file) => [
-              file.filename,
-              ...(file.status === 'renamed' && typeof file.previous_filename === 'string' && file.previous_filename
-                ? [file.previous_filename]
-                : [])
-            ]))];
-            setOutputs(
-              selectRoutesForChangedFiles(
-                config,
-                changedFiles
-              )
-            );
-          } catch (error) {
-            core.warning(`Unable to inspect PR files for SnapDrift scope; running all configured captures instead. ${error.message}`);
-            setOutputs({
-              shouldRun: true,
-              reason: 'snapdrift_scope_check_failed',
-              selectedRouteIds: allRouteIds
-            });
-          }
+          const scope = await resolvePullRequestScope({
+            github,
+            ...context.repo,
+            config,
+            pullNumber: Number(process.env.INPUT_PR_NUMBER || context.payload.pull_request?.number || ''),
+            routeIds: process.env.ROUTE_IDS || '',
+            forceRun: process.env.FORCE_RUN === 'true',
+            forceRunReason: process.env.FORCE_RUN_REASON || 'forced',
+            warning: (message) => core.warning(message)
+          });
+          core.setOutput('should_run', scope.shouldRun ? 'true' : 'false');
+          core.setOutput('reason', scope.reason);
+          core.setOutput('selected_route_ids', (scope.selectedRouteIds || []).join(','));
 
     - id: baseline
       if: steps.scope.outputs.should_run == 'true'
@@ -739,44 +671,15 @@ runs:
             maxErrorRows
           });
 
-          const comments = await github.paginate(github.rest.issues.listComments, {
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: issueNumber,
-            per_page: 100
+          const requestsModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/github-requests.mjs');
+          const { upsertPullRequestReportComment } = await import(pathToFileURL(requestsModulePath));
+          await upsertPullRequestReportComment({
+            github,
+            ...context.repo,
+            issueNumber,
+            body,
+            markers: PR_COMMENT_MARKERS
           });
-          const matchingComments = comments
-            .filter((comment) => comment.body && PR_COMMENT_MARKERS.some((marker) => comment.body.includes(marker)))
-            .sort((left, right) => {
-              const leftTime = new Date(left.updated_at || left.created_at).getTime();
-              const rightTime = new Date(right.updated_at || right.created_at).getTime();
-              return rightTime - leftTime;
-            });
-          const existing = matchingComments[0];
-
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body
-            });
-          }
-
-          for (const duplicate of matchingComments.slice(1)) {
-            await github.rest.issues.deleteComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: duplicate.id
-            });
-          }
 
     # A skipped compare writes a summary with no diff counters, so enforcement
     # has nothing to evaluate — `warn-and-skip` means "do not fail my build".

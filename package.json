@@ -81,6 +81,7 @@
     "./lib/cli.mjs": "./lib/cli.mjs",
     "./lib/provider.mjs": "./lib/provider.mjs",
     "./lib/outage-policy.mjs": "./lib/outage-policy.mjs",
+    "./lib/github-requests.mjs": "./lib/github-requests.mjs",
     "./lib/snap-provider.mjs": "./lib/snap-provider.mjs",
      "./lib/migrate-baselines.mjs": "./lib/migrate-baselines.mjs",
      "./lib/init-from-action.mjs": "./lib/init-from-action.mjs",

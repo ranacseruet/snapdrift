@@ -6,6 +6,7 @@ const {
   captureWithPolicy,
   diffWithPolicy,
   hasLocalScreenshots,
+  describeCaptureArtifacts,
   publishBaselineWithPolicy,
   MISSING_BASELINE_REASON,
   SNAP_UNAVAILABLE_REASON
@@ -42,6 +43,26 @@ function makeProvider({ captureError, diffError, publishError, captureResult = C
   };
 }
 
+describe('describeCaptureArtifacts', () => {
+  it.each([
+    ['local', 'https://example.com', true],
+    ['snap', 'https://example.com', false],
+    ['snap', 'http://localhost:3000', true],
+    ['unknown', 'https://example.com', true],
+    ['snap', undefined, false]
+  ])('describes %s captures at %s', (providerName, baseUrl, localScreenshots) => {
+    expect(describeCaptureArtifacts(providerName, CAPTURE_RESULT, { baseUrl })).toEqual({
+      localScreenshots,
+      artifactsRoot: localScreenshots ? CAPTURE_RESULT.screenshotsRoot : undefined
+    });
+    expect(hasLocalScreenshots(providerName, { baseUrl })).toBe(localScreenshots);
+  });
+
+  it('does not invent an artifacts root when capture paths are absent', () => {
+    expect(describeCaptureArtifacts('local')).toEqual({ localScreenshots: true, artifactsRoot: undefined });
+  });
+});
+
 describe('hasLocalScreenshots', () => {
   it('is true for the local provider', () => {
     expect(hasLocalScreenshots('local', { baseUrl: 'https://example.com' })).toBe(true);
@@ -57,6 +78,17 @@ describe('hasLocalScreenshots', () => {
 });
 
 describe('captureWithPolicy', () => {
+  it.each([
+    ['local', 'https://example.com', true],
+    ['snap', 'https://example.com', false],
+    ['snap', 'http://localhost:3000', true]
+  ])('surfaces artifact capabilities for %s at %s', async (providerName, baseUrl, localScreenshots) => {
+    const result = await captureWithPolicy({ provider: makeProvider(), providerName, config: { baseUrl }, captureOptions: {} });
+    expect(result).toEqual({
+      outcome: 'captured', providerName, result: CAPTURE_RESULT, localScreenshots,
+      artifacts: { localScreenshots, artifactsRoot: localScreenshots ? CAPTURE_RESULT.screenshotsRoot : undefined }
+    });
+  });
   it('returns the capture and the configured provider when Snap is healthy', async () => {
     const provider = makeProvider();
 
@@ -84,6 +116,8 @@ describe('captureWithPolicy', () => {
 
     expect(result.outcome).toBe('skipped');
     expect(result.result).toBeUndefined();
+    expect(result.artifacts).toEqual({ localScreenshots: false });
+    expect(result.localScreenshots).toBe(false);
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
@@ -163,6 +197,57 @@ describe('diffWithPolicy', () => {
     currentResultsPath: '/tmp/snap/results.json',
     currentManifestPath: '/tmp/snap/manifest.json'
   };
+
+  it.each([
+    ['diffed', undefined, DIFF_RESULT, 'snap'],
+    ['skipped', new SnapSkipError('unavailable'), undefined, 'snap'],
+    ['baseline-unavailable', new SnapFallbackError('unavailable'), undefined, 'local']
+  ])('returns explicit capture artifacts for %s', async (outcome, diffError, expectedResult, providerName) => {
+    const artifacts = { localScreenshots: false, artifactsRoot: undefined };
+    const result = await diffWithPolicy({
+      provider: makeProvider({ diffError }),
+      providerName: 'snap',
+      diffOptions,
+      artifacts,
+      baselineAvailable: false
+    });
+    expect(result).toEqual({
+      outcome,
+      providerName,
+      ...(expectedResult ? { result: expectedResult } : {}),
+      artifacts,
+      localScreenshots: false
+    });
+  });
+
+  it.each([
+    ['explicit remote overrides hybrid inference', { localScreenshots: false }, undefined, 'http://localhost:3000', true],
+    ['explicit hybrid overrides remote inference', { localScreenshots: true, artifactsRoot: '/tmp/hybrid' }, undefined, 'https://example.com', false],
+    ['remote inference', undefined, undefined, 'https://example.com', true],
+    ['hybrid inference', undefined, undefined, 'http://localhost:3000', false],
+    ['legacy true overrides artifacts', { localScreenshots: false }, true, 'https://example.com', false],
+    ['legacy false overrides artifacts', { localScreenshots: true }, false, 'http://localhost:3000', true]
+  ])('preserves fallback recapture decisions: %s', async (_name, artifacts, localScreenshots, baseUrl, recaptures) => {
+    const localProvider = makeProvider();
+    const result = await diffWithPolicy({
+      provider: makeProvider({ diffError: new SnapFallbackError('unavailable') }),
+      providerName: 'snap', config: { baseUrl }, diffOptions, captureOptions: {},
+      artifacts, localScreenshots, createLocalProvider: () => localProvider
+    });
+    expect(localProvider.capture).toHaveBeenCalledTimes(recaptures ? 1 : 0);
+    expect(result.localScreenshots).toBe(true);
+    expect(result.artifacts).toEqual({
+      localScreenshots: true,
+      artifactsRoot: recaptures ? CAPTURE_RESULT.screenshotsRoot : artifacts?.artifactsRoot
+    });
+    expect(result.recapture).toBe(recaptures ? CAPTURE_RESULT : undefined);
+    expect(localProvider.diff).toHaveBeenCalledWith(recaptures ? {
+      ...diffOptions,
+      currentResultsPath: CAPTURE_RESULT.resultsPath,
+      currentManifestPath: CAPTURE_RESULT.manifestPath,
+      currentRunDir: CAPTURE_RESULT.screenshotsRoot
+    } : diffOptions);
+  });
 
   it('returns the diff when Snap is healthy', async () => {
     const provider = makeProvider();

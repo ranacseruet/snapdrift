@@ -33,7 +33,7 @@ export async function executeActionScript({
   githubWorkspace = actionRoot
 }) {
   const metadata = yaml.load(await fs.readFile(path.resolve(actionPath), 'utf8'));
-  const step = metadata.runs.steps.find((candidate) => candidate.id === stepId);
+  const step = metadata.runs.steps.find((candidate) => candidate.id === stepId && candidate.with?.script);
   if (!step) throw new Error(`Could not find ${stepId} step in ${actionPath}`);
 
   const environment = {

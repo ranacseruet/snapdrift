@@ -289,6 +289,18 @@ describe.each(ACTIONS)('$name', (action) => {
     expect(result.warnings[0]).toContain('rate limit exceeded');
   });
 
+  it('uses the default forced reason without requesting files', async () => {
+    const result = await executeScopeAction(action, { forceRun: 'true', forceRunReason: '' });
+    expect(result.outputs.reason).toBe('forced');
+    expect(result.paginateCalls).toEqual([]);
+  });
+
+  it('rejects non-array file responses with the original warning', async () => {
+    const result = await executeScopeAction(action, { files: {} });
+    expect(result.outputs.reason).toBe('snapdrift_scope_check_failed');
+    expect(result.warnings).toEqual(['Unable to inspect PR files for SnapDrift scope; running all configured captures instead. Malformed GitHub changed-file response: expected an array of file records.']);
+  });
+
   it('reports no_changed_files for a valid PR with an empty file list', async () => {
     const result = await executeScopeAction(action, { files: [] });
 

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Refactoring
+
+- GitHub-script steps in `actions/scope`, `actions/pr-diff` (scope and PR report),
+  and `actions/comment` now delegate to the shared, dependency-injected helpers in
+  `lib/github-requests.mjs` (`fetchPullRequestFiles`, `resolveScopeDecision`,
+  `resolvePullRequestScope`, `upsertPullRequestReportComment`), so the changed-file
+  selection and comment-upsert behavior is defined once and exercised by unit and
+  real-YAML parity tests. Outputs, reasons, warnings, markers, and fallback bodies
+  are byte-for-byte identical.
+- `captureWithPolicy`/`diffWithPolicy` results now include an explicit `artifacts`
+  descriptor (`describeCaptureArtifacts`: `localScreenshots` plus `artifactsRoot`
+  for local or hosted local-capture hybrid runs) so fallback decisions stop relying
+  on provider-name/URL inference; `localScreenshots` remains, and
+  `hasLocalScreenshots` is kept as a thin wrapper. `lib/provider.mjs` exports
+  `PROVIDER_CAPABILITIES` and `providerSupports(provider, capability)` so the
+  unavailable `LocalProvider.fetchLatestBaseline` baseline-store capability is
+  discoverable without a runtime throw.
+
 ### Features
 
 - Local manifests now persist capture profile v2: engine, browser/Playwright, OS,

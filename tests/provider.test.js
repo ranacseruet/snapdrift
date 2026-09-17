@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const { createProvider, LocalProvider } = await import('../lib/provider.mjs');
+const { createProvider, LocalProvider, providerSupports, PROVIDER_CAPABILITIES } = await import('../lib/provider.mjs');
 const { SnapProvider } = await import('../lib/snap-provider.mjs');
 const { buildReportCommentBody } = await import('@snapdrift/adapter-report-md');
 const { validateSnapdriftConfig, VALID_PROVIDER_VALUES, VALID_ON_UNAVAILABLE_MODES } = await import('@snapdrift/manifest');
@@ -23,6 +23,27 @@ const validBase = {
 // ---------------------------------------------------------------------------
 // createProvider
 // ---------------------------------------------------------------------------
+
+describe('providerSupports', () => {
+  it.each(['capture', 'diff', 'publishBaseline', 'buildCommentBody'])('supports %s on both providers', (capability) => {
+    expect(providerSupports('local', capability)).toBe(true);
+    expect(providerSupports('snap', capability)).toBe(true);
+  });
+
+  it('distinguishes hosted baseline storage without constructing providers', () => {
+    expect(providerSupports('local', 'fetchLatestBaseline')).toBe(false);
+    expect(providerSupports('snap', 'fetchLatestBaseline')).toBe(true);
+    expect(PROVIDER_CAPABILITIES.local.fetchLatestBaseline).toBe(false);
+    expect(Object.isFrozen(PROVIDER_CAPABILITIES)).toBe(true);
+    expect(Object.isFrozen(PROVIDER_CAPABILITIES.snap)).toBe(true);
+  });
+
+  it.each([
+    ['unknown', 'capture'], ['local', 'unknown'], ['toString', 'capture'], ['local', 'toString'], ['__proto__', 'capture']
+  ])('rejects unknown capabilities: %s/%s', (provider, capability) => {
+    expect(providerSupports(provider, capability)).toBe(false);
+  });
+});
 
 describe('createProvider', () => {
   it('returns a LocalProvider for "local"', () => {
