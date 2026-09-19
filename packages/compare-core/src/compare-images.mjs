@@ -129,9 +129,9 @@ export class ComparisonTooLargeError extends Error {
 export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const ignoreRegions = options.ignoreRegions || [];
   validateIgnoreRegions(ignoreRegions);
-  const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
-  const [addedR, addedG, addedB, addedA] = parseHighlightColor(options.addedColor || DEFAULT_ADDED_COLOR);
-  const [removedR, removedG, removedB, removedA] = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR);
+  const changedColor = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
+  const addedColor = parseHighlightColor(options.addedColor || DEFAULT_ADDED_COLOR);
+  const removedColor = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR);
   const renderDiffImage = options.renderDiffImage !== false;
   const maxPixels = resolveMaxPixels(options.maxPixels);
 
@@ -253,7 +253,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
       if (changed) {
         differentPixels += 1;
         if (diffPng) {
-          const color = currentOnly ? [addedR, addedG, addedB, addedA] : baselineOnly ? [removedR, removedG, removedB, removedA] : [r, g, b, a];
+          const color = currentOnly ? addedColor : baselineOnly ? removedColor : changedColor;
           diffPng.data[diffIndex] = color[0];
           diffPng.data[diffIndex + 1] = color[1];
           diffPng.data[diffIndex + 2] = color[2];

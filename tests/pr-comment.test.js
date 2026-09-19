@@ -95,7 +95,64 @@ describe('buildReportCommentBody', () => {
         );
 
         expect(body).toContain('[View report artifacts →](https://github.com/example/repo/actions/runs/123/artifacts/456) `diffs/home-desktop.png`');
+        expect(body).toContain('orange = changed');
         expect(body).not.toContain('![Diff image]');
+    });
+
+    it('omits the diff palette legend when there is no semantic diff image (Snap provider summaries)', () => {
+        // Snap-shaped item: comparison metadata without a local diff image.
+        const body = buildReportCommentBody({
+            ...cleanSummary,
+            status: 'changes-detected',
+            changedScreenshots: 1,
+            changed: [{
+                id: 'home-desktop',
+                viewport: 'desktop',
+                mismatchRatio: 0.1,
+                differentPixels: 10,
+                totalPixels: 100,
+                comparison: {
+                    baseline: { width: 2, height: 1 },
+                    current: { width: 3, height: 1 },
+                    canvas: { width: 3, height: 1 },
+                    dimensionsChanged: true,
+                    totalPixels: 3
+                }
+            }],
+            dimensionChanges: [{
+                id: 'home-desktop',
+                viewport: 'desktop',
+                baselineWidth: 2,
+                baselineHeight: 1,
+                currentWidth: 3,
+                currentHeight: 1
+            }]
+        });
+        expect(body).not.toContain('orange = changed');
+    });
+
+    it('omits the diff palette legend when dimensions are equal (no added/removed pixels possible)', () => {
+        const body = buildReportCommentBody({
+            ...cleanSummary,
+            status: 'changes-detected',
+            changedScreenshots: 1,
+            changed: [{
+                id: 'home-desktop',
+                viewport: 'desktop',
+                mismatchRatio: 0.1,
+                differentPixels: 10,
+                totalPixels: 100,
+                comparison: {
+                    baseline: { width: 2, height: 1 },
+                    current: { width: 2, height: 1 },
+                    canvas: { width: 2, height: 1 },
+                    dimensionsChanged: false,
+                    totalPixels: 2
+                },
+                diffImagePath: 'diffs/home-desktop.png'
+            }]
+        });
+        expect(body).not.toContain('orange = changed');
     });
 
     it('truncates changed screenshots at 20 with overflow note', () => {
