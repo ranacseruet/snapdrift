@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Features
+
+- Local diff images now use a semantic palette so the rendered PNG reflects the
+  kind of change, not just that pixels differ. `@snapdrift/compare-core` union-canvas
+  comparisons render pixels present only in the current capture in green (`addedColor`,
+  default `[0, 170, 0, 255]`), pixels present only in the baseline in red (`removedColor`,
+  default `[255, 0, 0, 255]`), and overlapping changed pixels in orange (`highlightColor`,
+  default `[255, 140, 0, 255]`). Metrics are unchanged — one-sided pixels still count as
+  changed under comparison policy v1. Strict same-dimension `generateDiffImage` diffs
+  switch their default highlight from red to orange for parity and cannot contain
+  added/removed pixels. Markdown, HTML, and PR-comment reports render a legend
+  ("orange = changed · green = added · red = removed") wherever a diff image is embedded.
+  Consumers comparing diff-PNG bytes between versions will see different output by design;
+  the new options restore any previous palette.
+
 ### Refactoring
 
 - GitHub-script steps in `actions/scope`, `actions/pr-diff` (scope and PR report),

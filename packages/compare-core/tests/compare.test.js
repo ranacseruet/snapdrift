@@ -114,7 +114,7 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     expect(diffPng.height).toBe(10);
   });
 
-  test('highlights changed pixels with default red color', () => {
+  test('highlights changed pixels with default orange color', () => {
     const baseline = solidPng(2, 2, [0, 0, 0, 255]);
     // Create current with 1 different pixel
     const currentPng = new PNG({ width: 2, height: 2 });
@@ -130,11 +130,11 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     const diffBuf = generateDiffImage(baseline, current);
     const diffPng = PNG.sync.read(diffBuf);
 
-    // Pixel (0,0) should be red (changed)
-    expect(diffPng.data[0]).toBe(255);  // R
-    expect(diffPng.data[1]).toBe(0);    // G
-    expect(diffPng.data[2]).toBe(0);    // B
-    expect(diffPng.data[3]).toBe(255);   // A
+    // Pixel (0,0) should be orange (changed)
+    expect(diffPng.data[0]).toBe(255);    // R
+    expect(diffPng.data[1]).toBe(140);    // G
+    expect(diffPng.data[2]).toBe(0);      // B
+    expect(diffPng.data[3]).toBe(255);    // A
 
     // Pixel (1,0) should be original (unchanged)
     expect(diffPng.data[4]).toBe(0);    // R
@@ -155,6 +155,16 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     expect(diffPng.data[1]).toBe(255);  // G
     expect(diffPng.data[2]).toBe(0);    // B
     expect(diffPng.data[3]).toBe(128);  // A
+  });
+
+  test('highlights changed pixels with default orange color', () => {
+    const baseline = solidPng(2, 2, [0, 0, 0, 255]);
+    const current = solidPng(2, 2, [255, 255, 255, 255]);
+
+    const diffBuf = generateDiffImage(baseline, current);
+    const diffPng = PNG.sync.read(diffBuf);
+
+    expect([...diffPng.data.slice(0, 4)]).toEqual([255, 140, 0, 255]);
   });
 
   test('keeps unchanged pixels at original color', () => {
@@ -190,9 +200,9 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     expect(diffPng.data[2]).toBe(128);
     expect(diffPng.data[3]).toBe(128);
 
-    // Pixel (2,0) outside ignore region → red highlight (changed)
+    // Pixel (2,0) outside ignore region → orange highlight (changed)
     expect(diffPng.data[32]).toBe(255);
-    expect(diffPng.data[33]).toBe(0);
+    expect(diffPng.data[33]).toBe(140);
     expect(diffPng.data[34]).toBe(0);
     expect(diffPng.data[35]).toBe(255);
   });
@@ -332,7 +342,71 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.totalPixels).toBe(3);
     expect(result.pct).toBe(result.mismatchRatio);
     expect(result.pixelsChanged).toBe(result.differentPixels);
+    expect([...diffPng.data.slice(8, 12)]).toEqual([0, 170, 0, 255]);
+  });
+
+  test('renders current-only pixels as added (green) and baseline-only as removed (red)', () => {
+    // Baseline 2x1 black; current 3x1 white.
+    const baseline = solidPng(2, 1, [0, 0, 0, 255]);
+    const current = solidPng(3, 1, [255, 255, 255, 255]);
+
+    const result = compareImages(baseline, current);
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+
+    // Pixels (0,0) and (1,0): in both, differ → changed → orange
+    expect([...diffPng.data.slice(0, 4)]).toEqual([255, 140, 0, 255]);
+    expect([...diffPng.data.slice(4, 8)]).toEqual([255, 140, 0, 255]);
+    // Pixel (2,0): only in current → added → green
+    expect([...diffPng.data.slice(8, 12)]).toEqual([0, 170, 0, 255]);
+    expect(result.differentPixels).toBe(3);
+    expect(result.comparison.dimensionsChanged).toBe(true);
+  });
+
+  test('renders baseline-only pixels as removed (red)', () => {
+    // Baseline 3x1 black; current 1x1 white — pixels (1,0) and (2,0) are baseline-only.
+    const baseline = solidPng(3, 1, [0, 0, 0, 255]);
+    const current = solidPng(1, 1, [255, 255, 255, 255]);
+
+    const result = compareImages(baseline, current);
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+
+    // Pixel (0,0): in both, differs → changed → orange
+    expect([...diffPng.data.slice(0, 4)]).toEqual([255, 140, 0, 255]);
+    // Pixel (1,0): only in baseline → removed → red
+    expect([...diffPng.data.slice(4, 8)]).toEqual([255, 0, 0, 255]);
+    // Pixel (2,0): only in baseline → removed → red
     expect([...diffPng.data.slice(8, 12)]).toEqual([255, 0, 0, 255]);
+    expect(result.differentPixels).toBe(3);
+  });
+
+  test('honors custom addedColor and removedColor', () => {
+    // Added case: baseline 2x1 black, current 3x1 with pixel (2,0) white.
+    // Pixel (2,0) is current-only → addedColor.
+    const addedBaseline = solidPng(2, 1, [0, 0, 0, 255]);
+    const addedCurrentPng = new PNG({ width: 3, height: 1 });
+    for (let x = 0; x < 3; x++) {
+      const i = x * 4;
+      addedCurrentPng.data[i] = x < 2 ? 0 : 9;
+      addedCurrentPng.data[i + 1] = 0;
+      addedCurrentPng.data[i + 2] = 0;
+      addedCurrentPng.data[i + 3] = 255;
+    }
+    const addedCurrent = PNG.sync.write(addedCurrentPng);
+
+    const addedResult = compareImages(addedBaseline, addedCurrent, { addedColor: [0, 0, 255, 255] });
+    const addedPng = PNG.sync.read(addedResult.diffImageBuffer);
+    // Pixels (0,0) and (1,0) match → baseline color; pixel (2,0) is added → custom blue.
+    expect([...addedPng.data.slice(0, 4)]).toEqual([0, 0, 0, 255]);
+    expect([...addedPng.data.slice(8, 12)]).toEqual([0, 0, 255, 255]);
+
+    // Removed case: baseline 4x1 black, current 3x1 black — pixel (3,0) is baseline-only.
+    const removedBaseline = solidPng(4, 1, [0, 0, 0, 255]);
+    const removedCurrent = solidPng(3, 1, [0, 0, 0, 255]);
+
+    const removedResult = compareImages(removedBaseline, removedCurrent, { removedColor: [255, 255, 0, 255] });
+    const removedPng = PNG.sync.read(removedResult.diffImageBuffer);
+    // Pixel (3,0) is baseline-only → custom yellow.
+    expect([...removedPng.data.slice(12, 16)]).toEqual([255, 255, 0, 255]);
   });
 
   test('excludes masked pixels from the denominator and renders them gray', () => {
@@ -429,5 +503,7 @@ describe('@snapdrift/compare-core — compareImages', () => {
       /width and .height must be non-negative/
     );
     expect(() => compareImages(baseline, baseline, { highlightColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
+    expect(() => compareImages(baseline, baseline, { addedColor: /** @type {any} */ ([-1, 0, 0, 255]) })).toThrow(/highlightColor must be an array of four integers/);
+    expect(() => compareImages(baseline, baseline, { removedColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
   });
 });

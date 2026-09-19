@@ -21,6 +21,14 @@ export function formatViewport(viewport) {
 }
 
 /**
+ * Human-facing legend for the semantic diff-image palette rendered by
+ * `@snapdrift/compare-core`: orange = changed pixels, green = pixels present
+ * only in the current capture (added), red = pixels present only in the
+ * baseline (removed).
+ */
+export const DIFF_IMAGE_LEGEND = 'Diff image colors: orange = changed · green = added · red = removed';
+
+/**
  * Format an internal 0–1 ratio for human-facing reports.
  * @param {number} ratio
  * @returns {string}

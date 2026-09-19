@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, formatPercentage, formatViewport } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, formatPercentage, formatViewport } from './constants.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 
@@ -136,7 +136,7 @@ export async function generateHtmlReport(summary, options = {}) {
     changedHtml = `<table>
       <thead><tr><th>Route</th><th>Path</th><th>Viewport</th>${comparisonDetails ? '<th>Baseline</th><th>Current</th><th>Canvas</th>' : ''}<th>Mismatch</th><th>Pixels changed</th>${comparisonDetails ? '<th>Diff image</th>' : ''}</tr></thead>
       <tbody>${rows.join('')}</tbody>
-    </table>`;
+    </table>${comparisonDetails ? `<p class="diff-legend"><sub>${escapeHtml(DIFF_IMAGE_LEGEND)}</sub></p>` : ''}`;
   }
 
   // --- Capture gaps ---
@@ -190,7 +190,7 @@ export async function generateHtmlReport(summary, options = {}) {
     dimensionHtml = `<table>
       <thead><tr><th>Route</th><th>Viewport</th><th>Baseline</th><th>Current</th><th>Canvas</th><th>Diff image</th></tr></thead>
       <tbody>${legacyRows}${comparisonRows}</tbody>
-    </table>`;
+    </table><p class="diff-legend"><sub>${escapeHtml(DIFF_IMAGE_LEGEND)}</sub></p>`;
   }
 
   // --- Errors ---
@@ -256,6 +256,7 @@ export async function generateHtmlReport(summary, options = {}) {
     .image-col img { max-width: 100%; border: 1px solid #d0d7de; border-radius: 4px; display: block; }
     .no-img { color: #57606a; font-size: 0.85em; font-style: italic; }
     .none { color: #57606a; font-style: italic; margin: 0; }
+    .diff-legend { margin: 8px 0 0; color: #57606a; font-size: 0.8em; }
     code { background: #eaeef2; padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
     footer { font-size: 0.8em; color: #57606a; text-align: right; margin-top: 8px; }
   </style>

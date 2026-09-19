@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
 import { escapeMarkdown } from './pr-comment.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
@@ -112,6 +112,10 @@ export function makeMarkdown(summaryData) {
         lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} |`);
       }
     }
+    if (comparisonDetails) {
+      lines.push('');
+      lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
+    }
   }
 
   lines.push('');
@@ -149,6 +153,7 @@ export function makeMarkdown(summaryData) {
     lines.push('> Pixel comparison included for opted-in unequal dimensions on a top-left-aligned union canvas.');
     lines.push('>');
     lines.push('> One-sided pixels count as changes, while `diff.comparisonPolicy.threshold` remains the per-route aggregation threshold.');
+    lines.push(`> ${DIFF_IMAGE_LEGEND}`);
     lines.push('');
     lines.push('| Route | Viewport | Baseline | Current | Canvas | Diff image |');
     lines.push('|:------|:---------|:---------|:--------|:-------|:-----------|');

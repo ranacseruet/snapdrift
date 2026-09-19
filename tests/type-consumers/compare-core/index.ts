@@ -5,6 +5,7 @@ import type { CompareImagesResult, CompareImagesMetricsResult, CompareResult, Co
 const image = Buffer.alloc(0);
 const region: IgnoreRegion = { x: 0, y: 0, width: 1, height: 1 };
 const options: DiffImageOptions = { highlightColor: [255, 0, 0, 255], ignoreRegions: [region] };
+const semanticOptions: DiffImageOptions = { addedColor: [0, 170, 0, 255], removedColor: [255, 0, 0, 255] };
 const metricsOptions: CompareImagesOptions & { renderDiffImage: false } = { ...options, renderDiffImage: false };
 const result: CompareBuffersResult = compareBuffers(image, image);
 const imageResult: CompareImagesResult = compareImages(image, image, options);
@@ -31,5 +32,10 @@ compareBuffers('baseline.png', image);
 compareWithIgnoreRegions(image, image, [{ x: 0, y: 0, width: '1', height: 1 }]);
 // @ts-expect-error highlight requires four channels
  generateDiffImage(image, image, { highlightColor: [255, 0, 0] });
+// @ts-expect-error addedColor requires four channels
+compareImages(image, image, { addedColor: [0, 170, 0] });
+// @ts-expect-error removedColor requires four channels
+compareImages(image, image, { removedColor: [255, 0, 0] });
+void semanticOptions;
 // @ts-expect-error comparison results are not buffers
 const wrongResult: Buffer = compareBuffers(image, image);

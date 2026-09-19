@@ -12,8 +12,23 @@ export interface IgnoreRegion {
 }
 
 export interface DiffImageOptions {
-  /** RGBA color for changed pixels. Default: [255, 0, 0, 255] (red). */
+  /**
+   * RGBA color for pixels that differ between baseline and current.
+   * Default: [255, 140, 0, 255] (orange).
+   */
   highlightColor?: [number, number, number, number];
+  /**
+   * RGBA color for pixels present only in the current image (added).
+   * Union-canvas comparisons only; strict same-dimension diffs cannot add pixels.
+   * Default: [0, 170, 0, 255] (green).
+   */
+  addedColor?: [number, number, number, number];
+  /**
+   * RGBA color for pixels present only in the baseline image (removed).
+   * Union-canvas comparisons only; strict same-dimension diffs cannot remove pixels.
+   * Default: [255, 0, 0, 255] (red).
+   */
+  removedColor?: [number, number, number, number];
   /** Pixels in ignore regions are overlaid with a neutral semi-transparent gray instead of being highlighted. */
   ignoreRegions?: IgnoreRegion[];
 }
@@ -96,7 +111,15 @@ export function compareImages(
   currentBuffer: Buffer,
   options: CompareImagesOptions & { renderDiffImage: false }
 ): CompareImagesMetricsResult;
-/** Renders and returns the visual diff (default). */
+/**
+ * Union-canvas comparison. Diff rendering is semantic: added pixels (current-only)
+ * use `addedColor` (green), removed pixels (baseline-only) use `removedColor` (red),
+ * and overlapping changed pixels use `highlightColor` (orange).
+ */
 export function compareImages(baselineBuffer: Buffer, currentBuffer: Buffer, options?: CompareImagesOptions): CompareImagesResult;
 export function compareWithIgnoreRegions(baselineBuffer: Buffer, currentBuffer: Buffer, regions: IgnoreRegion[]): CompareBuffersResult;
+/**
+ * Strict same-dimension diff. Changed pixels use `highlightColor` (orange by default);
+ * `addedColor`/`removedColor` do not apply because equal dimensions preclude one-sided pixels.
+ */
 export function generateDiffImage(baselineBuffer: Buffer, currentBuffer: Buffer, options?: DiffImageOptions): Buffer;

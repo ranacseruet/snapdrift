@@ -15,6 +15,8 @@ export const DEFAULT_SNAPDRIFT_REPO_URL: string;
 export const DEFAULT_SNAPDRIFT_ICON_URL: string;
 export const STATUS_ICONS: Readonly<Record<string, string>>;
 export const STATUS_LABELS: Readonly<Record<string, string>>;
+/** Legend rendered alongside embedded diff images ("orange = changed · green = added · red = removed"). */
+export const DIFF_IMAGE_LEGEND: string;
 export function formatPercentage(ratio: number): string;
 export function formatViewport(viewport: VisualViewport | undefined): string;
 

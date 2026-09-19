@@ -22,7 +22,9 @@ const { PNG } = pngjs;
  * measurement, not this arithmetic. See `CompareImagesOptions.maxPixels`.
  */
 export const MAX_COMPARISON_PIXELS = 32 * 1024 * 1024;
-const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
+const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 140, 0, 255]);
+const DEFAULT_ADDED_COLOR = /** @type {const} */ ([0, 170, 0, 255]);
+const DEFAULT_REMOVED_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
 const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
 
 /**
@@ -86,6 +88,12 @@ export class ComparisonTooLargeError extends Error {
  * No threshold is applied here. Callers decide whether `mismatchRatio` is
  * actionable after aggregating the returned comparison metrics.
  *
+ * Diff rendering is semantic: pixels present only in the current image are
+ * additions (green by default), pixels present only in the baseline image are
+ * removals (red by default), and overlapping pixels that differ use
+ * `highlightColor` (orange by default). One-sided pixels still count as
+ * changed in the metrics, matching comparison policy v1.
+ *
  * When ignore regions cover the whole canvas, `totalPixels` is 0 and
  * `mismatchRatio` is reported as 0, so the comparison is treated as matched.
  *
@@ -122,6 +130,8 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const ignoreRegions = options.ignoreRegions || [];
   validateIgnoreRegions(ignoreRegions);
   const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
+  const [addedR, addedG, addedB, addedA] = parseHighlightColor(options.addedColor || DEFAULT_ADDED_COLOR);
+  const [removedR, removedG, removedB, removedA] = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR);
   const renderDiffImage = options.renderDiffImage !== false;
   const maxPixels = resolveMaxPixels(options.maxPixels);
 
@@ -217,7 +227,10 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
 
       totalPixels += 1;
       // A coordinate present on exactly one side is a changed one-sided pixel,
-      // regardless of its RGBA values.
+      // regardless of its RGBA values. Rendered semantically: current-only
+      // pixels are additions, baseline-only pixels are removals.
+      const currentOnly = !inBaseline && inCurrent;
+      const baselineOnly = inBaseline && !inCurrent;
       let changed = inBaseline !== inCurrent;
 
       if (inBaseline && inCurrent) {
@@ -240,10 +253,11 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
       if (changed) {
         differentPixels += 1;
         if (diffPng) {
-          diffPng.data[diffIndex] = r;
-          diffPng.data[diffIndex + 1] = g;
-          diffPng.data[diffIndex + 2] = b;
-          diffPng.data[diffIndex + 3] = a;
+          const color = currentOnly ? [addedR, addedG, addedB, addedA] : baselineOnly ? [removedR, removedG, removedB, removedA] : [r, g, b, a];
+          diffPng.data[diffIndex] = color[0];
+          diffPng.data[diffIndex + 1] = color[1];
+          diffPng.data[diffIndex + 2] = color[2];
+          diffPng.data[diffIndex + 3] = color[3];
         }
       }
     }

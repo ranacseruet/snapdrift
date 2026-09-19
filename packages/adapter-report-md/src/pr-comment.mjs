@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
 
 export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
 export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
@@ -145,6 +145,10 @@ export function buildReportCommentBody(summary, meta = {}) {
         : '';
       lines.push(`*...and ${changed.length - maxChangedRows} more*${runLinkSuffix}`);
     }
+    if (comparisonDetails) {
+      lines.push('');
+      lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
+    }
     lines.push('');
     lines.push('</details>');
   }
@@ -169,6 +173,7 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('<details open><summary>Dimension shifts — pixel comparison included</summary>');
     lines.push('');
     lines.push('> SnapDrift compared opted-in unequal dimensions on a top-left-aligned union canvas. One-sided pixels count as changes.');
+    lines.push(`> ${DIFF_IMAGE_LEGEND}`);
     lines.push('');
     lines.push('| Route | Viewport | Baseline | Current | Canvas | Diff image |');
     lines.push('|:------|:---------|:---------|:--------|:-------|:-----------|');

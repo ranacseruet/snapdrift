@@ -6,7 +6,7 @@ import { buildIgnoreMask, createDimensionMismatchError, parseHighlightColor, val
 
 const { PNG } = pngjs;
 
-const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 0, 0, 255]);
+const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 140, 0, 255]);
 const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
 
 /**
@@ -14,6 +14,9 @@ const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
  * Changed pixels are highlighted with the specified color;
  * unchanged pixels retain their original color.
  * Pixels inside ignore regions are painted with a neutral semi-transparent gray.
+ *
+ * Both images must have identical dimensions, so there are no one-sided
+ * (added/removed) pixels — `addedColor`/`removedColor` do not apply here.
  *
  * @param {Buffer} baselineBuffer - Raw PNG buffer for the baseline image.
  * @param {Buffer} currentBuffer - Raw PNG buffer for the current image.

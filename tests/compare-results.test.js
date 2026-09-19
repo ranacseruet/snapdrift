@@ -658,7 +658,7 @@ describe('generateDriftReport', () => {
     const diffPng = PNG.sync.read(await fs.readFile(path.join(diffImagesDir, 'root-index-desktop.png')));
     expect(diffPng.width).toBe(3);
     expect(diffPng.height).toBe(1);
-    expect([...diffPng.data.slice(8, 12)]).toEqual([255, 0, 0, 255]);
+    expect([...diffPng.data.slice(8, 12)]).toEqual([0, 170, 0, 255]);
   });
 
   it('falls back to diff.threshold when a programmatic policy omits threshold', async () => {
