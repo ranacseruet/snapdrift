@@ -8,11 +8,18 @@ Workspace releases this version:
   options and the orange default for changed pixels).
 - `@snapdrift/adapter-report-md` 1.3.0 — the exported `DIFF_IMAGE_LEGEND` constant rendered
   alongside diff images.
+- `@snapdrift/adapter-fs` 1.4.0 — cross-route browser storage isolation (#171), capture
+  profile v2 validation and the compatibility-before-pixels gate (#172), and the semantic
+  diff image handoff to the reporting packages.
+- `@snapdrift/manifest` 1.5.0 — capture profile v2 schema, capture-profile helpers, and the
+  `captureCompatibility` summary types (#172).
 
-The root dependency floors move to `@snapdrift/compare-core ^1.4.0` and
-`@snapdrift/adapter-report-md ^1.3.0`. The dispatcher pins 5e43b95 — the #173 merge
-commit on `main`, the newest commit touching `actions/`, which already contains the
-wrapper implementations and the `lib/`/`packages/` runtime they load.
+The root dependency floors move to `@snapdrift/adapter-fs ^1.4.0`,
+`@snapdrift/compare-core ^1.4.0`, and `@snapdrift/manifest ^1.5.0`; `adapter-fs` and
+`adapter-report-md` in turn require `compare-core ^1.4.0`, `adapter-report-md ^1.3.0`, and
+`manifest ^1.5.0`. The dispatcher pins 3967590 — the #174 merge commit on `main`, which
+contains the newest `actions/` implementation (#173) and the `lib/`/`packages/` runtime the
+wrappers load.
 
 ### Features
 

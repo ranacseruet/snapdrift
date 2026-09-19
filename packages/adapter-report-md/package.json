@@ -11,6 +11,6 @@
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/ranacseruet/snapdrift.git", "directory": "packages/adapter-report-md" },
   "dependencies": {
-    "@snapdrift/manifest": "^1.4.0"
+    "@snapdrift/manifest": "^1.5.0"
   }
 }
