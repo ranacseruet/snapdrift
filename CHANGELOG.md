@@ -1,9 +1,34 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 - 2026-09-19
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.4.0 — the semantic diff palette (`addedColor`/`removedColor`
+  options and the orange default for changed pixels).
+- `@snapdrift/adapter-report-md` 1.3.0 — the exported `DIFF_IMAGE_LEGEND` constant rendered
+  alongside diff images.
+
+The root dependency floors move to `@snapdrift/compare-core ^1.4.0` and
+`@snapdrift/adapter-report-md ^1.3.0`. The dispatcher pins 5e43b95 — the #173 merge
+commit on `main`, the newest commit touching `actions/`, which already contains the
+wrapper implementations and the `lib/`/`packages/` runtime they load.
 
 ### Features
 
+- Local manifests now persist capture profile v2: engine, browser/Playwright, OS,
+  locale/timezone, and rendering settings. Local comparison validates manifests,
+  requires exact v2 profile equality, and checks configured route paths and
+  normalized viewports before reading PNGs. Incompatibilities are
+  `incompatible_capture` errors, not product drift from changed image dimensions;
+  the summary's `captureCompatibility` status describes profiles only.
+- Legacy missing/v1 profiles remain unverified and pixel-comparable after route
+  checks unless shared metadata conflicts or an explicit foreign engine is found.
+  The unverified diagnostic appears in CLI, Markdown, and HTML reports as well as
+  JSON summaries and PR comments. Malformed or unsupported profiles are rejected.
+  Refresh using `snapdrift baseline`
+  (`provider: "local"`) or the existing baseline action; `report-only` acknowledges
+  incompatibility nonblockingly but never bypasses it to compare pixels.
 - Local diff images now use a semantic palette so the rendered PNG reflects the
   kind of change, not just that pixels differ. `@snapdrift/compare-core` union-canvas
   comparisons render pixels present only in the current capture in green (`addedColor`,
@@ -13,9 +38,9 @@
   changed under comparison policy v1. Strict same-dimension `generateDiffImage` diffs
   switch their default highlight from red to orange for parity and cannot contain
   added/removed pixels. Markdown, HTML, and PR-comment reports render a legend
-  ("orange = changed · green = added · red = removed") wherever a diff image is embedded.
-  Consumers comparing diff-PNG bytes between versions will see different output by design;
-  the new options restore any previous palette.
+  ("orange = changed · green = added · red = removed") whenever a local diff image is
+  embedded. Consumers comparing diff-PNG bytes between versions will see different
+  output by design; the new options restore any previous palette.
 
 ### Refactoring
 
@@ -37,22 +62,6 @@
   `PROVIDER_CAPABILITIES` and `providerSupports(provider, capability)` so the
   unavailable `LocalProvider.fetchLatestBaseline` baseline-store capability is
   discoverable without a runtime throw.
-
-### Features
-
-- Local manifests now persist capture profile v2: engine, browser/Playwright, OS,
-  locale/timezone, and rendering settings. Local comparison validates manifests,
-  requires exact v2 profile equality, and checks configured route paths and
-  normalized viewports before reading PNGs. Incompatibilities are
-  `incompatible_capture` errors, not product drift from changed image dimensions;
-  the summary's `captureCompatibility` status describes profiles only.
-- Legacy missing/v1 profiles remain unverified and pixel-comparable after route
-  checks unless shared metadata conflicts or an explicit foreign engine is found.
-  The unverified diagnostic appears in CLI, Markdown, and HTML reports as well as
-  JSON summaries and PR comments. Malformed or unsupported profiles are rejected.
-  Refresh using `snapdrift baseline`
-  (`provider: "local"`) or the existing baseline action; `report-only` acknowledges
-  incompatibility nonblockingly but never bypasses it to compare pixels.
 
 ### Behavior changes
 
