@@ -29,11 +29,12 @@ export function validateIgnoreRegions(regions) {
 
 /**
  * @param {readonly number[]} color
+ * @param {string} [fieldName] - Option name used in the validation error.
  * @returns {[number, number, number, number]}
  */
-export function parseHighlightColor(color) {
+export function parseHighlightColor(color, fieldName = 'highlightColor') {
   if (!Array.isArray(color) || color.length !== 4 || !color.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255)) {
-    throw new Error('highlightColor must be an array of four integers between 0 and 255.');
+    throw new Error(`${fieldName} must be an array of four integers between 0 and 255.`);
   }
   return /** @type {[number, number, number, number]} */ (color);
 }

@@ -131,7 +131,7 @@ describe('buildReportCommentBody', () => {
         expect(body).not.toContain('orange = changed');
     });
 
-    it('omits the diff palette legend when dimensions are equal (no added/removed pixels possible)', () => {
+    it('renders the diff palette legend for equal-dimension local diffs (orange-only images)', () => {
         const body = buildReportCommentBody({
             ...cleanSummary,
             status: 'changes-detected',
@@ -152,7 +152,7 @@ describe('buildReportCommentBody', () => {
                 diffImagePath: 'diffs/home-desktop.png'
             }]
         });
-        expect(body).not.toContain('orange = changed');
+        expect(body).toContain('orange = changed');
     });
 
     it('truncates changed screenshots at 20 with overflow note', () => {

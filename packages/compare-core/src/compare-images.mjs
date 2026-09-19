@@ -129,9 +129,9 @@ export class ComparisonTooLargeError extends Error {
 export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const ignoreRegions = options.ignoreRegions || [];
   validateIgnoreRegions(ignoreRegions);
-  const changedColor = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
-  const addedColor = parseHighlightColor(options.addedColor || DEFAULT_ADDED_COLOR);
-  const removedColor = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR);
+  const changedColor = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR, 'highlightColor');
+  const addedColor = parseHighlightColor(options.addedColor || DEFAULT_ADDED_COLOR, 'addedColor');
+  const removedColor = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR, 'removedColor');
   const renderDiffImage = options.renderDiffImage !== false;
   const maxPixels = resolveMaxPixels(options.maxPixels);
 

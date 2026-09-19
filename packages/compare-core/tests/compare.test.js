@@ -157,7 +157,7 @@ describe('@snapdrift/compare-core — generateDiffImage', () => {
     expect(diffPng.data[3]).toBe(128);  // A
   });
 
-  test('highlights changed pixels with default orange color', () => {
+  test('highlights an all-changed image with the default orange color', () => {
     const baseline = solidPng(2, 2, [0, 0, 0, 255]);
     const current = solidPng(2, 2, [255, 255, 255, 255]);
 
@@ -503,7 +503,7 @@ describe('@snapdrift/compare-core — compareImages', () => {
       /width and .height must be non-negative/
     );
     expect(() => compareImages(baseline, baseline, { highlightColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
-    expect(() => compareImages(baseline, baseline, { addedColor: /** @type {any} */ ([-1, 0, 0, 255]) })).toThrow(/highlightColor must be an array of four integers/);
-    expect(() => compareImages(baseline, baseline, { removedColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
+    expect(() => compareImages(baseline, baseline, { addedColor: /** @type {any} */ ([-1, 0, 0, 255]) })).toThrow(/addedColor must be an array of four integers/);
+    expect(() => compareImages(baseline, baseline, { removedColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/removedColor must be an array of four integers/);
   });
 });
