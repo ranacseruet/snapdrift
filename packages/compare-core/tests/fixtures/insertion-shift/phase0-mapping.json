@@ -1,0 +1,101 @@
+{
+  "measuredAt": "2026-09-21",
+  "constants": {
+    "offsetMin": -40,
+    "offsetMax": 160,
+    "searchStride": 2,
+    "noiseDelta": 2,
+    "inkLuma": 32,
+    "minInkSamples": 8,
+    "highlightRun": 6,
+    "offsetSwitchCost": 1.5,
+    "unmatchedCost": 0.45,
+    "localMismatchCost": 0.5,
+    "structuredDelta": 32,
+    "structuredHotLimit": 40
+  },
+  "scoreMs": 1174,
+  "runCount": 137,
+  "contentIntervalCount": 8,
+  "gate": {
+    "upperPage": "y=[0,1266) offset 0. Version label stays inside this run; 4 rows there have a structured residual, the changed digit.",
+    "retainedCards": "y=[1266,1409) offset 112, covering the 1.0.2 card and the 1.0.1 card.",
+    "removedCard": "unresolved y=[1409,1496). Covers the 1.0.0 heading. The changelog link at y=1496 matches offset +22 and is not included.",
+    "lowerPage": "y=[1496,5315) is one shifted interval; rows alternate between +21 and +22 and are merged. Two later gaps stay local: y=[5315,5318) and y=[5335,5345).",
+    "decision": "Passed for correspondence. Eight content intervals. The deletion sits on the 1.0.0 heading and stops where the link matches. Line-sized mismatches are local unresolved bands, not glued into the +21/+22 run. The highlight renderer is the next step."
+  },
+  "contentIntervals": [
+    {
+      "start": 0,
+      "end": 1266,
+      "kind": "stable",
+      "offset": 0,
+      "highlightRows": 7,
+      "structuredRows": 4,
+      "meanCost": 0.0013168017278518372
+    },
+    {
+      "start": 1266,
+      "end": 1409,
+      "kind": "stable",
+      "offset": 112,
+      "highlightRows": 22,
+      "structuredRows": 3,
+      "meanCost": 0.009433962264150943
+    },
+    {
+      "start": 1409,
+      "end": 1496,
+      "kind": "unresolved",
+      "offset": null,
+      "highlightRows": 0,
+      "structuredRows": 0,
+      "meanCost": 0.3931034482758618
+    },
+    {
+      "start": 1496,
+      "end": 5315,
+      "kind": "stable",
+      "offset": 22,
+      "highlightRows": 239,
+      "structuredRows": 24,
+      "meanCost": 0.009423614859848314
+    },
+    {
+      "start": 5315,
+      "end": 5318,
+      "kind": "unresolved",
+      "offset": null,
+      "highlightRows": 0,
+      "structuredRows": 0,
+      "meanCost": 0.3515346873145038
+    },
+    {
+      "start": 5318,
+      "end": 5335,
+      "kind": "stable",
+      "offset": 22,
+      "highlightRows": 0,
+      "structuredRows": 0,
+      "meanCost": 0.008403361344537815
+    },
+    {
+      "start": 5335,
+      "end": 5345,
+      "kind": "unresolved",
+      "offset": null,
+      "highlightRows": 0,
+      "structuredRows": 0,
+      "meanCost": 0.2562795167264615
+    },
+    {
+      "start": 5345,
+      "end": 5622,
+      "kind": "stable",
+      "offset": 21,
+      "highlightRows": 0,
+      "structuredRows": 0,
+      "meanCost": 0
+    }
+  ]
+}

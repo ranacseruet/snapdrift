@@ -1,0 +1,68 @@
+{
+  "pair": {
+    "baseline": {
+      "file": "baseline.png",
+      "sha256": "cb9252e2368813a0ab85dfb5b929cd21a3c251a66d09a8c0b7046870447e99f1",
+      "width": 1440,
+      "height": 5622
+    },
+    "current": {
+      "file": "current.png",
+      "sha256": "66e51e86efecbfc347d44147b1c28b06d2f88f077912a887885b25a8c8921950",
+      "width": 1440,
+      "height": 5644
+    }
+  },
+  "method": "Full-resolution ink rows (luminance >= 40) plus visual inspection of crops. Ranges are baseline rows unless noted. They are the acceptance regions for a later highlight renderer, not algorithm inputs.",
+  "regions": [
+    {
+      "id": "version-label",
+      "role": "orange-edit",
+      "baseline": { "y": [1149, 1160], "x": [700, 860] },
+      "changedGlyph": { "y": [1155, 1157], "x": [778, 785] },
+      "note": "Label reads Diff Checker v1.0.2 in the baseline and v1.0.3 in the current capture, at the same row. The changed pixels are the final digit, max channel delta 111."
+    },
+    {
+      "id": "changelog-heading",
+      "role": "unchanged",
+      "baseline": { "y": [1197, 1208] },
+      "current": { "y": [1197, 1208] },
+      "note": "Same heading at offset 0."
+    },
+    {
+      "id": "inserted-1.0.3",
+      "role": "green-insertion",
+      "current": { "y": [1266, 1378] },
+      "note": "New 1.0.3 changelog card. Its title ink is current y=[1266, 1278). The following baseline card does not start until current y=1378."
+    },
+    {
+      "id": "retained-1.0.2",
+      "role": "shifted-unchanged",
+      "baseline": { "y": [1266, 1356] },
+      "current": { "y": [1378, 1468] },
+      "offset": 112,
+      "note": "1.0.2 title ink moves from baseline y=[1266, 1278) to current y=[1378, 1390)."
+    },
+    {
+      "id": "retained-1.0.1",
+      "role": "shifted-unchanged",
+      "baseline": { "y": [1356, 1446] },
+      "current": { "y": [1467, 1557] },
+      "offset": 111,
+      "note": "1.0.1 title ink moves from baseline y=[1356, 1368) to current y=[1467, 1479)."
+    },
+    {
+      "id": "removed-1.0.0",
+      "role": "red-deletion",
+      "baseline": { "y": [1420, 1496] },
+      "note": "1.0.0 heading. Bright ink that matches nowhere is y=[1420, 1430) and y=[1446, 1458). The next bright line, y=[1496, 1507), is the changelog link and matches the current capture at offset +22 with max channel delta 2, so it is not part of the deletion. An earlier note extended this region to y=1565; that included the link."
+    },
+    {
+      "id": "below-changelog",
+      "role": "shifted-unchanged",
+      "baseline": { "y": [1496, 5622] },
+      "offset": 22,
+      "note": "Starts at the changelog link, which matches current y=[1518, 1529). Next step heading baseline y=[1702, 1715) matches current y=[1724, 1737). Individual text lines also match at +21. Two short bands, y=[5315, 5318) and y=[5335, 5345), do not match either neighbor and stay local gaps."
+    }
+  ]
+}
