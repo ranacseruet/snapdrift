@@ -5,7 +5,8 @@
 - Added opt-in comparison policy v2 with bounded vertical row alignment for
   inserted and deleted page rows. Unchanged content that shifts after an
   insertion remains matched; reports record aligned results and conservative
-  coordinate fallbacks. Policy v1 remains the default.
+  coordinate fallbacks. Deprecated policy v1 remains the compatibility default
+  so existing configurations are unchanged; new configurations should use v2.
 
 ## 0.13.0 - 2026-09-19
 

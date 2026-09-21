@@ -88,8 +88,8 @@ export type CompareBuffersResult = CompareResult;
 
 export interface CompareImagesOptions extends DiffImageOptions {
   /**
-   * Row alignment strategy. Omit this for the v1 top-left union comparison;
-   * `vertical` selects insertion-aware comparison policy v2.
+   * Row alignment strategy. Omitting this uses the deprecated v1 top-left
+   * union comparison for compatibility; `vertical` selects policy v2.
    */
   alignment?: 'vertical';
   /**

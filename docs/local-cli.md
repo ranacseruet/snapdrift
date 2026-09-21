@@ -345,9 +345,9 @@ The `Missing`, `Errors`, and `Dim diff` lines only print when their count is gre
 
 The `report.html` path is printed whenever the status is anything other than `clean`; pass `--open` to also launch it in your default browser.
 
-SnapDrift always applies comparison policy v1 unless an explicit v2 policy is
-configured. It synthesizes v1 from `diff.threshold` when `diff` does not declare
-one:
+SnapDrift retains deprecated comparison policy v1 for compatibility unless an
+explicit v2 policy is configured. It synthesizes v1 from `diff.threshold` when
+`diff` does not declare one. New configurations should use v2:
 
 ```json
 "comparisonPolicy": { "version": 1, "threshold": 0.01 }

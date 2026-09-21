@@ -309,12 +309,13 @@ See the [Local CLI guide](local-cli.md) for full command reference, flags, direc
 ## Refresh the baseline automatically
 
 After an intentional layout change merges, the baseline can be republished as
-usual. Local comparisons apply policy v1
-(`{ "version": 1, "threshold": number }`) by default — synthesized from
-`diff.threshold` when not configured — so unequal frames are compared on a union
-canvas and dimension metadata stays in the report. Set
-`diff.comparisonPolicy.version` to `2` to opt into bounded vertical row
-alignment; the report records aligned results and coordinate fallbacks.
+usual. Local comparisons retain deprecated policy v1
+(`{ "version": 1, "threshold": number }`) as the compatibility default —
+synthesized from `diff.threshold` when not configured — so unequal frames are
+compared on a union canvas and dimension metadata stays in the report. New
+configurations should set `diff.comparisonPolicy.version` to `2` to opt into
+bounded vertical row alignment; the report records aligned results and
+coordinate fallbacks.
 
 Use the provided workflow template to refresh the baseline automatically on every push to your default branch (i.e. every merge):
 

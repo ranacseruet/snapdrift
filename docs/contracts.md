@@ -40,7 +40,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.apiKey` | `string` | Inline API key with `${VAR}` interpolation (mutually exclusive with `snap.apiKeyEnv`) |
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
-| `diff.comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }` | Optional explicit comparison policy. v1 is the compatibility default; v2 enables bounded vertical row alignment. `threshold` must match `diff.threshold` |
+| `diff.comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }` | Optional explicit comparison policy. Deprecated v1 remains the compatibility default; new configurations should use v2 for bounded vertical row alignment. `threshold` must match `diff.threshold` |
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 
@@ -282,7 +282,7 @@ but still fails if other comparable routes changed.
 |:------|:-----|:------------|
 | `captureCompatibility` | `{ status, reason? }?` | Local profile-level compatibility: `verified`, `unverified`, or `incompatible`; route identity errors are separate |
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
-| `comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }?` | Effective comparison policy used by the adapter (v1 is synthesized from `diff.threshold` when not configured) |
+| `comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }?` | Effective comparison policy used by the adapter (deprecated v1 is synthesized from `diff.threshold` when not configured) |
 
 When a policy comparison is applied, each affected `changed[]` item may also contain
 `comparison` with `baseline`, `current`, and `canvas` `{ width, height }`
@@ -331,7 +331,7 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 - Mismatch ratio is `different_pixels / total_pixels`
 - `diff.threshold` applies per screenshot
 - Missing captures are counted separately from drift signals
-- Comparison policy v1 `{ "version": 1, "threshold": number }` remains the default. Images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator.
+- Comparison policy v1 `{ "version": 1, "threshold": number }` is deprecated but remains the compatibility default. Images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator.
 - Comparison policy v2 `{ "version": 2, "threshold": number }` is opt-in. When source widths match and no ignore regions are requested, rows are fingerprinted and aligned with a bounded Myers sequence diff. Unchanged content that moves after an insertion/deletion remains matched; inserted current rows are green, deleted baseline rows are red, and actual pixel edits are orange. Width changes, ignore regions, ambiguous row matches, and resource limits fall back to v1 coordinate comparison and record the fallback reason. This is a raster row alignment aid, not DOM or arbitrary component matching.
 - Both policies preserve the explicit dimension-change signal: a source height/width change remains a changed route even when the aligned mismatch ratio is at or below the threshold. Empty output corners do not enter the denominator.
 - Local diff images are rendered with a semantic palette: orange = changed pixels, green = added or inserted pixels, red = removed or deleted pixels. Equal-dimension strict diffs (`generateDiffImage`) use orange for changed pixels and cannot contain added/removed pixels. Reports render a legend whenever a local diff image is embedded; summaries that carry only comparison metadata (Snap provider runs, which render diffs hosted-side) render no legend.

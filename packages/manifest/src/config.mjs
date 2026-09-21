@@ -7,10 +7,13 @@ import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 /** @type {readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict']} */
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
-/** Supported explicit comparison policies. v1 remains the default for compatibility. */
+/** Supported explicit comparison policies. Deprecated v1 remains the default for compatibility. */
 export const SUPPORTED_COMPARISON_POLICY_VERSIONS = [1, 2];
 export const COMPARISON_ROW_KINDS = ['matched', 'changed', 'inserted', 'deleted'];
 export const COMPARISON_FALLBACK_REASONS = ['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions'];
+/** Current opt-in comparison policy for new configurations. */
+export const LATEST_COMPARISON_POLICY_VERSION = 2;
+/** @deprecated v1 is retained only as the compatibility default; use policy v2 for new configurations. */
 export const COMPARISON_POLICY_VERSION = 1;
 export const VALID_PROVIDER_VALUES = ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];

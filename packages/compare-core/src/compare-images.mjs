@@ -217,8 +217,9 @@ function compareAlignedImages(baselinePng, currentPng, options) {
 
 /**
  * Compare two PNG buffers and generate the corresponding visual diff in the
- * same pass over the decoded pixels. The default is the v1 top-left-aligned
- * union canvas; callers can opt into `alignment: 'vertical'` for policy v2.
+ * same pass over the decoded pixels. The default is the deprecated v1
+ * top-left-aligned union canvas for compatibility; callers can opt into
+ * `alignment: 'vertical'` for policy v2.
  *
  * No threshold is applied here. Callers decide whether `mismatchRatio` is
  * actionable after aggregating the returned comparison metrics.

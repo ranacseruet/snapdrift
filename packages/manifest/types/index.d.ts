@@ -31,11 +31,19 @@ export interface VisualRegressionSelectionConfig {
   sharedExact?: string[];
 }
 
-/** Explicit comparison policy. v1 is the compatibility default; v2 aligns vertical rows. */
-export interface ComparisonPolicy {
-  version: 1 | 2;
+/** @deprecated Coordinate-based comparison policy. Retained for existing configurations; use `ComparisonPolicyV2` for new configurations. */
+export interface ComparisonPolicyV1 {
+  version: 1;
   threshold: number;
 }
+
+/** Insertion-aware vertical row comparison policy. */
+export interface ComparisonPolicyV2 {
+  version: 2;
+  threshold: number;
+}
+
+export type ComparisonPolicy = ComparisonPolicyV1 | ComparisonPolicyV2;
 
 export interface ComparisonDimensions {
   width: number;
@@ -105,6 +113,7 @@ export interface VisualRegressionConfig {
   diff: {
     threshold: number;
     mode: 'report-only' | 'fail-on-changes' | 'fail-on-incomplete' | 'strict';
+    /** Deprecated v1 remains the compatibility default; new configurations should use v2. */
     comparisonPolicy?: ComparisonPolicy;
   };
   selection?: VisualRegressionSelectionConfig;
@@ -270,7 +279,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   captureCompatibility?: CaptureCompatibility;
   dimensionChanges: VisualDiffDimensionItem[];
-  /** The exact policy used for local comparisons. */
+  /** The exact policy used for local comparisons; v1 is deprecated and retained for compatibility. */
   comparisonPolicy?: ComparisonPolicy;
   message?: string;
   /** Link to the provider's run detail page. Set by SnapProvider during diff(); undefined for LocalProvider. Serialized into summary.json so the comment step can include it without re-creating the provider. */
@@ -350,7 +359,7 @@ export interface ProviderDiffOptions {
   currentRunDir?: string;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
-  /** Explicit comparison contract selected by the provider. */
+  /** Explicit comparison contract selected by the provider; v1 is deprecated for compatibility. */
   comparisonPolicy?: ComparisonPolicy;
 }
 
@@ -407,7 +416,9 @@ export interface VisualProvider {
 // --- Config validation and route selection ---
 
 export const VALID_DIFF_MODES: readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
+/** @deprecated v1 is retained only as the compatibility default. */
 export const COMPARISON_POLICY_VERSION: 1;
+export const LATEST_COMPARISON_POLICY_VERSION: 2;
 export const SUPPORTED_COMPARISON_POLICY_VERSIONS: readonly [1, 2];
 export const VALID_PROVIDER_VALUES: readonly ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES: readonly ['fail', 'warn-and-skip', 'fallback-local'];
