@@ -318,6 +318,42 @@ describe('buildReportCommentBody', () => {
     expect(body).toContain('...and 5 more');
   });
 
+  it('truncates alignment notes with changed rows and reports omitted notes', () => {
+    const body = buildReportCommentBody(
+      {
+        ...cleanSummary,
+        status: 'changes-detected',
+        changedScreenshots: 3,
+        changed: [
+          {
+            id: 'visible-route',
+            viewport: 'desktop',
+            mismatchRatio: 0.01,
+            comparison: { mode: 'vertical-aligned' }
+          },
+          {
+            id: 'hidden-aligned-route',
+            viewport: 'desktop',
+            mismatchRatio: 0.01,
+            comparison: { mode: 'vertical-aligned' }
+          },
+          {
+            id: 'hidden-fallback-route',
+            viewport: 'desktop',
+            mismatchRatio: 0.01,
+            comparison: { mode: 'coordinate-fallback', fallbackReason: 'ambiguous' }
+          }
+        ]
+      },
+      { maxChangedRows: 1 }
+    );
+
+    expect(body).toContain('vertical row alignment: visible-route');
+    expect(body).not.toContain('hidden-aligned-route');
+    expect(body).not.toContain('hidden-fallback-route');
+    expect(body).toContain('2 additional alignment notes omitted; see full report');
+  });
+
   it('respects custom maxErrorRows limit', () => {
     const errors = Array.from({ length: 6 }, (_, i) => ({
       id: `route-${i}`,

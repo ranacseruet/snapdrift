@@ -170,8 +170,16 @@ export function buildReportCommentBody(summary, meta = {}) {
       lines.push('');
       lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
     }
-    const alignmentNotes = formatAlignmentNotes(changed);
-    if (alignmentNotes.length > 0) {
+    const displayedChanged = changed.slice(0, maxChangedRows);
+    const alignmentNotes = formatAlignmentNotes(displayedChanged);
+    const omittedAlignmentCount = changed
+      .slice(maxChangedRows)
+      .filter((item) => item.comparison?.mode === 'vertical-aligned' || item.comparison?.mode === 'coordinate-fallback')
+      .length;
+    if (alignmentNotes.length > 0 || omittedAlignmentCount > 0) {
+      if (omittedAlignmentCount > 0) {
+        alignmentNotes.push(`${omittedAlignmentCount} additional alignment ${omittedAlignmentCount === 1 ? 'note' : 'notes'} omitted; see full report`);
+      }
       lines.push('');
       lines.push(`> Comparison alignment — ${alignmentNotes.join('; ')}.`);
     }
