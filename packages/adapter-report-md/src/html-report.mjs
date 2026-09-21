@@ -1,6 +1,7 @@
 // @ts-check
 
 import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, formatPercentage, formatViewport } from './constants.mjs';
+import { getAlignmentNotes } from './alignment-notes.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
 
@@ -41,19 +42,12 @@ function hasSemanticDiffImage(item) {
   return Boolean(item.diffImagePath);
 }
 
-/**
- * @param {DriftSummary['changed']} changed
- * @returns {string}
- */
+/** @param {DriftSummary['changed']} changed @returns {string} */
 function formatAlignmentNote(changed) {
-  const aligned = changed.filter((item) => item.comparison?.mode === 'vertical-aligned').map((item) => item.id);
-  const fallback = changed
-    .filter((item) => item.comparison?.mode === 'coordinate-fallback')
-    .map((item) => `${item.id} (${item.comparison?.fallbackReason || 'unspecified reason'})`);
-  const notes = [];
-  if (aligned.length > 0) notes.push(`vertical row alignment: ${aligned.join(', ')}`);
-  if (fallback.length > 0) notes.push(`coordinate fallback: ${fallback.join(', ')}`);
-  return notes.length > 0 ? ` <p class="comparison-alignment">Comparison alignment — ${escapeHtml(notes.join('; '))}.</p>` : '';
+  const notes = getAlignmentNotes(changed).map((note) => note.kind === 'aligned'
+    ? `vertical row alignment: ${note.routeIds.map(escapeHtml).join(', ')}`
+    : `coordinate fallback: ${note.routes.map(({ id, reason }) => `${escapeHtml(id)} (${escapeHtml(reason)})`).join(', ')}`);
+  return notes.length > 0 ? ` <p class="comparison-alignment">Comparison alignment — ${notes.join('; ')}.</p>` : '';
 }
 
 /**

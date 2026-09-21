@@ -420,6 +420,30 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'ambiguous' });
   });
 
+  test('v2 does not treat paired rows as ambiguous when a duplicate row is deleted', () => {
+    const baseline = rowPng([10, 10, 20]);
+    const current = rowPng([10, 200]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+
+    expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'vertical-aligned' });
+  });
+
+  test('v2 keeps identical captures on the byte-equality fast path with aligned metadata', () => {
+    const baseline = rowPng([10, 20, 30]);
+    const result = compareImages(baseline, baseline, { alignment: 'vertical' });
+
+    expect(result.differentPixels).toBe(0);
+    expect(result.totalPixels).toBe(12);
+    expect(result.diffImageBuffer).toEqual(baseline);
+    expect(result.comparison).toMatchObject({
+      policyVersion: 2,
+      mode: 'vertical-aligned',
+      totalPixels: 12,
+      rowMapping: [{ outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 }]
+    });
+  });
+
   test('v2 metrics are identical when diff rendering is disabled', () => {
     const baseline = rowPng([10, 20, 30]);
     const current = rowPng([10, 200, 20, 30]);

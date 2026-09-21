@@ -155,7 +155,7 @@ The pull request drift bundle contains:
 | `current/results.json` | Current capture results |
 | `current/manifest.json` | Current manifest |
 | `current/screenshots/*.png` | Current images |
-| `diffs/*.png` | Generated v1 diff images for changed screenshots |
+| `diffs/*.png` | Generated v1 union or v2 aligned/fallback diff images for changed screenshots |
 
 ## Screenshot manifest shape
 

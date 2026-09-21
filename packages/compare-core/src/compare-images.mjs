@@ -49,6 +49,24 @@ function resolveMaxPixels(maxPixels) {
 }
 
 /**
+ * Compare decoded pixel buffers without requiring callers or test doubles to
+ * provide Node's Buffer#equals method.
+ *
+ * @param {Uint8Array} left
+ * @param {Uint8Array} right
+ * @returns {boolean}
+ */
+function pixelDataEqual(left, right) {
+  const leftWithEquals = /** @type {Uint8Array & { equals?: (value: Uint8Array) => boolean }} */ (left);
+  if (typeof leftWithEquals.equals === 'function') return leftWithEquals.equals(right);
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+/**
  * Error raised when an unequal-dimension comparison would exceed the bounded
  * union canvas. The code is stable for callers that need to classify it.
  */
@@ -294,6 +312,35 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const dimensionsChanged = baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height;
   let alignmentFallbackReason;
 
+  // Keep unchanged v2 captures on the same cheap path as v1 while returning
+  // the complete aligned metadata contract.
+  if (alignmentRequested && !dimensionsChanged && ignoreRegions.length === 0 && pixelDataEqual(baselinePng.data, currentPng.data)) {
+    const totalPixels = canvasWidth * canvasHeight;
+    const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
+      baseline: { width: baselinePng.width, height: baselinePng.height },
+      current: { width: currentPng.width, height: currentPng.height },
+      canvas: { width: canvasWidth, height: canvasHeight },
+      dimensionsChanged: false,
+      totalPixels,
+      policyVersion: 2,
+      mode: /** @type {const} */ ('vertical-aligned'),
+      rowMapping: canvasHeight > 0
+        ? [{ outputStart: 0, length: canvasHeight, kind: /** @type {const} */ ('matched'), baselineStart: 0, currentStart: 0 }]
+        : []
+    });
+    return {
+      width: canvasWidth,
+      height: canvasHeight,
+      differentPixels: 0,
+      totalPixels,
+      mismatchRatio: 0,
+      pct: 0,
+      pixelsChanged: 0,
+      ...(renderDiffImage ? { diffImageBuffer: baselineBuffer } : {}),
+      comparison
+    };
+  }
+
   if (alignmentRequested && ignoreRegions.length === 0) {
     const alignedResult = compareAlignedImages(baselinePng, currentPng, {
       renderDiffImage,
@@ -320,14 +367,14 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
       ? {
           policyVersion: 2,
           mode: 'coordinate-fallback',
-          fallbackReason: alignmentFallbackReason || 'alignment-unavailable'
+          fallbackReason: alignmentFallbackReason || 'alignment-limit'
         }
       : {})
   });
 
   // Fast path: identical dimensions and decoded pixels. The visual diff of an
   // unchanged image is the image itself, so the baseline buffer can be reused.
-  if (!alignmentRequested && !dimensionsChanged && ignoreRegions.length === 0 && baselinePng.data.equals(currentPng.data)) {
+  if (!alignmentRequested && !dimensionsChanged && ignoreRegions.length === 0 && pixelDataEqual(baselinePng.data, currentPng.data)) {
     const totalPixels = canvasWidth * canvasHeight;
     comparison.totalPixels = totalPixels;
     return {

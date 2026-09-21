@@ -142,19 +142,33 @@ describe('@snapdrift/compare-core — comparison size limit', () => {
   });
 
   test('bounds the aligned output canvas, including inserted and deleted rows', () => {
-    const baselineData = new Uint8Array([0, 0, 0, 255, 10, 10, 10, 255]);
-    const currentData = new Uint8Array([0, 0, 0, 255, 20, 20, 20, 255, 10, 10, 10, 255]);
+    // Both source images are five rows tall, so the union is five pixels, but
+    // one deletion plus one insertion requires a six-row aligned canvas.
+    const baselineData = new Uint8Array([
+      0, 0, 0, 255,
+      10, 10, 10, 255,
+      20, 20, 20, 255,
+      30, 30, 30, 255,
+      40, 40, 40, 255
+    ]);
+    const currentData = new Uint8Array([
+      0, 0, 0, 255,
+      90, 90, 90, 255,
+      10, 10, 10, 255,
+      20, 20, 20, 255,
+      40, 40, 40, 255
+    ]);
     readPng
-      .mockReturnValueOnce({ width: 1, height: 2, data: baselineData })
-      .mockReturnValueOnce({ width: 1, height: 3, data: currentData });
+      .mockReturnValueOnce({ width: 1, height: 5, data: baselineData })
+      .mockReturnValueOnce({ width: 1, height: 5, data: currentData });
 
     let error;
     try {
-      compareImages(Buffer.alloc(0), Buffer.alloc(0), { alignment: 'vertical', maxPixels: 2, renderDiffImage: false });
+      compareImages(Buffer.alloc(0), Buffer.alloc(0), { alignment: 'vertical', maxPixels: 5, renderDiffImage: false });
     } catch (caught) {
       error = caught;
     }
     expect(error).toBeInstanceOf(ComparisonTooLargeError);
-    expect(error.message).toContain('union canvas 1x3');
+    expect(error.message).toContain('union canvas 1x6');
   });
 });

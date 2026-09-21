@@ -1554,6 +1554,91 @@ describe('SnapProvider.diff() baseline mapping', () => {
     });
   });
 
+  it('fails closed when a v2 run returns v1-shaped comparison metadata', async () => {
+    const metadata = diffRunMetadata({
+      runId: 'run_v2_v1_result',
+      comparisonPolicy: { version: 2, threshold: 0.01 }
+    });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          diffPixels: 0,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison: {
+            baseline: { width: 4, height: 6 },
+            current: { width: 4, height: 8 },
+            canvas: { width: 4, height: 8 },
+            dimensionsChanged: true,
+            totalPixels: 32
+          },
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata,
+      { comparisonPolicy: { version: 2, threshold: 0.01 } }
+    );
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringMatching(/different policy than v2/)
+        })
+      ])
+    );
+  });
+
+  it('rejects aligned metadata whose denominator is smaller than its canvas', async () => {
+    const metadata = diffRunMetadata({
+      runId: 'run_v2_short_denominator',
+      comparisonPolicy: { version: 2, threshold: 0.01 }
+    });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 1,
+          diffPixels: 1,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison: {
+            baseline: { width: 1, height: 1 },
+            current: { width: 1, height: 2 },
+            canvas: { width: 1, height: 2 },
+            dimensionsChanged: true,
+            totalPixels: 1,
+            policyVersion: 2,
+            mode: 'vertical-aligned',
+            rowMapping: [{ outputStart: 0, length: 2, kind: 'inserted', currentStart: 0 }]
+          },
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata,
+      { comparisonPolicy: { version: 2, threshold: 0.01 } }
+    );
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringMatching(/missing complete comparison metadata/)
+        })
+      ])
+    );
+  });
+
   it('fails closed when a v1 capture has no complete comparison metadata', async () => {
     const metadata = diffRunMetadata({
       runId: 'run_missing_comparison',

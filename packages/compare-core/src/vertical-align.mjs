@@ -10,7 +10,11 @@ import { diffArrays } from 'diff';
  * worker at risk.
  */
 export const MAX_ALIGNMENT_ROWS = 100_000;
-export const MAX_ALIGNMENT_EDIT_LENGTH = 16_384;
+// Keep the synchronous Myers search below a bounded sub-second budget for
+// dissimilar tall captures. Larger edit groups conservatively use v1.
+export const MAX_ALIGNMENT_EDIT_LENGTH = 2_048;
+export const COMPARISON_ROW_KINDS = /** @type {const} */ (['matched', 'changed', 'inserted', 'deleted']);
+export const COMPARISON_FALLBACK_REASONS = /** @type {const} */ (['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions']);
 
 /**
  * @typedef {'matched' | 'changed' | 'inserted' | 'deleted'} AlignmentRowKind
@@ -178,17 +182,20 @@ export function alignRows(baseline, current) {
       changeIndex += 1;
     }
 
-    // If an unmatched row is also present elsewhere in the opposite image,
+    const pairedCount = Math.min(removedCount, addedCount);
+    const unmatchedRemovedTail = unmatchedRemoved.slice(pairedCount);
+    const unmatchedAddedTail = unmatchedAdded.slice(pairedCount);
+
+    // If a truly unmatched row is also present elsewhere in the opposite image,
     // there is no reliable way to tell movement from insertion. Fall back to
     // coordinate comparison instead of painting an arbitrary occurrence green.
     if (
-      (unmatchedAdded.length > removedCount && unmatchedAdded.some((fingerprint) => baselineFingerprintSet.has(fingerprint))) ||
-      (unmatchedRemoved.length > addedCount && unmatchedRemoved.some((fingerprint) => currentFingerprintSet.has(fingerprint)))
+      unmatchedAddedTail.some((fingerprint) => baselineFingerprintSet.has(fingerprint)) ||
+      unmatchedRemovedTail.some((fingerprint) => currentFingerprintSet.has(fingerprint))
     ) {
       return { kind: 'fallback', reason: 'ambiguous' };
     }
 
-    const pairedCount = Math.min(removedCount, addedCount);
     if (pairedCount > 0) {
       appendSegment(segments, {
         outputStart: outputIndex,

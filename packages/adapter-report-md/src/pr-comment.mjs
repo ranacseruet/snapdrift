@@ -1,6 +1,7 @@
 // @ts-check
 
 import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
+import { getAlignmentNotes } from './alignment-notes.mjs';
 
 export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
 export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
@@ -58,19 +59,11 @@ function hasSemanticDiffImage(item) {
   return Boolean(item.diffImagePath);
 }
 
-/**
- * @param {import('@snapdrift/manifest').VisualDiffChangedItem[]} changed
- * @returns {string[]}
- */
-function getAlignmentNotes(changed) {
-  const aligned = changed.filter((item) => item.comparison?.mode === 'vertical-aligned').map((item) => item.id);
-  const fallback = changed
-    .filter((item) => item.comparison?.mode === 'coordinate-fallback')
-    .map((item) => `${item.id} (${item.comparison?.fallbackReason || 'unspecified reason'})`);
-  const notes = [];
-  if (aligned.length > 0) notes.push(`vertical row alignment: ${aligned.join(', ')}`);
-  if (fallback.length > 0) notes.push(`coordinate fallback: ${fallback.join(', ')}`);
-  return notes;
+/** @param {import('@snapdrift/manifest').VisualDiffChangedItem[]} changed @returns {string[]} */
+function formatAlignmentNotes(changed) {
+  return getAlignmentNotes(changed).map((note) => note.kind === 'aligned'
+    ? `vertical row alignment: ${note.routeIds.map(escapeMarkdown).join(', ')}`
+    : `coordinate fallback: ${note.routes.map(({ id, reason }) => `${escapeMarkdown(id)} (${escapeMarkdown(reason)})`).join(', ')}`);
 }
 
 /**
@@ -177,7 +170,7 @@ export function buildReportCommentBody(summary, meta = {}) {
       lines.push('');
       lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
     }
-    const alignmentNotes = getAlignmentNotes(changed);
+    const alignmentNotes = formatAlignmentNotes(changed);
     if (alignmentNotes.length > 0) {
       lines.push('');
       lines.push(`> Comparison alignment — ${alignmentNotes.join('; ')}.`);

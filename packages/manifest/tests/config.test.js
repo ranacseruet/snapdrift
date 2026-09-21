@@ -7,6 +7,8 @@ import {
   VALID_DIFF_MODES,
   COMPARISON_POLICY_VERSION,
   SUPPORTED_COMPARISON_POLICY_VERSIONS,
+  COMPARISON_ROW_KINDS,
+  COMPARISON_FALLBACK_REASONS,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS
 } from '../src/config.mjs';
@@ -264,6 +266,8 @@ describe('@snapdrift/manifest — constants', () => {
   test('comparison policy version is v1', () => {
     expect(COMPARISON_POLICY_VERSION).toBe(1);
     expect(SUPPORTED_COMPARISON_POLICY_VERSIONS).toEqual([1, 2]);
+    expect(COMPARISON_ROW_KINDS).toEqual(['matched', 'changed', 'inserted', 'deleted']);
+    expect(COMPARISON_FALLBACK_REASONS).toEqual(['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions']);
   });
 
   test('SNAPDRIFT_NAVIGATION_TIMEOUT_MS is positive', () => {

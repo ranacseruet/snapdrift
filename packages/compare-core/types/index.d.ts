@@ -40,6 +40,11 @@ export interface ComparisonDimensions {
 
 export type ComparisonRowKind = 'matched' | 'changed' | 'inserted' | 'deleted';
 
+export const COMPARISON_ROW_KINDS: readonly ['matched', 'changed', 'inserted', 'deleted'];
+export const COMPARISON_FALLBACK_REASONS: readonly ['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions'];
+
+export type ComparisonFallbackReason = (typeof COMPARISON_FALLBACK_REASONS)[number];
+
 export interface ComparisonRowMapping {
   outputStart: number;
   length: number;
@@ -61,7 +66,7 @@ export interface ComparisonMetadata {
   /** Row mapping used to render and score an aligned result. */
   rowMapping?: ComparisonRowMapping[];
   /** Why v2 used coordinate fallback, when it did. */
-  fallbackReason?: 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions' | 'alignment-unavailable';
+  fallbackReason?: ComparisonFallbackReason;
 }
 
 export interface CompareResult {
@@ -126,6 +131,8 @@ export class ComparisonTooLargeError extends Error {
 }
 
 export const MAX_COMPARISON_PIXELS: number;
+export const MAX_ALIGNMENT_ROWS: number;
+export const MAX_ALIGNMENT_EDIT_LENGTH: number;
 
 export function compareBuffers(baselineBuffer: Buffer, currentBuffer: Buffer): CompareBuffersResult;
 /** Metrics-only overload: `diffImageBuffer` is not rendered. */

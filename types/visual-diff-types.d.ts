@@ -34,10 +34,13 @@ export interface ComparisonMetadata {
   policyVersion?: 2;
   mode?: 'vertical-aligned' | 'coordinate-fallback';
   rowMapping?: ComparisonRowMapping[];
-  fallbackReason?: 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions' | 'alignment-unavailable';
+  fallbackReason?: ComparisonFallbackReason;
 }
 
+export type ComparisonFallbackReason = 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions';
+export const COMPARISON_FALLBACK_REASONS: readonly ['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions'];
 export type ComparisonRowKind = 'matched' | 'changed' | 'inserted' | 'deleted';
+export const COMPARISON_ROW_KINDS: readonly ['matched', 'changed', 'inserted', 'deleted'];
 export interface ComparisonRowMapping {
   outputStart: number;
   length: number;

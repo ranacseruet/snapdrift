@@ -226,6 +226,32 @@ describe('buildReportCommentBody', () => {
     expect(body).toContain('| home-mobile | 390x844 |');
   });
 
+  it('escapes route ids in v2 alignment notes', () => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      status: 'changes-detected',
+      changedScreenshots: 1,
+      changed: [{
+        id: '<unsafe|route>',
+        viewport: 'desktop',
+        mismatchRatio: 0.1,
+        comparison: {
+          baseline: { width: 1, height: 1 },
+          current: { width: 1, height: 2 },
+          canvas: { width: 1, height: 2 },
+          dimensionsChanged: true,
+          totalPixels: 2,
+          policyVersion: 2,
+          mode: 'vertical-aligned',
+          rowMapping: [{ outputStart: 0, length: 2, kind: 'inserted', currentStart: 0 }]
+        }
+      }]
+    });
+
+    expect(body).toContain('vertical row alignment: &lt;unsafe\\|route&gt;');
+    expect(body).not.toContain('vertical row alignment: <unsafe|route>');
+  });
+
   it('formats an object viewport in the opted-in unequal-dimension shifts table', () => {
     const body = buildReportCommentBody({
       ...cleanSummary,
