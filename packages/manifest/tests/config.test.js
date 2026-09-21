@@ -6,6 +6,7 @@ import {
   splitCommaList,
   VALID_DIFF_MODES,
   COMPARISON_POLICY_VERSION,
+  SUPPORTED_COMPARISON_POLICY_VERSIONS,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS
 } from '../src/config.mjs';
@@ -137,10 +138,21 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
       ...VALID_CONFIG,
       diff: {
         ...VALID_CONFIG.diff,
-        comparisonPolicy: { version: 2, threshold: 0.01 }
+        comparisonPolicy: { version: 3, threshold: 0.01 }
       }
     };
     expect(() => validateSnapdriftConfig(copy)).toThrow('diff.comparisonPolicy.version');
+  });
+
+  test('accepts opt-in v2 row-aligned comparison policy', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      diff: {
+        ...VALID_CONFIG.diff,
+        comparisonPolicy: { version: 2, threshold: 0.01 }
+      }
+    };
+    expect(validateSnapdriftConfig(copy).diff.comparisonPolicy).toEqual({ version: 2, threshold: 0.01 });
   });
 
   test('rejects an invalid comparison policy threshold', () => {
@@ -251,6 +263,7 @@ describe('@snapdrift/manifest — constants', () => {
 
   test('comparison policy version is v1', () => {
     expect(COMPARISON_POLICY_VERSION).toBe(1);
+    expect(SUPPORTED_COMPARISON_POLICY_VERSIONS).toEqual([1, 2]);
   });
 
   test('SNAPDRIFT_NAVIGATION_TIMEOUT_MS is positive', () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added opt-in comparison policy v2 with bounded vertical row alignment for
+  inserted and deleted page rows. Unchanged content that shifts after an
+  insertion remains matched; reports record aligned results and conservative
+  coordinate fallbacks. Policy v1 remains the default.
+
 ## 0.13.0 - 2026-09-19
 
 Workspace releases this version:

@@ -345,12 +345,19 @@ The `Missing`, `Errors`, and `Dim diff` lines only print when their count is gre
 
 The `report.html` path is printed whenever the status is anything other than `clean`; pass `--open` to also launch it in your default browser.
 
-SnapDrift always applies comparison policy v1. It synthesizes the policy from
-`diff.threshold` when `diff` does not declare one, so the explicit opt-in is only
-needed to pin a non-default threshold:
+SnapDrift always applies comparison policy v1 unless an explicit v2 policy is
+configured. It synthesizes v1 from `diff.threshold` when `diff` does not declare
+one:
 
 ```json
 "comparisonPolicy": { "version": 1, "threshold": 0.01 }
+```
+
+Set `version` to `2` to enable bounded vertical row alignment for equal-width
+captures. Reports record aligned results and conservative coordinate fallbacks:
+
+```json
+"comparisonPolicy": { "version": 2, "threshold": 0.01 }
 ```
 
 The report includes the baseline, current, and union-canvas dimensions in

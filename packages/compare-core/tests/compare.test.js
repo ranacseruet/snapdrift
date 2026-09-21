@@ -21,6 +21,26 @@ function solidPng(width, height, color) {
   return PNG.sync.write(png);
 }
 
+/**
+ * Create a PNG whose rows have distinct solid grayscale values.
+ * @param {number[]} rows
+ * @param {number} [width]
+ * @returns {Buffer}
+ */
+function rowPng(rows, width = 4) {
+  const png = new PNG({ width, height: rows.length });
+  rows.forEach((value, y) => {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      png.data[index] = value;
+      png.data[index + 1] = value;
+      png.data[index + 2] = value;
+      png.data[index + 3] = 255;
+    }
+  });
+  return PNG.sync.write(png);
+}
+
 describe('@snapdrift/compare-core — compareBuffers', () => {
   test('returns zero mismatch for identical buffers', () => {
     const buf = solidPng(10, 10, [0, 0, 0, 255]);
@@ -302,6 +322,117 @@ describe('@snapdrift/compare-core — compareWithIgnoreRegions', () => {
 });
 
 describe('@snapdrift/compare-core — compareImages', () => {
+  test('v2 aligns a middle insertion and marks only inserted rows green', () => {
+    const baseline = rowPng([10, 20, 30, 40, 50, 60]);
+    const current = rowPng([10, 20, 30, 200, 210, 40, 50, 60]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+
+    expect(result.differentPixels).toBe(8);
+    expect(result.totalPixels).toBe(32);
+    expect(result.mismatchRatio).toBe(0.25);
+    expect(result.comparison).toMatchObject({
+      policyVersion: 2,
+      mode: 'vertical-aligned',
+      canvas: { width: 4, height: 8 },
+      rowMapping: [
+        { outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 },
+        { outputStart: 3, length: 2, kind: 'inserted', currentStart: 3 },
+        { outputStart: 5, length: 3, kind: 'matched', baselineStart: 3, currentStart: 5 }
+      ]
+    });
+    for (const y of [0, 1, 2, 5, 6, 7]) {
+      expect([...diffPng.data.slice(y * 16, y * 16 + 4)]).not.toEqual([0, 170, 0, 255]);
+      expect([...diffPng.data.slice(y * 16, y * 16 + 4)]).not.toEqual([255, 140, 0, 255]);
+    }
+    for (const y of [3, 4]) {
+      expect([...diffPng.data.slice(y * 16, y * 16 + 4)]).toEqual([0, 170, 0, 255]);
+    }
+  });
+
+  test('v2 pairs a real row edit separately from an insertion', () => {
+    const baseline = rowPng([10, 20, 30, 40, 50, 60]);
+    const current = rowPng([10, 20, 200, 30, 99, 50, 60]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+
+    expect(result.comparison.mode).toBe('vertical-aligned');
+    expect(result.differentPixels).toBe(8);
+    expect([...diffPng.data.slice(2 * 16, 2 * 16 + 4)]).toEqual([0, 170, 0, 255]);
+    expect([...diffPng.data.slice(4 * 16, 4 * 16 + 4)]).toEqual([255, 140, 0, 255]);
+  });
+
+  test('v2 marks deleted rows red and keeps the remaining suffix aligned', () => {
+    const baseline = rowPng([10, 20, 30, 200, 210, 40, 50]);
+    const current = rowPng([10, 20, 30, 40, 50]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+
+    expect(result.differentPixels).toBe(8);
+    expect(result.comparison.rowMapping).toEqual([
+      { outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 },
+      { outputStart: 3, length: 2, kind: 'deleted', baselineStart: 3 },
+      { outputStart: 5, length: 2, kind: 'matched', baselineStart: 5, currentStart: 3 }
+    ]);
+    expect([...diffPng.data.slice(3 * 16, 3 * 16 + 4)]).toEqual([255, 0, 0, 255]);
+  });
+
+  test('v2 handles multiple insertions and deletions even when source heights match', () => {
+    const baseline = rowPng([10, 20, 30, 40, 50]);
+    const current = rowPng([10, 200, 20, 30, 50]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+
+    expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'vertical-aligned', canvas: { width: 4, height: 6 } });
+    expect(result.comparison.rowMapping).toEqual([
+      { outputStart: 0, length: 1, kind: 'matched', baselineStart: 0, currentStart: 0 },
+      { outputStart: 1, length: 1, kind: 'inserted', currentStart: 1 },
+      { outputStart: 2, length: 2, kind: 'matched', baselineStart: 1, currentStart: 2 },
+      { outputStart: 4, length: 1, kind: 'deleted', baselineStart: 3 },
+      { outputStart: 5, length: 1, kind: 'matched', baselineStart: 4, currentStart: 4 }
+    ]);
+    expect(result.differentPixels).toBe(8);
+    expect(result.totalPixels).toBe(24);
+  });
+
+  test('v2 falls back conservatively for width changes and ignored regions', () => {
+    const baseline = rowPng([10, 20, 30], 4);
+    const wider = rowPng([10, 200, 20, 30], 5);
+
+    const widthFallback = compareImages(baseline, wider, { alignment: 'vertical' });
+    expect(widthFallback.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'width-mismatch' });
+
+    const ignoredFallback = compareImages(baseline, rowPng([10, 200, 20, 30], 4), {
+      alignment: 'vertical',
+      ignoreRegions: [{ x: 0, y: 1, width: 4, height: 1 }]
+    });
+    expect(ignoredFallback.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'ignore-regions' });
+  });
+
+  test('v2 falls back when a repeated row makes insertion location ambiguous', () => {
+    const baseline = rowPng([10, 20, 10]);
+    const current = rowPng([10, 10, 20, 10]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'ambiguous' });
+  });
+
+  test('v2 metrics are identical when diff rendering is disabled', () => {
+    const baseline = rowPng([10, 20, 30]);
+    const current = rowPng([10, 200, 20, 30]);
+    const rendered = compareImages(baseline, current, { alignment: 'vertical' });
+    const metrics = compareImages(baseline, current, { alignment: 'vertical', renderDiffImage: false });
+
+    expect(metrics.diffImageBuffer).toBeUndefined();
+    expect(metrics.differentPixels).toBe(rendered.differentPixels);
+    expect(metrics.totalPixels).toBe(rendered.totalPixels);
+    expect(metrics.mismatchRatio).toBe(rendered.mismatchRatio);
+    expect(metrics.comparison).toEqual(rendered.comparison);
+  });
+
   test('compares top-left overlap without counting empty union corners', () => {
     const baseline = solidPng(2, 2, [0, 0, 0, 255]);
     const current = solidPng(3, 1, [0, 0, 0, 255]);

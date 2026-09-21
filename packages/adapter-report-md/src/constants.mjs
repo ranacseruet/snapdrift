@@ -26,7 +26,7 @@ export function formatViewport(viewport) {
  * only in the current capture (added), red = pixels present only in the
  * baseline (removed).
  */
-export const DIFF_IMAGE_LEGEND = 'Diff image colors: orange = changed · green = added · red = removed';
+export const DIFF_IMAGE_LEGEND = 'Diff image colors: orange = changed · green = added or inserted · red = removed or deleted';
 
 /**
  * Format an internal 0–1 ratio for human-facing reports.

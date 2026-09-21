@@ -106,6 +106,59 @@ describe('generateHtmlReport', () => {
     expect(html).toContain('0.04%');
   });
 
+  it('identifies aligned and coordinate-fallback v2 comparisons in the report', async () => {
+    const html = await generateHtmlReport(makeSummary({
+      status: 'changes-detected',
+      changedScreenshots: 2,
+      changed: [
+        {
+          id: 'inserted-route',
+          path: '/',
+          viewport: 'desktop',
+          width: 1440,
+          height: 920,
+          differentPixels: 100,
+          totalPixels: 1324800,
+          mismatchRatio: 100 / 1324800,
+          status: 'changed',
+          comparison: {
+            baseline: { width: 1440, height: 900 },
+            current: { width: 1440, height: 920 },
+            canvas: { width: 1440, height: 920 },
+            dimensionsChanged: true,
+            totalPixels: 1324800,
+            policyVersion: 2,
+            mode: 'vertical-aligned',
+            rowMapping: [{ outputStart: 0, length: 1, kind: 'inserted', currentStart: 0 }]
+          }
+        },
+        {
+          id: 'fallback-route',
+          path: '/fallback',
+          viewport: 'desktop',
+          width: 1441,
+          height: 900,
+          differentPixels: 100,
+          totalPixels: 1296900,
+          mismatchRatio: 100 / 1296900,
+          status: 'changed',
+          comparison: {
+            baseline: { width: 1440, height: 900 },
+            current: { width: 1441, height: 900 },
+            canvas: { width: 1441, height: 900 },
+            dimensionsChanged: true,
+            totalPixels: 1296900,
+            policyVersion: 2,
+            mode: 'coordinate-fallback',
+            fallbackReason: 'width-mismatch'
+          }
+        }
+      ]
+    }));
+    expect(html).toContain('vertical row alignment: inserted-route');
+    expect(html).toContain('coordinate fallback: fallback-route (width-mismatch)');
+  });
+
   it('renders capture gaps when missing items exist', async () => {
     const html = await generateHtmlReport(makeSummary({
       status: 'incomplete',

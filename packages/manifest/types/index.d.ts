@@ -31,9 +31,9 @@ export interface VisualRegressionSelectionConfig {
   sharedExact?: string[];
 }
 
-/** Explicit opt-in to the top-left-aligned unequal-dimension comparison policy. */
+/** Explicit comparison policy. v1 is the compatibility default; v2 aligns vertical rows. */
 export interface ComparisonPolicy {
-  version: 1;
+  version: 1 | 2;
   threshold: number;
 }
 
@@ -48,6 +48,19 @@ export interface ComparisonMetadata {
   canvas: ComparisonDimensions;
   dimensionsChanged: boolean;
   totalPixels: number;
+  policyVersion?: 2;
+  mode?: 'vertical-aligned' | 'coordinate-fallback';
+  rowMapping?: ComparisonRowMapping[];
+  fallbackReason?: 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions' | 'alignment-unavailable';
+}
+
+export type ComparisonRowKind = 'matched' | 'changed' | 'inserted' | 'deleted';
+export interface ComparisonRowMapping {
+  outputStart: number;
+  length: number;
+  kind: ComparisonRowKind;
+  baselineStart?: number;
+  currentStart?: number;
 }
 
 export interface SnapConfig {
@@ -223,7 +236,7 @@ export interface VisualDiffChangedItem {
   totalPixels: number;
   mismatchRatio: number;
   status: 'changed';
-  /** Present for v1 union-canvas comparisons. */
+  /** Present for policy comparisons (v1 union canvas or v2 aligned/fallback). */
   comparison?: ComparisonMetadata;
   /** Relative to the local diff output/artifact directory. */
   diffImagePath?: string;
@@ -254,7 +267,7 @@ export interface VisualDiffSummary {
   errors: VisualDiffErrorItem[];
   captureCompatibility?: CaptureCompatibility;
   dimensionChanges: VisualDiffDimensionItem[];
-  /** The exact policy used for v1 local comparisons, when opted in. */
+  /** The exact policy used for local comparisons. */
   comparisonPolicy?: ComparisonPolicy;
   message?: string;
   /** Link to the provider's run detail page. Set by SnapProvider during diff(); undefined for LocalProvider. Serialized into summary.json so the comment step can include it without re-creating the provider. */
@@ -392,6 +405,7 @@ export interface VisualProvider {
 
 export const VALID_DIFF_MODES: readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
 export const COMPARISON_POLICY_VERSION: 1;
+export const SUPPORTED_COMPARISON_POLICY_VERSIONS: readonly [1, 2];
 export const VALID_PROVIDER_VALUES: readonly ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES: readonly ['fail', 'warn-and-skip', 'fallback-local'];
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS: number;

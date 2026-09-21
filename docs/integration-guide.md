@@ -309,10 +309,12 @@ See the [Local CLI guide](local-cli.md) for full command reference, flags, direc
 ## Refresh the baseline automatically
 
 After an intentional layout change merges, the baseline can be republished as
-usual. Local comparisons always apply comparison policy v1
-(`{ "version": 1, "threshold": number }`) — synthesized from `diff.threshold`
-when not configured — so unequal frames are compared on a union canvas and
-dimension metadata stays in the report.
+usual. Local comparisons apply policy v1
+(`{ "version": 1, "threshold": number }`) by default — synthesized from
+`diff.threshold` when not configured — so unequal frames are compared on a union
+canvas and dimension metadata stays in the report. Set
+`diff.comparisonPolicy.version` to `2` to opt into bounded vertical row
+alignment; the report records aligned results and coordinate fallbacks.
 
 Use the provided workflow template to refresh the baseline automatically on every push to your default branch (i.e. every merge):
 
@@ -340,8 +342,11 @@ Grant `issues: write` and `pull-requests: write` to the job.
 The Snap client never retries 4xx and never falls back, even when `onUnavailable` is set. Inspect the response body — the most common cause is a project-id mismatch between `GITHUB_REPOSITORY` (auto-derived) and the project's id on Snap.
 
 **Screenshots have different dimensions**  
-SnapDrift compares the top-left-aligned union canvas, records the route in
-`changed[]`, and writes a local diff PNG. Refresh the baseline after an
+SnapDrift compares the top-left-aligned union canvas by default. Policy v2 can
+align equal-width rows so unchanged content after an insertion is not painted
+as drift; width changes, ignored regions, ambiguous rows, and resource limits
+fall back to coordinate comparison. Either policy records the route in
+`changed[]`, and local runs write a diff PNG. Refresh the baseline after an
 intentional change when you want future runs to return to equal-size
 comparisons.
 

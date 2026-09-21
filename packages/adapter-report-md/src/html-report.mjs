@@ -42,6 +42,21 @@ function hasSemanticDiffImage(item) {
 }
 
 /**
+ * @param {DriftSummary['changed']} changed
+ * @returns {string}
+ */
+function formatAlignmentNote(changed) {
+  const aligned = changed.filter((item) => item.comparison?.mode === 'vertical-aligned').map((item) => item.id);
+  const fallback = changed
+    .filter((item) => item.comparison?.mode === 'coordinate-fallback')
+    .map((item) => `${item.id} (${item.comparison?.fallbackReason || 'unspecified reason'})`);
+  const notes = [];
+  if (aligned.length > 0) notes.push(`vertical row alignment: ${aligned.join(', ')}`);
+  if (fallback.length > 0) notes.push(`coordinate fallback: ${fallback.join(', ')}`);
+  return notes.length > 0 ? ` <p class="comparison-alignment">Comparison alignment — ${escapeHtml(notes.join('; '))}.</p>` : '';
+}
+
+/**
  * @param {string} text
  * @returns {string}
  */
@@ -150,7 +165,7 @@ export async function generateHtmlReport(summary, options = {}) {
     changedHtml = `<table>
       <thead><tr><th>Route</th><th>Path</th><th>Viewport</th>${comparisonDetails ? '<th>Baseline</th><th>Current</th><th>Canvas</th>' : ''}<th>Mismatch</th><th>Pixels changed</th>${comparisonDetails ? '<th>Diff image</th>' : ''}</tr></thead>
       <tbody>${rows.join('')}</tbody>
-    </table>${comparisonDetails && semanticDiff ? `<p class="diff-legend"><sub>${escapeHtml(DIFF_IMAGE_LEGEND)}</sub></p>` : ''}`;
+    </table>${comparisonDetails && semanticDiff ? `<p class="diff-legend"><sub>${escapeHtml(DIFF_IMAGE_LEGEND)}</sub></p>` : ''}${formatAlignmentNote(summary.changed)}`;
   }
 
   // --- Capture gaps ---

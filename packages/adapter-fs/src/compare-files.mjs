@@ -162,6 +162,7 @@ export async function comparePngs(baselinePath, currentPath, options = {}) {
     return compareBuffers(baselineBuffer, currentBuffer);
   }
   return compareImages(baselineBuffer, currentBuffer, {
+    ...(options.comparisonPolicy.version === 2 ? { alignment: 'vertical' } : {}),
     ...(options.renderDiffImage === undefined ? {} : { renderDiffImage: options.renderDiffImage })
   });
 }

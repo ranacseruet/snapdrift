@@ -29,6 +29,20 @@ function createPng(width, height, r = 255, g = 255, b = 255) {
   return PNG.sync.write(png);
 }
 
+function createRowPng(rows, width = 4) {
+  const png = new PNG({ width, height: rows.length });
+  rows.forEach((value, y) => {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      png.data[index] = value;
+      png.data[index + 1] = value;
+      png.data[index + 2] = value;
+      png.data[index + 3] = 255;
+    }
+  });
+  return PNG.sync.write(png);
+}
+
 async function writeJson(filePath, data) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(data, null, 2));
@@ -659,6 +673,32 @@ describe('generateDriftReport', () => {
     expect(diffPng.width).toBe(3);
     expect(diffPng.height).toBe(1);
     expect([...diffPng.data.slice(8, 12)]).toEqual([0, 170, 0, 255]);
+  });
+
+  it('uses v2 row alignment in the local report and preserves the dimension signal', async () => {
+    const routeId = 'aligned-route';
+    const imagePath = 'screenshots/aligned.png';
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 4)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 4, 5)],
+      baselinePngs: [{ relPath: imagePath, width: 4, height: 4, r: 0, g: 0, b: 0 }],
+      currentPngs: [{ relPath: imagePath, width: 4, height: 5, r: 0, g: 0, b: 0 }],
+      comparisonPolicy: { version: 2, threshold: 1 }
+    });
+    await fs.writeFile(path.join(opts.baselineRunDir, imagePath), createRowPng([10, 20, 30, 40]));
+    await fs.writeFile(path.join(opts.currentRunDir, imagePath), createRowPng([10, 20, 200, 30, 40]));
+
+    const { summary, markdown } = await generateDriftReport({ ...opts, routeIds: [routeId], diffImagesDir: path.join(tempDir, 'diffs') });
+
+    expect(summary.status).toBe('changes-detected');
+    expect(summary.comparisonPolicy).toEqual({ version: 2, threshold: 1 });
+    expect(summary.changed[0]).toMatchObject({
+      differentPixels: 4,
+      totalPixels: 20,
+      comparison: { policyVersion: 2, mode: 'vertical-aligned', dimensionsChanged: true, canvas: { width: 4, height: 5 } }
+    });
+    expect(markdown).toContain('vertical row alignment');
   });
 
   it('falls back to diff.threshold when a programmatic policy omits threshold', async () => {

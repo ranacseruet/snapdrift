@@ -121,7 +121,7 @@ before pixels. Incompatible captures produce incomplete errors, not product drif
 - Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - Full-page comparisons are bounded to a 32 Mi-pixel union canvas; see the [screenshot size budget](docs/contracts.md#screenshot-size-budget) for viewport, device-scale, and remediation guidance
 - One global `diff.threshold`
-- Unequal dimensions compare on a top-left-aligned union canvas via comparison policy v1, which is always applied (synthesized from `diff.threshold` when `diff.comparisonPolicy` is absent)
+- Unequal dimensions use top-left union comparison policy v1 by default; opt into policy v2 with `{ "version": 2, "threshold": number }` for bounded vertical row alignment of inserted/deleted content
 - Local provider writes artifacts to the runner filesystem; for a hosted backend with a dashboard and a shared baseline store, configure `provider: "snap"` (see the [Integration Guide](docs/integration-guide.md#hosted-snap-provider))
 - Hosted Snap baselines publish only from the default branch and always include the complete configured route set
 

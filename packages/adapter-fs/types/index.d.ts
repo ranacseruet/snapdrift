@@ -57,7 +57,7 @@ export interface GenerateDriftReportOptions {
   baselineRunDir?: string;
   currentRunDir?: string;
   diffImagesDir?: string;
-  /** Overrides the effective v1 comparison policy; synthesized from `diff.threshold` when omitted. */
+  /** Overrides the effective comparison policy; v1 is synthesized from `diff.threshold` when omitted. */
   comparisonPolicy?: ComparisonPolicy;
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;

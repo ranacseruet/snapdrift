@@ -25,6 +25,20 @@ function solidPng(width, height, color) {
   return PNG.sync.write(png);
 }
 
+function rowPng(rows, width = 2) {
+  const png = new PNG({ width, height: rows.length });
+  rows.forEach((value, y) => {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      png.data[index] = value;
+      png.data[index + 1] = value;
+      png.data[index + 2] = value;
+      png.data[index + 3] = 255;
+    }
+  });
+  return PNG.sync.write(png);
+}
+
 async function writePngFile(filePath, width, height, color) {
   const buffer = solidPng(width, height, color);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -117,6 +131,25 @@ describe('@snapdrift/adapter-fs — compare-files', () => {
 
       expect(result.differentPixels).toBe(1);
       expect(result.diffImageBuffer).toBeUndefined();
+
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    test('routes v2 policies through vertical row alignment', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-cmp-'));
+      const baselinePath = path.join(tmpDir, 'baseline.png');
+      const currentPath = path.join(tmpDir, 'current.png');
+
+      await fs.writeFile(baselinePath, rowPng([10, 20, 30, 40]));
+      await fs.writeFile(currentPath, rowPng([10, 20, 200, 30, 40]));
+
+      const result = await comparePngs(baselinePath, currentPath, {
+        comparisonPolicy: { version: 2, threshold: 0.1 }
+      });
+
+      expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'vertical-aligned' });
+      expect(result.differentPixels).toBe(2);
+      expect(result.totalPixels).toBe(10);
 
       await fs.rm(tmpDir, { recursive: true, force: true });
     });

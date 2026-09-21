@@ -16,7 +16,7 @@ export interface VisualRegressionSelectionConfig {
 }
 
 export interface ComparisonPolicy {
-  version: 1;
+  version: 1 | 2;
   threshold: number;
 }
 
@@ -31,6 +31,19 @@ export interface ComparisonMetadata {
   canvas: ComparisonDimensions;
   dimensionsChanged: boolean;
   totalPixels: number;
+  policyVersion?: 2;
+  mode?: 'vertical-aligned' | 'coordinate-fallback';
+  rowMapping?: ComparisonRowMapping[];
+  fallbackReason?: 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions' | 'alignment-unavailable';
+}
+
+export type ComparisonRowKind = 'matched' | 'changed' | 'inserted' | 'deleted';
+export interface ComparisonRowMapping {
+  outputStart: number;
+  length: number;
+  kind: ComparisonRowKind;
+  baselineStart?: number;
+  currentStart?: number;
 }
 
 export interface VisualRegressionRouteConfig {

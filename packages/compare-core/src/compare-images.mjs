@@ -3,6 +3,7 @@
 import pngjs from 'pngjs';
 
 import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
+import { alignRows } from './vertical-align.mjs';
 
 const { PNG } = pngjs;
 
@@ -75,6 +76,121 @@ export class ComparisonTooLargeError extends Error {
 }
 
 /**
+ * Compare two equal-width images after aligning their rows. The result uses
+ * one output row for every matched, changed, inserted, or deleted source row.
+ *
+ * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
+ * @param {{ data: Uint8Array, width: number, height: number }} currentPng
+ * @param {{
+ *   renderDiffImage: boolean,
+ *   changedColor: [number, number, number, number],
+ *   addedColor: [number, number, number, number],
+ *   removedColor: [number, number, number, number],
+ *   maxPixels: number
+ * }} options
+ * @returns {{ kind: 'aligned', result: CompareImagesImplementationResult } | { kind: 'fallback', reason: string }}
+ */
+function compareAlignedImages(baselinePng, currentPng, options) {
+  const alignment = alignRows(baselinePng, currentPng);
+  if (alignment.kind === 'fallback') {
+    return alignment;
+  }
+
+  const canvasWidth = baselinePng.width;
+  const canvasHeight = alignment.height;
+  if (canvasWidth * canvasHeight > options.maxPixels) {
+    throw new ComparisonTooLargeError(
+      baselinePng.width,
+      baselinePng.height,
+      currentPng.width,
+      currentPng.height,
+      canvasWidth,
+      canvasHeight,
+      options.maxPixels
+    );
+  }
+
+  const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
+    baseline: { width: baselinePng.width, height: baselinePng.height },
+    current: { width: currentPng.width, height: currentPng.height },
+    canvas: { width: canvasWidth, height: canvasHeight },
+    dimensionsChanged: baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height,
+    totalPixels: 0,
+    policyVersion: 2,
+    mode: /** @type {const} */ ('vertical-aligned'),
+    rowMapping: alignment.segments
+  });
+  const diffPng = options.renderDiffImage ? new PNG({ width: canvasWidth, height: canvasHeight }) : undefined;
+  let differentPixels = 0;
+  let totalPixels = 0;
+
+  for (const segment of alignment.segments) {
+    for (let offset = 0; offset < segment.length; offset++) {
+      const outputY = segment.outputStart + offset;
+      const baselineY = segment.baselineStart === undefined ? undefined : segment.baselineStart + offset;
+      const currentY = segment.currentStart === undefined ? undefined : segment.currentStart + offset;
+      totalPixels += canvasWidth;
+
+      for (let x = 0; x < canvasWidth; x++) {
+        const outputIndex = (outputY * canvasWidth + x) * 4;
+        const baselineIndex = baselineY === undefined ? -1 : (baselineY * canvasWidth + x) * 4;
+        const currentIndex = currentY === undefined ? -1 : (currentY * canvasWidth + x) * 4;
+        const changed = segment.kind !== 'matched' && (
+          segment.kind === 'inserted' ||
+          segment.kind === 'deleted' ||
+          baselinePng.data[baselineIndex] !== currentPng.data[currentIndex] ||
+          baselinePng.data[baselineIndex + 1] !== currentPng.data[currentIndex + 1] ||
+          baselinePng.data[baselineIndex + 2] !== currentPng.data[currentIndex + 2] ||
+          baselinePng.data[baselineIndex + 3] !== currentPng.data[currentIndex + 3]
+        );
+
+        if (changed) {
+          differentPixels += 1;
+        }
+        if (!diffPng) continue;
+
+        const color = segment.kind === 'inserted'
+          ? options.addedColor
+          : segment.kind === 'deleted'
+            ? options.removedColor
+            : changed
+              ? options.changedColor
+              : undefined;
+        if (color) {
+          diffPng.data[outputIndex] = color[0];
+          diffPng.data[outputIndex + 1] = color[1];
+          diffPng.data[outputIndex + 2] = color[2];
+          diffPng.data[outputIndex + 3] = color[3];
+        } else {
+          const sourceIndex = currentIndex >= 0 ? currentIndex : baselineIndex;
+          diffPng.data[outputIndex] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex] : baselinePng.data[sourceIndex]) : 0;
+          diffPng.data[outputIndex + 1] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 1] : baselinePng.data[sourceIndex + 1]) : 0;
+          diffPng.data[outputIndex + 2] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 2] : baselinePng.data[sourceIndex + 2]) : 0;
+          diffPng.data[outputIndex + 3] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 3] : baselinePng.data[sourceIndex + 3]) : 0;
+        }
+      }
+    }
+  }
+
+  const mismatchRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
+  comparison.totalPixels = totalPixels;
+  return {
+    kind: 'aligned',
+    result: {
+      width: canvasWidth,
+      height: canvasHeight,
+      differentPixels,
+      totalPixels,
+      mismatchRatio,
+      pct: mismatchRatio,
+      pixelsChanged: differentPixels,
+      ...(diffPng ? { diffImageBuffer: PNG.sync.write(diffPng) } : {}),
+      comparison
+    }
+  };
+}
+
+/**
  * @typedef {import('../types/index.d.ts').CompareResult & {
  *   comparison: import('../types/index.d.ts').ComparisonMetadata,
  *   diffImageBuffer?: Buffer
@@ -82,8 +198,9 @@ export class ComparisonTooLargeError extends Error {
  */
 
 /**
- * Compare two PNG buffers on a top-left-aligned union canvas and generate the
- * corresponding visual diff in the same pass over the decoded pixels.
+ * Compare two PNG buffers and generate the corresponding visual diff in the
+ * same pass over the decoded pixels. The default is the v1 top-left-aligned
+ * union canvas; callers can opt into `alignment: 'vertical'` for policy v2.
  *
  * No threshold is applied here. Callers decide whether `mismatchRatio` is
  * actionable after aggregating the returned comparison metrics.
@@ -134,6 +251,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   const removedColor = parseHighlightColor(options.removedColor || DEFAULT_REMOVED_COLOR, 'removedColor');
   const renderDiffImage = options.renderDiffImage !== false;
   const maxPixels = resolveMaxPixels(options.maxPixels);
+  const alignmentRequested = options.alignment === 'vertical';
 
   // Best-effort pre-decode guard: reject oversized unions before allocating the
   // decoded RGBA buffers, which are the largest allocations in this path.
@@ -174,17 +292,42 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
   }
 
   const dimensionsChanged = baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height;
-  const comparison = {
+  let alignmentFallbackReason;
+
+  if (alignmentRequested && ignoreRegions.length === 0) {
+    const alignedResult = compareAlignedImages(baselinePng, currentPng, {
+      renderDiffImage,
+      changedColor,
+      addedColor,
+      removedColor,
+      maxPixels
+    });
+    if (alignedResult.kind === 'aligned') {
+      return alignedResult.result;
+    }
+    alignmentFallbackReason = alignedResult.reason;
+  } else if (alignmentRequested) {
+    alignmentFallbackReason = 'ignore-regions';
+  }
+
+  const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
     baseline: { width: baselinePng.width, height: baselinePng.height },
     current: { width: currentPng.width, height: currentPng.height },
     canvas: { width: canvasWidth, height: canvasHeight },
     dimensionsChanged,
-    totalPixels: 0
-  };
+    totalPixels: 0,
+    ...(alignmentRequested
+      ? {
+          policyVersion: 2,
+          mode: 'coordinate-fallback',
+          fallbackReason: alignmentFallbackReason || 'alignment-unavailable'
+        }
+      : {})
+  });
 
   // Fast path: identical dimensions and decoded pixels. The visual diff of an
   // unchanged image is the image itself, so the baseline buffer can be reused.
-  if (!dimensionsChanged && ignoreRegions.length === 0 && baselinePng.data.equals(currentPng.data)) {
+  if (!alignmentRequested && !dimensionsChanged && ignoreRegions.length === 0 && baselinePng.data.equals(currentPng.data)) {
     const totalPixels = canvasWidth * canvasHeight;
     comparison.totalPixels = totalPixels;
     return {

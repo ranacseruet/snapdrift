@@ -46,6 +46,21 @@ function hasSemanticDiffImage(item) {
 }
 
 /**
+ * @param {DriftSummary['changed']} changed
+ * @returns {string[]}
+ */
+function getAlignmentNotes(changed) {
+  const aligned = changed.filter((item) => item.comparison?.mode === 'vertical-aligned').map((item) => item.id);
+  const fallback = changed
+    .filter((item) => item.comparison?.mode === 'coordinate-fallback')
+    .map((item) => `${item.id} (${item.comparison?.fallbackReason || 'unspecified reason'})`);
+  const notes = [];
+  if (aligned.length > 0) notes.push(`vertical row alignment: ${aligned.join(', ')}`);
+  if (fallback.length > 0) notes.push(`coordinate fallback: ${fallback.join(', ')}`);
+  return notes;
+}
+
+/**
  * @param {string | undefined} diffImagePath
  * @returns {string}
  */
@@ -130,6 +145,11 @@ export function makeMarkdown(summaryData) {
       lines.push('');
       lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
     }
+    const alignmentNotes = getAlignmentNotes(summaryData.changed);
+    if (alignmentNotes.length > 0) {
+      lines.push('');
+      lines.push(`> Comparison alignment — ${alignmentNotes.join('; ')}.`);
+    }
   }
 
   lines.push('');
@@ -164,7 +184,12 @@ export function makeMarkdown(summaryData) {
     }
   } else {
     lines.push('');
-    lines.push('> Pixel comparison included for opted-in unequal dimensions on a top-left-aligned union canvas.');
+    const dimensionModes = new Set(comparisonDimensionChanges.map((item) => item.comparison?.mode).filter(Boolean));
+    if (dimensionModes.size === 0) {
+      lines.push('> Pixel comparison included for opted-in unequal dimensions on a top-left-aligned union canvas.');
+    } else {
+      lines.push('> Pixel comparison included for opted-in unequal dimensions. The report records whether vertical row alignment or coordinate fallback was used.');
+    }
     lines.push('>');
     lines.push('> One-sided pixels count as changes, while `diff.comparisonPolicy.threshold` remains the per-route aggregation threshold.');
     if (comparisonDimensionChanges.some(hasSemanticDiffImage)) {

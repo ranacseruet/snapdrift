@@ -1505,6 +1505,55 @@ describe('SnapProvider.diff() baseline mapping', () => {
     expect(summary.dimensionChanges).toHaveLength(0);
   });
 
+  it('maps v2 aligned metadata and preserves the aligned canvas geometry', async () => {
+    const metadata = diffRunMetadata({
+      runId: 'run_aligned',
+      comparisonPolicy: { version: 2, threshold: 0.01 }
+    });
+    const { summary } = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0.25,
+          diffPixels: 8,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison: {
+            baseline: { width: 4, height: 6 },
+            current: { width: 4, height: 8 },
+            canvas: { width: 4, height: 8 },
+            dimensionsChanged: true,
+            totalPixels: 32,
+            policyVersion: 2,
+            mode: 'vertical-aligned',
+            rowMapping: [
+              { outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 },
+              { outputStart: 3, length: 2, kind: 'inserted', currentStart: 3 },
+              { outputStart: 5, length: 3, kind: 'matched', baselineStart: 3, currentStart: 5 }
+            ]
+          },
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata,
+      { comparisonPolicy: { version: 2, threshold: 0.01 } }
+    );
+
+    expect(summary.status).toBe('changes-detected');
+    expect(summary.comparisonPolicy).toEqual({ version: 2, threshold: 0.01 });
+    expect(summary.changed[0]).toMatchObject({
+      width: 4,
+      height: 8,
+      differentPixels: 8,
+      totalPixels: 32,
+      comparison: { policyVersion: 2, mode: 'vertical-aligned' }
+    });
+  });
+
   it('fails closed when a v1 capture has no complete comparison metadata', async () => {
     const metadata = diffRunMetadata({
       runId: 'run_missing_comparison',

@@ -19,7 +19,7 @@ export interface DiffImageOptions {
   highlightColor?: [number, number, number, number];
   /**
    * RGBA color for pixels present only in the current image (added).
-   * Union-canvas comparisons only; strict same-dimension diffs cannot add pixels.
+   * Union-canvas and insertion-aware comparisons; strict same-dimension diffs cannot add pixels.
    * Default: [0, 170, 0, 255] (green).
    */
   addedColor?: [number, number, number, number];
@@ -38,12 +38,30 @@ export interface ComparisonDimensions {
   height: number;
 }
 
+export type ComparisonRowKind = 'matched' | 'changed' | 'inserted' | 'deleted';
+
+export interface ComparisonRowMapping {
+  outputStart: number;
+  length: number;
+  kind: ComparisonRowKind;
+  baselineStart?: number;
+  currentStart?: number;
+}
+
 export interface ComparisonMetadata {
   baseline: ComparisonDimensions;
   current: ComparisonDimensions;
   canvas: ComparisonDimensions;
   dimensionsChanged: boolean;
   totalPixels: number;
+  /** Present for the opt-in policy v2 result. */
+  policyVersion?: 2;
+  /** Whether v2 aligned rows or fell back to coordinate comparison. */
+  mode?: 'vertical-aligned' | 'coordinate-fallback';
+  /** Row mapping used to render and score an aligned result. */
+  rowMapping?: ComparisonRowMapping[];
+  /** Why v2 used coordinate fallback, when it did. */
+  fallbackReason?: 'width-mismatch' | 'alignment-limit' | 'ambiguous' | 'verification-failed' | 'ignore-regions' | 'alignment-unavailable';
 }
 
 export interface CompareResult {
@@ -64,6 +82,11 @@ export interface CompareResult {
 export type CompareBuffersResult = CompareResult;
 
 export interface CompareImagesOptions extends DiffImageOptions {
+  /**
+   * Row alignment strategy. Omit this for the v1 top-left union comparison;
+   * `vertical` selects insertion-aware comparison policy v2.
+   */
+  alignment?: 'vertical';
   /**
    * Whether to render and return `diffImageBuffer`. Default: `true`.
    * Set to `false` to skip the PNG encode for callers that only need metrics.

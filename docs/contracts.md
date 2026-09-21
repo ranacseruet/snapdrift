@@ -40,7 +40,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.apiKey` | `string` | Inline API key with `${VAR}` interpolation (mutually exclusive with `snap.apiKeyEnv`) |
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
-| `diff.comparisonPolicy` | `{ "version": 1, "threshold": number }` | Accepted for compatibility; comparison policy v1 is always applied when absent. `threshold` must match `diff.threshold` |
+| `diff.comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }` | Optional explicit comparison policy. v1 is the compatibility default; v2 enables bounded vertical row alignment. `threshold` must match `diff.threshold` |
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 
@@ -282,13 +282,21 @@ but still fails if other comparable routes changed.
 |:------|:-----|:------------|
 | `captureCompatibility` | `{ status, reason? }?` | Local profile-level compatibility: `verified`, `unverified`, or `incompatible`; route identity errors are separate |
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
-| `comparisonPolicy` | `{ "version": 1, "threshold": number }?` | Effective v1 comparison policy used by the local adapter (synthesized from `diff.threshold` when not configured) |
+| `comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }?` | Effective comparison policy used by the adapter (v1 is synthesized from `diff.threshold` when not configured) |
 
-When v1 comparison is applied, each affected `changed[]` item may also contain
+When a policy comparison is applied, each affected `changed[]` item may also contain
 `comparison` with `baseline`, `current`, and `canvas` `{ width, height }`
 objects, `dimensionsChanged`, and the effective `totalPixels` denominator. A
 local changed item with a generated image contains `diffImagePath`, relative to
 the diff output bundle (for example `diffs/home.png`).
+
+Policy v2 comparison metadata additionally includes `policyVersion: 2` and
+`mode`. An aligned result has `mode: "vertical-aligned"` and a compact
+`rowMapping` describing matched, changed, inserted, and deleted row runs. A
+`mode: "coordinate-fallback"` result includes `fallbackReason` when widths,
+ignore regions, ambiguity, or the alignment resource limit prevent safe row
+alignment. The aligned canvas may be taller than either source image because
+inserted and deleted rows each occupy an output row.
 
 When a changed item has a generated local `diffImagePath`, its PR comment cell
 links to the uploaded report artifact (or the workflow run when no artifact URL
@@ -323,8 +331,10 @@ Additional missing-baseline fields: `baselineAvailable`, `currentResultsPath`.
 - Mismatch ratio is `different_pixels / total_pixels`
 - `diff.threshold` applies per screenshot
 - Missing captures are counted separately from drift signals
-- Comparison policy v1 `{ "version": 1, "threshold": number }` is always applied. When `diff.comparisonPolicy` is absent, SnapDrift synthesizes it from `diff.threshold`. Images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator. Dimension changes land in `changed[]` with comparison metadata and a generated local diff image.
-- Local diff images are rendered with a semantic palette: orange = pixels that differ between baseline and current, green = pixels present only in the current capture (added), red = pixels present only in the baseline (removed). The palette is a rendering detail of `@snapdrift/compare-core` (`addedColor`/`removedColor`/`highlightColor` options); the frozen v1 comparison metrics are unaffected. Equal-dimension strict diffs (`generateDiffImage`) use orange for changed pixels and cannot contain added/removed pixels. Reports render a legend whenever a local diff image is embedded; summaries that carry only comparison metadata (Snap provider runs, which render diffs hosted-side) render no legend.
+- Comparison policy v1 `{ "version": 1, "threshold": number }` remains the default. Images are top-left aligned on a max-dimension union canvas with no scaling. Overlap pixels are compared, one-sided pixels count as changed (including transparent pixels), and empty union corners do not enter the denominator.
+- Comparison policy v2 `{ "version": 2, "threshold": number }` is opt-in. When source widths match and no ignore regions are requested, rows are fingerprinted and aligned with a bounded Myers sequence diff. Unchanged content that moves after an insertion/deletion remains matched; inserted current rows are green, deleted baseline rows are red, and actual pixel edits are orange. Width changes, ignore regions, ambiguous row matches, and resource limits fall back to v1 coordinate comparison and record the fallback reason. This is a raster row alignment aid, not DOM or arbitrary component matching.
+- Both policies preserve the explicit dimension-change signal: a source height/width change remains a changed route even when the aligned mismatch ratio is at or below the threshold. Empty output corners do not enter the denominator.
+- Local diff images are rendered with a semantic palette: orange = changed pixels, green = added or inserted pixels, red = removed or deleted pixels. Equal-dimension strict diffs (`generateDiffImage`) use orange for changed pixels and cannot contain added/removed pixels. Reports render a legend whenever a local diff image is embedded; summaries that carry only comparison metadata (Snap provider runs, which render diffs hosted-side) render no legend.
 - `dimensionChanges[]` remains part of the summary contract but is empty for local comparisons in v1. Strict same-dimension comparison (`compareBuffers`) remains available to direct `@snapdrift/compare-core`/`comparePngs` callers that pass no policy.
 - Threshold is applied after pixel aggregation. A mismatch exactly equal to the threshold is matched; a dimension change is still a changed signal independent of ratio.
 - `diff.mode` controls enforcement, not summary generation
@@ -372,6 +382,11 @@ The comparator reports this condition with the stable error code
 `comparison_too_large` and includes the baseline, current, and union-canvas
 dimensions in the error message. The ceiling that was exceeded is included too,
 since a caller may raise it per call.
+
+Policy v2 uses the aligned output height for this same budget. Because an
+inserted row and a deleted row each occupy an output row, that height can be up
+to the sum of the baseline and current heights. If the aligned canvas exceeds
+the budget, v2 returns `comparison_too_large` before allocating a diff image.
 
 `32 × 1024 × 1024` is the *default* ceiling, not an algorithm property. The cost
 is dominated by the decoded images: both RGBA inputs (4 bytes per pixel each) are

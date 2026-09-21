@@ -59,6 +59,21 @@ function hasSemanticDiffImage(item) {
 }
 
 /**
+ * @param {import('@snapdrift/manifest').VisualDiffChangedItem[]} changed
+ * @returns {string[]}
+ */
+function getAlignmentNotes(changed) {
+  const aligned = changed.filter((item) => item.comparison?.mode === 'vertical-aligned').map((item) => item.id);
+  const fallback = changed
+    .filter((item) => item.comparison?.mode === 'coordinate-fallback')
+    .map((item) => `${item.id} (${item.comparison?.fallbackReason || 'unspecified reason'})`);
+  const notes = [];
+  if (aligned.length > 0) notes.push(`vertical row alignment: ${aligned.join(', ')}`);
+  if (fallback.length > 0) notes.push(`coordinate fallback: ${fallback.join(', ')}`);
+  return notes;
+}
+
+/**
  * @param {string | undefined} diffImagePath
  * @param {string | undefined} artifactUrl
  * @param {string | undefined} runUrl
@@ -162,6 +177,11 @@ export function buildReportCommentBody(summary, meta = {}) {
       lines.push('');
       lines.push(`<sub>${DIFF_IMAGE_LEGEND}</sub>`);
     }
+    const alignmentNotes = getAlignmentNotes(changed);
+    if (alignmentNotes.length > 0) {
+      lines.push('');
+      lines.push(`> Comparison alignment — ${alignmentNotes.join('; ')}.`);
+    }
     lines.push('');
     lines.push('</details>');
   }
@@ -185,7 +205,12 @@ export function buildReportCommentBody(summary, meta = {}) {
     lines.push('');
     lines.push('<details open><summary>Dimension shifts — pixel comparison included</summary>');
     lines.push('');
-    lines.push('> SnapDrift compared opted-in unequal dimensions on a top-left-aligned union canvas. One-sided pixels count as changes.');
+    const dimensionModes = new Set(comparisonDimensionChanges.map((item) => item.comparison?.mode).filter(Boolean));
+    if (dimensionModes.size === 0) {
+      lines.push('> SnapDrift compared opted-in unequal dimensions on a top-left-aligned union canvas. One-sided pixels count as changes.');
+    } else {
+      lines.push('> SnapDrift compared opted-in unequal dimensions and records whether vertical row alignment or coordinate fallback was used. One-sided pixels count as changes.');
+    }
     if (comparisonDimensionChanges.some(hasSemanticDiffImage)) {
       lines.push(`> ${DIFF_IMAGE_LEGEND}`);
     }

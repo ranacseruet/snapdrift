@@ -7,6 +7,8 @@ import { VIEWPORT_PRESETS } from './viewport.mjs';
 
 /** @type {readonly ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict']} */
 export const VALID_DIFF_MODES = ['report-only', 'fail-on-changes', 'fail-on-incomplete', 'strict'];
+/** Supported explicit comparison policies. v1 remains the default for compatibility. */
+export const SUPPORTED_COMPARISON_POLICY_VERSIONS = [1, 2];
 export const COMPARISON_POLICY_VERSION = 1;
 export const VALID_PROVIDER_VALUES = ['local', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];
@@ -166,8 +168,8 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
         errors.push('diff.comparisonPolicy must be an object when provided.');
       } else {
         const comparisonPolicy = candidate.diff.comparisonPolicy;
-        if (comparisonPolicy.version !== COMPARISON_POLICY_VERSION) {
-          errors.push(`diff.comparisonPolicy.version must be ${COMPARISON_POLICY_VERSION}.`);
+        if (!SUPPORTED_COMPARISON_POLICY_VERSIONS.includes(/** @type {number} */ (comparisonPolicy.version))) {
+          errors.push(`diff.comparisonPolicy.version must be one of: ${SUPPORTED_COMPARISON_POLICY_VERSIONS.join(', ')}.`);
         }
         if (
           typeof comparisonPolicy.threshold !== 'number' ||
