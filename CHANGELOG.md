@@ -2,11 +2,32 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-09-21
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.5.0 — bounded vertical row alignment and comparison
+  policy v2, with conservative coordinate fallbacks and resource limits.
+- `@snapdrift/manifest` 1.6.0 — policy v2 validation, constants, and comparison types.
+- `@snapdrift/adapter-fs` 1.5.0 — local policy v2 comparison and summary types.
+- `@snapdrift/adapter-report-md` 1.4.0 — alignment and fallback details in Markdown,
+  HTML, and bounded PR comments.
+
+Root and workspace dependency floors require these versions so upgrades receive
+all parts of the policy v2 implementation. The dispatcher pins `576e774`, the
+#176 merge commit on `main`, including the runtime loaded by both wrapper actions.
+
+### Features
+
 - Added opt-in comparison policy v2 with bounded vertical row alignment for
   inserted and deleted page rows. Unchanged content that shifts after an
   insertion remains matched; reports record aligned results and conservative
   coordinate fallbacks. Deprecated policy v1 remains the compatibility default
   so existing configurations are unchanged; new configurations should use v2.
+
+- Snap-provider requests forward policy v2 and validate hosted acknowledgements
+  and alignment metadata. Hosted use requires matching Snap service support;
+  publishing this library does not deploy the hosted service.
 
 ## 0.13.0 - 2026-09-19
 
