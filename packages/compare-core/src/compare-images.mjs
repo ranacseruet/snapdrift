@@ -133,17 +133,22 @@ function appendAlignmentSegment(segments, segment) {
 }
 
 /**
+ * Max absolute difference across RGBA. Offset scoring still uses RGB ink.
+ * Highlighting includes alpha so a mapped row whose opacity changed is not
+ * reported as matched.
+ *
  * @param {Uint8Array} baseline
  * @param {Uint8Array} current
  * @param {number} baselineIndex
  * @param {number} currentIndex
  * @returns {number}
  */
-function rgbDelta(baseline, current, baselineIndex, currentIndex) {
+function channelDelta(baseline, current, baselineIndex, currentIndex) {
   return Math.max(
     Math.abs(baseline[baselineIndex] - current[currentIndex]),
     Math.abs(baseline[baselineIndex + 1] - current[currentIndex + 1]),
-    Math.abs(baseline[baselineIndex + 2] - current[currentIndex + 2])
+    Math.abs(baseline[baselineIndex + 2] - current[currentIndex + 2]),
+    Math.abs(baseline[baselineIndex + 3] - current[currentIndex + 3])
   );
 }
 
@@ -199,7 +204,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
         const baselineIndex = baselineRow + x * 4;
         const currentIndex = pixelRow + x * 4;
         const outputIndex = (outputY * canvasWidth + x) * 4;
-        const delta = rgbDelta(baselinePng.data, currentPng.data, baselineIndex, currentIndex);
+        const delta = channelDelta(baselinePng.data, currentPng.data, baselineIndex, currentIndex);
         if (pixelIsHighlighted(delta, step.paint)) {
           highlighted += 1;
           if (diffPng) {

@@ -51,6 +51,13 @@ export const UNMATCHED_COST = 0.45;
  * 1.2s. Past this budget the page keeps the coordinate fallback.
  */
 export const MAX_OFFSET_SCORE_VISITS = 1_500_000_000;
+/**
+ * Bytes for the per-row cost table (Float64) plus the Viterbi backpointers
+ * (Int16). The acceptance pair is about 11 MB. A narrow million-row image
+ * can pass the visit cap and still need about 2 GB for these matrices, so
+ * the search stops before allocating them.
+ */
+export const MAX_OFFSET_MATRIX_BYTES = 64 * 1024 * 1024;
 /** More content intervals than this is a fragmented mapping, not a page of edits. */
 export const MAX_OFFSET_CONTENT_INTERVALS = 64;
 
@@ -507,7 +514,8 @@ export function analyzeOffsetRuns(baseline, current) {
 
   const offsetCount = OFFSET_MAX - OFFSET_MIN + 1;
   const visits = baseline.height * offsetCount * Math.ceil(baseline.width / SEARCH_STRIDE);
-  if (visits > MAX_OFFSET_SCORE_VISITS) {
+  const matrixBytes = baseline.height * offsetCount * 8 + baseline.height * (offsetCount + 1) * 2;
+  if (visits > MAX_OFFSET_SCORE_VISITS || matrixBytes > MAX_OFFSET_MATRIX_BYTES) {
     return { kind: 'fallback', reason: 'alignment-limit' };
   }
 

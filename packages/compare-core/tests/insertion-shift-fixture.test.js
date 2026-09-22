@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import pngjs from 'pngjs';
 import { compareOffsetAligned } from '../src/compare-images.mjs';
 import { compareImages } from '../src/index.mjs';
+import { analyzeOffsetRuns, MAX_OFFSET_MATRIX_BYTES, OFFSET_MAX, OFFSET_MIN } from '../src/offset-align.mjs';
 import { syntheticAlignmentCases } from './synthetic-alignment-cases.mjs';
 
 const { PNG } = pngjs;
@@ -147,5 +148,49 @@ describe('synthetic alignment cases', () => {
       ]
     });
     expect(insertion.differentPixels).toBe(32);
+  });
+
+  test('offset highlighting counts an opacity change and keeps a small alpha delta matched', () => {
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 32 * 1024 * 1024
+    };
+    const width = 32;
+    const height = 4;
+    const baseline = new PNG({ width, height });
+    const faded = new PNG({ width, height });
+    const slight = new PNG({ width, height });
+    for (let index = 0; index < baseline.data.length; index += 4) {
+      baseline.data[index] = 80;
+      baseline.data[index + 1] = 80;
+      baseline.data[index + 2] = 80;
+      baseline.data[index + 3] = 255;
+      faded.data.set(baseline.data.subarray(index, index + 3), index);
+      faded.data[index + 3] = 0;
+      slight.data.set(baseline.data.subarray(index, index + 3), index);
+      slight.data[index + 3] = 240;
+    }
+
+    const opaque = compareOffsetAligned(baseline, faded, options);
+    const quiet = compareOffsetAligned(baseline, slight, options);
+    expect(opaque.kind).toBe('aligned');
+    expect(quiet.kind).toBe('aligned');
+    if (opaque.kind === 'aligned') expect(opaque.result.differentPixels).toBe(width * height);
+    if (quiet.kind === 'aligned') expect(quiet.result.differentPixels).toBe(0);
+  });
+
+  test('refuses the offset search when the score matrices would exceed their byte budget', () => {
+    const offsetCount = OFFSET_MAX - OFFSET_MIN + 1;
+    const millionRowBytes = 1_000_000 * offsetCount * 8 + 1_000_000 * (offsetCount + 1) * 2;
+    expect(millionRowBytes).toBeGreaterThan(MAX_OFFSET_MATRIX_BYTES);
+
+    const mapped = analyzeOffsetRuns(
+      { data: new Uint8Array(0), width: 10, height: 40_000 },
+      { data: new Uint8Array(0), width: 10, height: 40_000 }
+    );
+    expect(mapped).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
   });
 });
