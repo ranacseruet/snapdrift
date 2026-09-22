@@ -1,6 +1,6 @@
 {
   "name": "snapdrift",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "private": false,
   "type": "module",
   "description": "SnapDrift captures, compares, and reports UI drift for Playwright-based app checks.",
@@ -103,10 +103,10 @@
     "registry": "https://registry.npmjs.org"
   },
   "dependencies": {
-    "@snapdrift/adapter-fs": "^1.5.0",
+    "@snapdrift/adapter-fs": "^1.6.0",
     "@snapdrift/adapter-report-md": "^1.4.0",
-    "@snapdrift/compare-core": "^1.5.0",
-    "@snapdrift/manifest": "^1.6.0",
+    "@snapdrift/compare-core": "^1.6.0",
+    "@snapdrift/manifest": "^1.7.0",
     "js-yaml": "^5.4.0",
     "playwright": "^1.59.1",
     "pngjs": "^7.0.0"

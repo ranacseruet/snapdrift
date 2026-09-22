@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-09-22
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.6.0 — vertical-offset alignment when exact row
+  matching hits its edit cap, including alpha-aware highlighting and the
+  search memory caps.
+- `@snapdrift/manifest` 1.7.0 — `comparedOffset` on comparison row mappings.
+- `@snapdrift/adapter-fs` 1.6.0 — depends on that compare-core so local policy
+  v2 comparisons use the offset-run engine.
+
+`@snapdrift/adapter-report-md` stays 1.4.0. Root floors move to
+`@snapdrift/compare-core ^1.6.0`, `@snapdrift/manifest ^1.7.0`, and
+`@snapdrift/adapter-fs ^1.6.0`. The dispatcher pins `7b7b913`, the #179 merge
+commit on `main`, which contains the offset-run runtime loaded by both wrapper
+actions.
+
+### Features
+
 - Comparison policy v2, after exact row alignment hits its edit cap, maps long
   vertical-offset runs so an insertion does not highlight the rest of a shifted
   page. A matched row on that path was mapped and fell below the highlight
