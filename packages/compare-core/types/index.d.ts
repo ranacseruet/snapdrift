@@ -51,6 +51,13 @@ export interface ComparisonRowMapping {
   kind: ComparisonRowKind;
   baselineStart?: number;
   currentStart?: number;
+  /**
+   * Present when an offset-run row was compared one pixel above or below the
+   * recorded current row. Output row i was compared to current row
+   * `currentStart + i + comparedOffset`. `currentStart` still consumes each
+   * current row once.
+   */
+  comparedOffset?: -1 | 0 | 1;
 }
 
 export interface ComparisonMetadata {
@@ -66,6 +73,7 @@ export interface ComparisonMetadata {
   /**
    * Row mapping used to render and score an aligned result.
    * On an offset-run match, `matched` means mapped and below the highlight rule.
+   * `comparedOffset` names a one-pixel neighbor when that row was the one compared.
    */
   rowMapping?: ComparisonRowMapping[];
   /** Why v2 used coordinate fallback, when it did. */

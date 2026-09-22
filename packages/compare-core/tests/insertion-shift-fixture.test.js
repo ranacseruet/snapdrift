@@ -71,8 +71,14 @@ describe('insertion-shift fixture', () => {
     expect(report.outputCursor).toBe(report.canvas.height);
     expect(report.orangeGlyph).toBeGreaterThanOrEqual(6);
     expect(report.deletion.kind).toBe('deleted');
-    expect(report.deletion.baselineStart).toBeLessThanOrEqual(1420);
+    // The annotated ink starts at y=1420. The rendered deletion starts at 1406:
+    // three card-tail rows are trimmed so they do not overlap the lower run,
+    // and the blank rows before the ink have no free current partner. Pin both
+    // edges so a mapping that deletes the page still fails.
+    expect(report.deletion).toMatchObject({ baselineStart: 1406, length: 90 });
     expect(report.deletion.baselineStart + report.deletion.length).toBe(1496);
+    expect(report.comparedOffsetsValid).toBe(true);
+    expect(report.neighborCompares).toBeGreaterThan(0);
     expect(report.localHighlights).toBeGreaterThan(0);
     expect(report.localGapKind).not.toBe('deleted');
   }, 30_000);
@@ -176,9 +182,13 @@ describe('synthetic alignment cases', () => {
 
     const opaque = compareOffsetAligned(baseline, faded, options);
     const quiet = compareOffsetAligned(baseline, slight, options);
-    expect(opaque.kind).toBe('aligned');
+    expect(opaque).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+    const counted = compareImages(PNG.sync.write(baseline), PNG.sync.write(faded), {
+      alignment: 'vertical',
+      renderDiffImage: false
+    });
+    expect(counted.differentPixels).toBe(width * height);
     expect(quiet.kind).toBe('aligned');
-    if (opaque.kind === 'aligned') expect(opaque.result.differentPixels).toBe(width * height);
     if (quiet.kind === 'aligned') expect(quiet.result.differentPixels).toBe(0);
   });
 
@@ -187,10 +197,219 @@ describe('synthetic alignment cases', () => {
     const millionRowBytes = 1_000_000 * offsetCount * 8 + 1_000_000 * (offsetCount + 1) * 2;
     expect(millionRowBytes).toBeGreaterThan(MAX_OFFSET_MATRIX_BYTES);
 
-    const mapped = analyzeOffsetRuns(
-      { data: new Uint8Array(0), width: 10, height: 40_000 },
-      { data: new Uint8Array(0), width: 10, height: 40_000 }
+    const bytesPerRow = offsetCount * 8 + (offsetCount + 1) * 2;
+    const height = Math.floor(MAX_OFFSET_MATRIX_BYTES / bytesPerRow) + 1;
+    const width = 32;
+    const data = new Uint8Array(height * width * 4);
+    for (let index = 0; index < data.length; index += 4) {
+      data[index] = 80;
+      data[index + 1] = 80;
+      data[index + 2] = 80;
+      data[index + 3] = 255;
+    }
+    const image = { data, width, height };
+    expect(analyzeOffsetRuns(image, image)).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+  });
+
+  test('fully transparent pixels do not fund an offset match', () => {
+    const width = 32;
+    const height = 8;
+    const baseline = new PNG({ width, height });
+    const current = new PNG({ width, height });
+    for (let index = 0; index < baseline.data.length; index += 4) {
+      baseline.data[index] = 220;
+      baseline.data[index + 1] = 220;
+      baseline.data[index + 2] = 220;
+      baseline.data[index + 3] = 0;
+      current.data.set(baseline.data.subarray(index, index + 4), index);
+    }
+    expect(analyzeOffsetRuns(baseline, current).kind === 'mapped' && analyzeOffsetRuns(baseline, current).rows?.some((row) => row.kind === 'stable' && !row.abstain)).toBe(false);
+  });
+
+  test('rejects a dissimilar page from the sampled offset search', () => {
+    const width = 32;
+    const height = 64;
+    const baseline = new PNG({ width, height });
+    const current = new PNG({ width, height });
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+        baseline.data[index] = 80;
+        baseline.data[index + 1] = 80;
+        baseline.data[index + 2] = 90;
+        baseline.data[index + 3] = 255;
+        current.data[index] = 200;
+        current.data[index + 1] = 40;
+        current.data[index + 2] = 40;
+        current.data[index + 3] = 255;
+      }
+    }
+    expect(analyzeOffsetRuns(baseline, current)).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+  });
+
+  test('an offset canvas past maxPixels falls back instead of throwing', () => {
+    const width = 32;
+    const height = 40;
+    const baseline = new PNG({ width, height });
+    const current = new PNG({ width, height });
+    for (let index = 0; index < baseline.data.length; index += 4) {
+      baseline.data[index] = 80;
+      baseline.data[index + 1] = 80;
+      baseline.data[index + 2] = 80;
+      baseline.data[index + 3] = 255;
+      current.data.set(baseline.data.subarray(index, index + 4), index);
+    }
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 10
+    };
+    expect(compareOffsetAligned(baseline, current, options)).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+  });
+
+  test('compareImages keeps a coordinate result when the offset canvas exceeds maxPixels', () => {
+    const width = 32;
+    const content = 1000;
+    const deleted = 200;
+    const inserted = 80;
+    const baselineHeight = content + deleted;
+    const currentHeight = inserted + content;
+    const baseline = new PNG({ width, height: baselineHeight });
+    const current = new PNG({ width, height: currentHeight });
+    const paint = (png, y, value, alpha = 255) => {
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+        png.data[index] = value;
+        png.data[index + 1] = value;
+        png.data[index + 2] = value;
+        png.data[index + 3] = alpha;
+      }
+    };
+    for (let y = 0; y < content; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const value = (y & (1 << (x % 16))) !== 0 ? 180 : 60;
+        const baselineIndex = (y * width + x) * 4;
+        baseline.data[baselineIndex] = value;
+        baseline.data[baselineIndex + 1] = value;
+        baseline.data[baselineIndex + 2] = value;
+        baseline.data[baselineIndex + 3] = 255;
+        const currentIndex = ((y + inserted) * width + x) * 4;
+        current.data[currentIndex] = value;
+        current.data[currentIndex + 1] = value;
+        current.data[currentIndex + 2] = value;
+        current.data[currentIndex + 3] = x === 0 ? 254 : 255;
+      }
+    }
+    for (let y = content; y < baselineHeight; y += 1) paint(baseline, y, 255);
+    for (let y = 0; y < inserted; y += 1) paint(current, y, 30);
+
+    const unionPixels = width * baselineHeight;
+    const offsetPixels = width * (inserted + content + deleted);
+    expect(offsetPixels).toBeGreaterThan(unionPixels);
+    const shared = { alignment: /** @type {const} */ ('vertical'), renderDiffImage: false };
+    const fallenBack = compareImages(PNG.sync.write(baseline), PNG.sync.write(current), {
+      ...shared,
+      maxPixels: unionPixels + width
+    });
+    expect(fallenBack.comparison).toMatchObject({
+      mode: 'coordinate-fallback',
+      fallbackReason: 'alignment-limit'
+    });
+    const aligned = compareImages(PNG.sync.write(baseline), PNG.sync.write(current), {
+      ...shared,
+      maxPixels: offsetPixels
+    });
+    expect(aligned.comparison.mode).toBe('vertical-aligned');
+  }, 60_000);
+
+  test('leaves an equal-height row replacement on the exact alignment path', () => {
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 32 * 1024 * 1024
+    };
+    const offset = compareOffsetAligned(
+      PNG.sync.read(cases.equalHeightInsertDelete.baseline),
+      PNG.sync.read(cases.equalHeightInsertDelete.current),
+      options
     );
-    expect(mapped).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+    expect(offset).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+    const exact = compareImages(cases.equalHeightInsertDelete.baseline, cases.equalHeightInsertDelete.current, {
+      alignment: 'vertical',
+      renderDiffImage: false
+    });
+    expect(exact.comparison.mode).toBe('vertical-aligned');
+    expect(exact.comparison.fallbackReason).toBeUndefined();
+  });
+
+  test('does not invent an offset for repeated text, gradients, whitespace, or several insertions', () => {
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 32 * 1024 * 1024
+    };
+    /**
+     * @param {{ kind: string, result?: { comparison: { rowMapping?: Array<{ kind: string, baselineStart?: number, currentStart?: number }> } } }} result
+     * @returns {number[]}
+     */
+    function pairedOffsets(result) {
+      if (result.kind !== 'aligned' || !result.result) return [];
+      return (result.result.comparison.rowMapping ?? [])
+        .filter((segment) => segment.baselineStart !== undefined && segment.currentStart !== undefined)
+        .map((segment) => /** @type {number} */ (segment.currentStart) - /** @type {number} */ (segment.baselineStart));
+    }
+
+    const repeated = compareOffsetAligned(
+      PNG.sync.read(cases.repeatedText.baseline),
+      PNG.sync.read(cases.repeatedText.current),
+      options
+    );
+    expect(pairedOffsets(repeated).every((offset) => offset === 0 || offset === 1)).toBe(true);
+
+    const gradient = compareOffsetAligned(
+      PNG.sync.read(cases.gradient.baseline),
+      PNG.sync.read(cases.gradient.current),
+      options
+    );
+    expect(gradient.kind).toBe('aligned');
+    const gradientOffsets = pairedOffsets(gradient);
+    expect(gradientOffsets.every((offset) => offset === 0 || offset === 1)).toBe(true);
+    expect(gradientOffsets.at(-1)).toBe(1);
+    expect(compareImages(cases.gradient.baseline, cases.gradient.current, {
+      alignment: 'vertical',
+      renderDiffImage: false
+    }).comparison.rowMapping?.filter((segment) => segment.kind === 'inserted')).toHaveLength(1);
+
+    expect(compareOffsetAligned(
+      PNG.sync.read(cases.whitespace.baseline),
+      PNG.sync.read(cases.whitespace.current),
+      options
+    )).toEqual({ kind: 'fallback', reason: 'alignment-limit' });
+    expect(compareImages(cases.whitespace.baseline, cases.whitespace.current, {
+      alignment: 'vertical',
+      renderDiffImage: false
+    }).differentPixels).toBe(0);
+    expect(compareImages(cases.whitespaceBand.baseline, cases.whitespaceBand.current, {
+      alignment: 'vertical',
+      renderDiffImage: false
+    }).differentPixels).toBe(0);
+
+    const several = compareImages(cases.multipleInsertions.baseline, cases.multipleInsertions.current, {
+      alignment: 'vertical',
+      renderDiffImage: false
+    });
+    expect(several.comparison.rowMapping?.filter((segment) => segment.kind === 'inserted')).toHaveLength(2);
+    const shifted = compareOffsetAligned(
+      PNG.sync.read(cases.multipleInsertions.baseline),
+      PNG.sync.read(cases.multipleInsertions.current),
+      options
+    );
+    expect(pairedOffsets(shifted).every((offset) => offset >= 0 && offset <= 2)).toBe(true);
   });
 });

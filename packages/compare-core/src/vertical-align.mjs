@@ -23,7 +23,8 @@ export const COMPARISON_FALLBACK_REASONS = /** @type {const} */ (['width-mismatc
  *   length: number,
  *   kind: AlignmentRowKind,
  *   baselineStart?: number,
- *   currentStart?: number
+ *   currentStart?: number,
+ *   comparedOffset?: -1 | 0 | 1
  * }} AlignmentSegment
  */
 

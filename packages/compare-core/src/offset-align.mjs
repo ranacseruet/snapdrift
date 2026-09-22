@@ -8,11 +8,24 @@
  * vertical offset even when antialiasing keeps rows from being byte-identical.
  * The offset window is searched. Nothing here is seeded with a known shift.
  *
- * Scoring uses baseline ink only (luminance at or above {@link INK_LUMA}).
- * A channel delta at or below {@link NOISE_DELTA} is the measured rendering
- * floor. A delta above {@link STRUCTURED_DELTA} is a structured residual.
- * More than {@link STRUCTURED_HOT_LIMIT} of those pixels pulls the row out of
- * the stable run so a wide mismatch is not painted as a small glyph edit.
+ * Scoring uses baseline ink only: luminance at or above {@link INK_LUMA} and
+ * alpha at or above that same floor. Fully transparent pixels do not vote,
+ * even when their RGB is bright. A channel delta at or below {@link NOISE_DELTA}
+ * is the measured rendering floor. A delta above {@link STRUCTURED_DELTA} is a
+ * structured residual, including an opacity change of that size. A smaller
+ * opacity change stays in the mapping and the highlight rule decides whether
+ * to paint it. More than {@link STRUCTURED_HOT_LIMIT} structured pixels pulls
+ * the row out of the stable run so a wide mismatch is not painted as a small
+ * glyph edit.
+ *
+ * An equal-height replacement stays on the exact Myers path. This search
+ * returns alignment-limit for that pair: the switch cost keeps a shifted page
+ * on one offset, and it is not spent on a one-row swap.
+ *
+ * Before the full table is allocated, every {@link PREFLIGHT_ROW_STRIDE}th
+ * ink row is scored. The sample stops early once even perfect remaining rows
+ * could not pull the mean under the evidence limit, so a dissimilar page
+ * falls back without the full search.
  */
 
 /** Inclusive offset window, in current-row minus baseline-row. */
@@ -58,6 +71,16 @@ export const MAX_OFFSET_SCORE_VISITS = 1_500_000_000;
  * the search stops before allocating them.
  */
 export const MAX_OFFSET_MATRIX_BYTES = 64 * 1024 * 1024;
+/**
+ * Rows between preflight samples. A dissimilar page's best in-window cost
+ * stays high, so this rejects it before the full height × window table.
+ * The acceptance pair's sampled mean stays near zero and the full search runs.
+ * A dissimilar 1440×5622 pair fell back in about 0.9s; scoring every offset
+ * on that pair took about 3.5s.
+ */
+const PREFLIGHT_ROW_STRIDE = 32;
+/** A mapping whose ink rows are this hot is not a usable correspondence. */
+const EVIDENCE_MEAN_COST_LIMIT = 0.25;
 /** More content intervals than this is a fragmented mapping, not a page of edits. */
 export const MAX_OFFSET_CONTENT_INTERVALS = 64;
 
@@ -90,17 +113,28 @@ export const MAX_OFFSET_CONTENT_INTERVALS = 64;
  * @param {number} baselineY
  * @returns {boolean}
  */
+/**
+ * @param {Uint8Array} data
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isBaselineInk(data, index) {
+  if (data[index + 3] < INK_LUMA) {
+    return false;
+  }
+  const luma =
+    data[index] * 0.299 +
+    data[index + 1] * 0.587 +
+    data[index + 2] * 0.114;
+  return luma >= INK_LUMA;
+}
+
 function rowAbstains(baseline, baselineY) {
   const width = baseline.width;
   const baselineRow = baselineY * width * 4;
   let ink = 0;
   for (let x = 0; x < width; x += SEARCH_STRIDE) {
-    const baselineIndex = baselineRow + x * 4;
-    const baselineLuma =
-      baseline.data[baselineIndex] * 0.299 +
-      baseline.data[baselineIndex + 1] * 0.587 +
-      baseline.data[baselineIndex + 2] * 0.114;
-    if (baselineLuma >= INK_LUMA) {
+    if (isBaselineInk(baseline.data, baselineRow + x * 4)) {
       ink += 1;
       if (ink >= MIN_INK_SAMPLES) {
         return false;
@@ -130,18 +164,17 @@ function rowInkCost(baseline, current, baselineY, offset) {
   for (let x = 0; x < width; x += SEARCH_STRIDE) {
     const baselineIndex = baselineRow + x * 4;
     const currentIndex = currentRow + x * 4;
-    const baselineLuma =
-      baseline.data[baselineIndex] * 0.299 +
-      baseline.data[baselineIndex + 1] * 0.587 +
-      baseline.data[baselineIndex + 2] * 0.114;
-    if (baselineLuma < INK_LUMA) {
+    if (!isBaselineInk(baseline.data, baselineIndex)) {
       continue;
     }
     ink += 1;
+    // Alpha uses the structured bar. A few levels of opacity are rendering
+    // noise and must not eject the row; a real fade is not a correspondence.
     const above =
       Math.abs(baseline.data[baselineIndex] - current.data[currentIndex]) > NOISE_DELTA ||
       Math.abs(baseline.data[baselineIndex + 1] - current.data[currentIndex + 1]) > NOISE_DELTA ||
-      Math.abs(baseline.data[baselineIndex + 2] - current.data[currentIndex + 2]) > NOISE_DELTA;
+      Math.abs(baseline.data[baselineIndex + 2] - current.data[currentIndex + 2]) > NOISE_DELTA ||
+      Math.abs(baseline.data[baselineIndex + 3] - current.data[currentIndex + 3]) > STRUCTURED_DELTA;
     if (above) {
       hot += 1;
     }
@@ -178,7 +211,8 @@ export function hotRuns(baseline, current, baselineY, offset) {
     const delta = Math.max(
       Math.abs(baseline.data[baselineIndex] - current.data[currentIndex]),
       Math.abs(baseline.data[baselineIndex + 1] - current.data[currentIndex + 1]),
-      Math.abs(baseline.data[baselineIndex + 2] - current.data[currentIndex + 2])
+      Math.abs(baseline.data[baselineIndex + 2] - current.data[currentIndex + 2]),
+      Math.abs(baseline.data[baselineIndex + 3] - current.data[currentIndex + 3])
     );
     if (delta > NOISE_DELTA) {
       noiseRun += 1;
@@ -497,8 +531,44 @@ function summarizeIntervals(baseline, current, rows) {
 }
 
 /**
+ * Best in-window ink cost of every sampled row. Above the evidence limit,
+ * the full search cannot produce a usable correspondence.
+ *
+ * @param {DecodedPng} baseline
+ * @param {DecodedPng} current
+ * @returns {boolean}
+ */
+function offsetPreflightRejects(baseline, current) {
+  const planned = Math.ceil(baseline.height / PREFLIGHT_ROW_STRIDE);
+  let sum = 0;
+  let samples = 0;
+  for (let y = 0; y < baseline.height; y += PREFLIGHT_ROW_STRIDE) {
+    if (rowAbstains(baseline, y)) {
+      continue;
+    }
+    let best = 1;
+    for (let offset = OFFSET_MIN; offset <= OFFSET_MAX; offset += 1) {
+      const cost = rowInkCost(baseline, current, y, offset);
+      if (cost < best) {
+        best = cost;
+      }
+      if (best === 0) {
+        break;
+      }
+    }
+    sum += best;
+    samples += 1;
+    if (sum / planned > EVIDENCE_MEAN_COST_LIMIT) {
+      return true;
+    }
+  }
+  return samples > 0 && sum / samples > EVIDENCE_MEAN_COST_LIMIT;
+}
+
+/**
  * Score the offset window and collapse it into the Phase 0 row path.
- * Returns a fallback when the search would exceed its visit budget.
+ * Returns a fallback when the search would exceed its visit budget, its
+ * matrix budget, or the sampled preflight.
  *
  * @param {DecodedPng} baseline
  * @param {DecodedPng} current
@@ -516,6 +586,9 @@ export function analyzeOffsetRuns(baseline, current) {
   const visits = baseline.height * offsetCount * Math.ceil(baseline.width / SEARCH_STRIDE);
   const matrixBytes = baseline.height * offsetCount * 8 + baseline.height * (offsetCount + 1) * 2;
   if (visits > MAX_OFFSET_SCORE_VISITS || matrixBytes > MAX_OFFSET_MATRIX_BYTES) {
+    return { kind: 'fallback', reason: 'alignment-limit' };
+  }
+  if (offsetPreflightRejects(baseline, current)) {
     return { kind: 'fallback', reason: 'alignment-limit' };
   }
 
@@ -566,8 +639,6 @@ export function pixelIsHighlighted(delta, paint) {
   return paint === 'residual' ? delta > NOISE_DELTA : delta > STRUCTURED_DELTA;
 }
 
-/** A mapping whose ink rows are this hot is not a usable correspondence. */
-const EVIDENCE_MEAN_COST_LIMIT = 0.25;
 /**
  * Current-row overlap between two stable runs that can be trimmed off the
  * earlier run. Larger crossings are not a safe vertical mapping.

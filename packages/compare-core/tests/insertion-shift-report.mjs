@@ -71,7 +71,22 @@ let baselineCursor = 0;
 let currentCursor = 0;
 let outputCursor = 0;
 let contiguous = true;
+let neighborCompares = 0;
+let comparedOffsetsValid = true;
 for (const segment of mapping) {
+  if (segment.comparedOffset !== undefined) {
+    neighborCompares += segment.length;
+    const comparedStart = (segment.currentStart ?? 0) + segment.comparedOffset;
+    if (
+      (segment.comparedOffset !== -1 && segment.comparedOffset !== 1) ||
+      (segment.kind !== 'matched' && segment.kind !== 'changed') ||
+      segment.currentStart === undefined ||
+      comparedStart < 0 ||
+      comparedStart + segment.length > rendered.comparison.current.height
+    ) {
+      comparedOffsetsValid = false;
+    }
+  }
   if (segment.outputStart !== outputCursor) contiguous = false;
   if (segment.baselineStart !== undefined) {
     if (segment.baselineStart !== baselineCursor) contiguous = false;
@@ -163,5 +178,7 @@ console.log(JSON.stringify({
   card: card ? { kind: card.segment.kind, offset: (card.segment.currentStart ?? 0) - (card.segment.baselineStart ?? 0) } : null,
   lowerHighlights,
   localGapKind: outputY('baseline', 5316)?.segment.kind ?? null,
-  localHighlights
+  localHighlights,
+  comparedOffsetsValid,
+  neighborCompares
 }));

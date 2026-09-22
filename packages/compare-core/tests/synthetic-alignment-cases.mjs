@@ -85,6 +85,31 @@ export function syntheticAlignmentCases() {
       baseline: pngFromRows(WIDTH, [rowA, rowB, rowC]),
       current: pngFromRows(WIDTH, [rowA, glyph, rowC]),
       note: 'Six contiguous pixels in the middle row jump by 140, a stand-in for a changed glyph.'
+    },
+    repeatedText: {
+      baseline: pngFromRows(WIDTH, [rowB, rowB, rowB, rowB, rowC]),
+      current: pngFromRows(WIDTH, [rowB, rowB, rowB, rowB, rowB, rowC]),
+      note: 'Identical ink rows with one extra copy. A confident offset outside 0 or 1 is the wrong copy.'
+    },
+    gradient: {
+      baseline: pngFromRows(WIDTH, [40, 55, 70, 85, 100, 115].map((value) => fill(WIDTH, value))),
+      current: pngFromRows(WIDTH, [40, 200, 55, 70, 85, 100, 115].map((value) => fill(WIDTH, value))),
+      note: 'Each row is a distinct gray. One inserted row shifts the rest by exactly one.'
+    },
+    whitespace: {
+      baseline: pngFromRows(WIDTH, [0, 0, 0, 0].map((value) => fill(WIDTH, value))),
+      current: pngFromRows(WIDTH, [0, 0, 0, 0].map((value) => fill(WIDTH, value))),
+      note: 'A blank band has no ink, so it cannot fund an offset.'
+    },
+    whitespaceBand: {
+      baseline: pngFromRows(WIDTH, [rowB, rowA, rowA, rowA, rowC]),
+      current: pngFromRows(WIDTH, [rowB, rowA, rowA, rowA, rowC]),
+      note: 'Blank rows between two ink rows. The band must not move the neighbors.'
+    },
+    multipleInsertions: {
+      baseline: pngFromRows(WIDTH, [40, 70, 100, 130, 160].map((value) => fill(WIDTH, value))),
+      current: pngFromRows(WIDTH, [40, 200, 70, 100, 220, 130, 160].map((value) => fill(WIDTH, value))),
+      note: 'Two inserted rows between distinct neighbors.'
     }
   };
 }

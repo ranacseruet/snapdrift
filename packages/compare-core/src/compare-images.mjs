@@ -125,7 +125,15 @@ function appendAlignmentSegment(segments, segment) {
     segment.currentStart === undefined ||
     previous.currentStart + previous.length === segment.currentStart;
 
-  if (previous && previous.kind === segment.kind && baselineContiguous && currentContiguous && previous.outputStart + previous.length === segment.outputStart) {
+  const sameComparedRow = (previous?.comparedOffset ?? 0) === (segment.comparedOffset ?? 0);
+  if (
+    previous &&
+    previous.kind === segment.kind &&
+    baselineContiguous &&
+    currentContiguous &&
+    sameComparedRow &&
+    previous.outputStart + previous.length === segment.outputStart
+  ) {
     previous.length += segment.length;
     return;
   }
@@ -133,9 +141,9 @@ function appendAlignmentSegment(segments, segment) {
 }
 
 /**
- * Max absolute difference across RGBA. Offset scoring still uses RGB ink.
- * Highlighting includes alpha so a mapped row whose opacity changed is not
- * reported as matched.
+ * Max absolute difference across RGBA. Highlighting includes alpha so a mapped
+ * row whose opacity changed is not reported as matched. Scoring ignores fully
+ * transparent pixels and treats only a large opacity change as a mismatch.
  *
  * @param {Uint8Array} baseline
  * @param {Uint8Array} current
@@ -156,7 +164,9 @@ function channelDelta(baseline, current, baselineIndex, currentIndex) {
  * Render a page from piecewise vertical-offset runs.
  * Used when exact row alignment exhausts its edit budget. Callers that still
  * have an exact Myers script should keep that script: short byte-identical
- * edits are cheaper and already precise.
+ * edits are cheaper and already precise. An offset canvas past `maxPixels`
+ * falls back so the caller can still use coordinate comparison. The coordinate
+ * union itself still throws when it exceeds the limit.
  *
  * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
  * @param {{ data: Uint8Array, width: number, height: number }} currentPng
@@ -178,15 +188,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
   const canvasWidth = baselinePng.width;
   const canvasHeight = plan.steps.length;
   if (canvasWidth * canvasHeight > options.maxPixels) {
-    throw new ComparisonTooLargeError(
-      baselinePng.width,
-      baselinePng.height,
-      currentPng.width,
-      currentPng.height,
-      canvasWidth,
-      canvasHeight,
-      options.maxPixels
-    );
+    return { kind: 'fallback', reason: 'alignment-limit' };
   }
 
   /** @type {import('./vertical-align.mjs').AlignmentSegment[]} */
@@ -220,12 +222,15 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
           diffPng.data[outputIndex + 3] = currentPng.data[currentIndex + 3];
         }
       }
+      const comparedDelta = step.pixelY - step.currentY;
+      const comparedOffset = comparedDelta === -1 || comparedDelta === 1 ? comparedDelta : undefined;
       appendAlignmentSegment(segments, {
         outputStart: outputY,
         length: 1,
         kind: highlighted > 0 ? 'changed' : 'matched',
         baselineStart: step.baselineY,
-        currentStart: step.currentY
+        currentStart: step.currentY,
+        ...(comparedOffset === undefined ? {} : { comparedOffset })
       });
     } else {
       highlighted = canvasWidth;
