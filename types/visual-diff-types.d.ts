@@ -55,6 +55,12 @@ export interface ComparisonRowMapping {
   kind: ComparisonRowKind;
   baselineStart?: number;
   currentStart?: number;
+  /**
+   * Present when an offset-run row was compared one pixel above or below the
+   * recorded current row. Output row i was compared to current row
+   * `currentStart + i + comparedOffset`.
+   */
+  comparedOffset?: -1 | 0 | 1;
 }
 
 export interface VisualRegressionRouteConfig {

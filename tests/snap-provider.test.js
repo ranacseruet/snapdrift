@@ -1554,6 +1554,73 @@ describe('SnapProvider.diff() baseline mapping', () => {
     });
   });
 
+  it('accepts a one-pixel comparedOffset and rejects one outside that neighbor', async () => {
+    const comparison = {
+      baseline: { width: 4, height: 2 },
+      current: { width: 4, height: 2 },
+      canvas: { width: 4, height: 2 },
+      dimensionsChanged: false,
+      totalPixels: 8,
+      policyVersion: 2,
+      mode: 'vertical-aligned',
+      rowMapping: [
+        { outputStart: 0, length: 1, kind: 'matched', baselineStart: 0, currentStart: 0, comparedOffset: 1 },
+        { outputStart: 1, length: 1, kind: 'matched', baselineStart: 1, currentStart: 1 }
+      ]
+    };
+    const metadata = diffRunMetadata({
+      runId: 'run_compared_offset',
+      comparisonPolicy: { version: 2, threshold: 0.01 }
+    });
+    const accepted = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          diffPixels: 0,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison,
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata,
+      { comparisonPolicy: { version: 2, threshold: 0.01 } }
+    );
+    expect(accepted.summary.status).not.toBe('incomplete');
+
+    const rejected = await runDiffWith(
+      [
+        {
+          routeId: 'home',
+          routePath: '/',
+          status: 'diffed',
+          baselineObjectKey: 'b/home.png',
+          currentObjectKey: 'c/home.png',
+          diffPct: 0,
+          diffPixels: 0,
+          diffObjectKey: 'd/home.png',
+          thresholdUsed: 0.01,
+          comparison: {
+            ...comparison,
+            rowMapping: [
+              { outputStart: 0, length: 1, kind: 'matched', baselineStart: 0, currentStart: 0, comparedOffset: 2 },
+              { outputStart: 1, length: 1, kind: 'matched', baselineStart: 1, currentStart: 1 }
+            ]
+          },
+          viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+        }
+      ],
+      metadata,
+      { comparisonPolicy: { version: 2, threshold: 0.01 } }
+    );
+    expect(rejected.summary.status).toBe('incomplete');
+  });
+
   it('fails closed when a v2 run returns v1-shaped comparison metadata', async () => {
     const metadata = diffRunMetadata({
       runId: 'run_v2_v1_result',

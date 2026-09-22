@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Comparison policy v2, after exact row alignment hits its edit cap, maps long
+  vertical-offset runs so an insertion does not highlight the rest of a shifted
+  page. A matched row on that path was mapped and fell below the highlight
+  rule; it does not have to be byte-identical. When the compared row is one
+  pixel above or below the recorded current row, the mapping includes
+  `comparedOffset` (`-1` or `1`).
+- Offset highlighting includes alpha. Scoring ignores fully transparent pixels
+  and treats a large opacity change as a structured mismatch, so a small alpha
+  delta stays on the offset path.
+- The offset search rejects a page before allocating its score matrices when
+  those matrices would exceed 64 MB. It also samples every 32nd row first and
+  stops that sample once the page cannot be a correspondence, so a dissimilar
+  page falls back without scoring every offset. A dissimilar 1440×5622 pair
+  fell back in about 0.9s; scoring every offset on that pair took about 3.5s.
+- An offset canvas that would exceed `maxPixels` falls back to coordinate
+  comparison instead of throwing. The coordinate union can still throw when it
+  itself exceeds the limit.
+
 ## 0.14.0 - 2026-09-21
 
 Workspace releases this version:

@@ -1,0 +1,12 @@
+{
+  "implementation": "compareImages alignment=vertical on main before the offset-run mapper",
+  "comparison": {
+    "policyVersion": 2,
+    "mode": "coordinate-fallback",
+    "fallbackReason": "alignment-limit",
+    "differentPixels": 1851288,
+    "totalPixels": 8127360,
+    "mismatchRatio": 0.2277846680841011
+  },
+  "elapsedMs": 366
+}
