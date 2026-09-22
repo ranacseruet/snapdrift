@@ -63,7 +63,10 @@ export interface ComparisonMetadata {
   policyVersion?: 2;
   /** Whether v2 aligned rows or fell back to coordinate comparison. */
   mode?: 'vertical-aligned' | 'coordinate-fallback';
-  /** Row mapping used to render and score an aligned result. */
+  /**
+   * Row mapping used to render and score an aligned result.
+   * On an offset-run match, `matched` means mapped and below the highlight rule.
+   */
   rowMapping?: ComparisonRowMapping[];
   /** Why v2 used coordinate fallback, when it did. */
   fallbackReason?: ComparisonFallbackReason;

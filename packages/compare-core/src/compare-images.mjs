@@ -2,6 +2,7 @@
 
 import pngjs from 'pngjs';
 
+import { buildOffsetRenderPlan, pixelIsHighlighted } from './offset-align.mjs';
 import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
 import { alignRows } from './vertical-align.mjs';
 
@@ -108,9 +109,193 @@ export class ComparisonTooLargeError extends Error {
  * }} options
  * @returns {{ kind: 'aligned', result: CompareImagesImplementationResult } | { kind: 'fallback', reason: string }}
  */
+/**
+ * @param {import('./vertical-align.mjs').AlignmentSegment[]} segments
+ * @param {import('./vertical-align.mjs').AlignmentSegment} segment
+ * @returns {void}
+ */
+function appendAlignmentSegment(segments, segment) {
+  const previous = segments.at(-1);
+  const baselineContiguous =
+    previous?.baselineStart === undefined ||
+    segment.baselineStart === undefined ||
+    previous.baselineStart + previous.length === segment.baselineStart;
+  const currentContiguous =
+    previous?.currentStart === undefined ||
+    segment.currentStart === undefined ||
+    previous.currentStart + previous.length === segment.currentStart;
+
+  if (previous && previous.kind === segment.kind && baselineContiguous && currentContiguous && previous.outputStart + previous.length === segment.outputStart) {
+    previous.length += segment.length;
+    return;
+  }
+  segments.push(segment);
+}
+
+/**
+ * @param {Uint8Array} baseline
+ * @param {Uint8Array} current
+ * @param {number} baselineIndex
+ * @param {number} currentIndex
+ * @returns {number}
+ */
+function rgbDelta(baseline, current, baselineIndex, currentIndex) {
+  return Math.max(
+    Math.abs(baseline[baselineIndex] - current[currentIndex]),
+    Math.abs(baseline[baselineIndex + 1] - current[currentIndex + 1]),
+    Math.abs(baseline[baselineIndex + 2] - current[currentIndex + 2])
+  );
+}
+
+/**
+ * Render a page from piecewise vertical-offset runs.
+ * Used when exact row alignment exhausts its edit budget. Callers that still
+ * have an exact Myers script should keep that script: short byte-identical
+ * edits are cheaper and already precise.
+ *
+ * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
+ * @param {{ data: Uint8Array, width: number, height: number }} currentPng
+ * @param {{
+ *   renderDiffImage: boolean,
+ *   changedColor: [number, number, number, number],
+ *   addedColor: [number, number, number, number],
+ *   removedColor: [number, number, number, number],
+ *   maxPixels: number
+ * }} options
+ * @returns {{ kind: 'aligned', result: CompareImagesImplementationResult } | { kind: 'fallback', reason: string }}
+ */
+export function compareOffsetAligned(baselinePng, currentPng, options) {
+  const plan = buildOffsetRenderPlan(baselinePng, currentPng);
+  if (plan.kind !== 'aligned') {
+    return plan;
+  }
+
+  const canvasWidth = baselinePng.width;
+  const canvasHeight = plan.steps.length;
+  if (canvasWidth * canvasHeight > options.maxPixels) {
+    throw new ComparisonTooLargeError(
+      baselinePng.width,
+      baselinePng.height,
+      currentPng.width,
+      currentPng.height,
+      canvasWidth,
+      canvasHeight,
+      options.maxPixels
+    );
+  }
+
+  /** @type {import('./vertical-align.mjs').AlignmentSegment[]} */
+  const segments = [];
+  const diffPng = options.renderDiffImage ? new PNG({ width: canvasWidth, height: canvasHeight }) : undefined;
+  let differentPixels = 0;
+  let outputY = 0;
+
+  for (const step of plan.steps) {
+    let highlighted = 0;
+    if (step.role === 'paired') {
+      const baselineRow = step.baselineY * canvasWidth * 4;
+      const pixelRow = step.pixelY * canvasWidth * 4;
+      for (let x = 0; x < canvasWidth; x += 1) {
+        const baselineIndex = baselineRow + x * 4;
+        const currentIndex = pixelRow + x * 4;
+        const outputIndex = (outputY * canvasWidth + x) * 4;
+        const delta = rgbDelta(baselinePng.data, currentPng.data, baselineIndex, currentIndex);
+        if (pixelIsHighlighted(delta, step.paint)) {
+          highlighted += 1;
+          if (diffPng) {
+            diffPng.data[outputIndex] = options.changedColor[0];
+            diffPng.data[outputIndex + 1] = options.changedColor[1];
+            diffPng.data[outputIndex + 2] = options.changedColor[2];
+            diffPng.data[outputIndex + 3] = options.changedColor[3];
+          }
+        } else if (diffPng) {
+          diffPng.data[outputIndex] = currentPng.data[currentIndex];
+          diffPng.data[outputIndex + 1] = currentPng.data[currentIndex + 1];
+          diffPng.data[outputIndex + 2] = currentPng.data[currentIndex + 2];
+          diffPng.data[outputIndex + 3] = currentPng.data[currentIndex + 3];
+        }
+      }
+      appendAlignmentSegment(segments, {
+        outputStart: outputY,
+        length: 1,
+        kind: highlighted > 0 ? 'changed' : 'matched',
+        baselineStart: step.baselineY,
+        currentStart: step.currentY
+      });
+    } else {
+      highlighted = canvasWidth;
+      const color = step.role === 'inserted' ? options.addedColor : options.removedColor;
+      if (diffPng) {
+        for (let x = 0; x < canvasWidth; x += 1) {
+          const outputIndex = (outputY * canvasWidth + x) * 4;
+          diffPng.data[outputIndex] = color[0];
+          diffPng.data[outputIndex + 1] = color[1];
+          diffPng.data[outputIndex + 2] = color[2];
+          diffPng.data[outputIndex + 3] = color[3];
+        }
+      }
+      appendAlignmentSegment(segments, step.role === 'inserted'
+        ? { outputStart: outputY, length: 1, kind: 'inserted', currentStart: step.currentY }
+        : { outputStart: outputY, length: 1, kind: 'deleted', baselineStart: step.baselineY });
+    }
+    differentPixels += highlighted;
+    outputY += 1;
+  }
+
+  const totalPixels = canvasWidth * canvasHeight;
+  const mismatchRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
+  const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
+    baseline: { width: baselinePng.width, height: baselinePng.height },
+    current: { width: currentPng.width, height: currentPng.height },
+    canvas: { width: canvasWidth, height: canvasHeight },
+    dimensionsChanged: baselinePng.height !== currentPng.height,
+    totalPixels,
+    policyVersion: 2,
+    mode: /** @type {const} */ ('vertical-aligned'),
+    rowMapping: segments
+  });
+  return {
+    kind: 'aligned',
+    result: {
+      width: canvasWidth,
+      height: canvasHeight,
+      differentPixels,
+      totalPixels,
+      mismatchRatio,
+      pct: mismatchRatio,
+      pixelsChanged: differentPixels,
+      ...(diffPng ? { diffImageBuffer: PNG.sync.write(diffPng) } : {}),
+      comparison
+    }
+  };
+}
+
+/**
+ * Compare two equal-width images after aligning their rows. Exact fingerprint
+ * alignment is tried first. When that search hits its edit cap, piecewise
+ * vertical-offset runs supply the row plan. The result uses one output row
+ * for every matched, changed, inserted, or deleted source row.
+ *
+ * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
+ * @param {{ data: Uint8Array, width: number, height: number }} currentPng
+ * @param {{
+ *   renderDiffImage: boolean,
+ *   changedColor: [number, number, number, number],
+ *   addedColor: [number, number, number, number],
+ *   removedColor: [number, number, number, number],
+ *   maxPixels: number
+ * }} options
+ * @returns {{ kind: 'aligned', result: CompareImagesImplementationResult } | { kind: 'fallback', reason: string }}
+ */
 function compareAlignedImages(baselinePng, currentPng, options) {
   const alignment = alignRows(baselinePng, currentPng);
   if (alignment.kind === 'fallback') {
+    if (alignment.reason === 'alignment-limit') {
+      const offsetAligned = compareOffsetAligned(baselinePng, currentPng, options);
+      if (offsetAligned.kind === 'aligned') {
+        return offsetAligned;
+      }
+    }
     return alignment;
   }
 
