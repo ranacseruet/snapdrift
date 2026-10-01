@@ -155,7 +155,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@7b7b9138416fd16631c5d648b2ddfa9fe4a6a783 # v0.15.0
+      uses: ranacseruet/snapdrift/actions/baseline@6c9e25e501572334bcbf1e667a5efcd07359d1c4 # v0.15.0
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
