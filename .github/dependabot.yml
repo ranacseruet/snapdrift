@@ -6,6 +6,9 @@ updates:
       interval: monthly
     labels:
       - dependencies
+    ignore:
+      - dependency-name: "ranacseruet/snapdrift/*"
+      - dependency-name: "ranacseruet/snapdrift"
 
   - package-ecosystem: npm
     directory: /
