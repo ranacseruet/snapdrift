@@ -6,3 +6,4 @@ export { generateDriftReport, runDriftCheckCli } from './drift-report.mjs';
 export { stageArtifacts, getDefaultArtifactBundleDir } from './stage.mjs';
 export { writeDriftSummary } from './drift-summary-io.mjs';
 export { runBaselineCapture, assertNavigationOk } from './capture.mjs';
+export { runSnapBatchCapture } from './snap-batch-capture.mjs';

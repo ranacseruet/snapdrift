@@ -87,6 +87,7 @@ export interface VisualRegressionConfig {
   };
   selection?: VisualRegressionSelectionConfig;
   provider?: 'local' | 'snap';
+  capture?: 'playwright' | 'snap';
   snap?: SnapConfig;
 }
 
@@ -127,6 +128,7 @@ export interface VisualBaselineResults {
   screenshotsRoot?: string;
   routes: VisualBaselineRouteResult[];
   passed?: boolean;
+  engine?: string;
 }
 
 /** Exact route/viewport capture identity persisted for hosted baseline validation. */

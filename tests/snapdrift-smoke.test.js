@@ -463,6 +463,8 @@ describe('lib module exports are stable', () => {
         expect(typeof mod.splitCommaList).toBe('function');
         expect(typeof mod.DEFAULT_CONFIG_PATH).toBe('string');
         expect(Array.isArray(mod.VALID_DIFF_MODES)).toBe(true);
+        expect(Array.isArray(mod.VALID_CAPTURE_ENGINES)).toBe(true);
+        expect(typeof mod.isLocalBaseUrl).toBe('function');
         expect(mod.SNAPDRIFT_VIEWPORT_PRESETS).toBeDefined();
         expect(typeof mod.SNAPDRIFT_NAVIGATION_TIMEOUT_MS).toBe('number');
         expect(typeof mod.SNAPDRIFT_SETTLE_DELAY_MS).toBe('number');
@@ -490,9 +492,10 @@ describe('lib module exports are stable', () => {
         expect(typeof mod.writeDriftSummary).toBe('function');
     });
 
-    it('capture module exports runBaselineCapture', async () => {
+    it('capture module exports runBaselineCapture and runSnapBatchCapture', async () => {
         const mod = await import('../lib/capture-routes.mjs');
         expect(typeof mod.runBaselineCapture).toBe('function');
+        expect(typeof mod.runSnapBatchCapture).toBe('function');
     });
 
     it('comment module exports all expected symbols', async () => {

@@ -270,6 +270,32 @@ If you're adopting SnapDrift as a replacement for the upstream `snap/github-acti
 snapdrift init --from-snap-action .github/workflows/snap.yml
 ```
 
+## Fast CI with Snap Cloud Batch Screenshots (`capture: "snap"`)
+
+When your application deploys preview URLs (e.g., Vercel, Netlify, Cloudflare Pages, AWS Amplify) or runs on a publicly accessible staging server during CI, you can offload screenshot rendering to Snap Cloud while keeping comparison and artifact management local (`provider: "local"`):
+
+```json
+{
+  "baseUrl": "https://preview-pr-123.example.com",
+  "capture": "snap",
+  "snap": {
+    "apiKeyEnv": "SNAP_API_KEY"
+  },
+  "routes": [
+    { "id": "home-desktop", "path": "/", "viewport": "desktop" },
+    { "id": "pricing-desktop", "path": "/pricing", "viewport": "desktop" }
+  ]
+}
+```
+
+### Why use `capture: "snap"`?
+- **Skips Playwright Installation in CI:** The GitHub Actions wrapper actions (`actions/baseline` and `actions/pr-diff`) detect `capture: "snap"` with a remote `baseUrl` and skip `playwright install --with-deps chromium`, saving 45–90 seconds per workflow run.
+- **Parallel Cloud Rendering:** Snap Cloud renders full-page screenshots concurrently via its batch API (`POST /v1/screenshots`).
+- **Local Diff Engine:** Screenshots are downloaded and diffed locally on the runner with `@snapdrift/compare-core`, keeping full artifact bundles and PR comments in GitHub Actions without requiring hosted project configuration.
+
+> [!NOTE]
+> `capture: "snap"` requires a public or preview URL reachable by Snap Cloud. If `baseUrl` points to `localhost` or `127.0.0.1`, SnapDrift will fail with a clear configuration error because Snap Cloud cannot access loopback addresses. For local development or local dev servers, use `capture: "playwright"` (the default).
+
 ## Low-level actions
 
 The `pr-diff` wrapper composes the following low-level steps. They're still available for custom orchestration but most consumers don't need to reach for them:

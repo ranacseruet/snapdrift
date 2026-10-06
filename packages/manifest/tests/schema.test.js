@@ -276,6 +276,37 @@ describe('capture compatibility', () => {
     expect(checkCaptureProfileCompatibility({ engineVersion: 'v0', locale: 'fr-FR' }, LOCAL_PROFILE)).toMatchObject({ status: 'incompatible' });
   });
 
+  test('recognizes snap-batch engine and rejects mixed snapdrift-local / snap-batch comparison', () => {
+    const batchProfile = {
+      schemaVersion: 2,
+      engine: { name: 'snap-batch', version: '0.15.0' },
+      engineVersion: '0.15.0',
+      browser: 'chromium',
+      browserRevision: 'cloud',
+      playwrightVersion: 'cloud',
+      platform: { name: 'linux', architecture: 'x64', release: '1.0', version: '1.0' },
+      locale: 'en-US',
+      timezone: 'UTC',
+      settings: {
+        screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+        readiness: { waitUntil: 'load', settleDelayMs: 300 },
+        context: { isolation: 'cloud-batch', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' },
+        launch: { headless: true, args: [] }
+      }
+    };
+
+    expect(checkCaptureProfileCompatibility(batchProfile, batchProfile)).toEqual({ status: 'verified' });
+
+    expect(checkCaptureProfileCompatibility(batchProfile, LOCAL_PROFILE)).toMatchObject({
+      status: 'incompatible',
+      reason: expect.stringContaining('capture engine mismatch')
+    });
+    expect(checkCaptureProfileCompatibility(LOCAL_PROFILE, batchProfile)).toMatchObject({
+      status: 'incompatible',
+      reason: expect.stringContaining('capture engine mismatch')
+    });
+  });
+
   test('normalizes desktop but preserves mobile device characteristics', () => {
     expect(normalizedViewportIdentity('desktop')).toBe(normalizedViewportIdentity({ width: 1440, height: 900 }));
     expect(normalizedViewportIdentity('mobile')).not.toBe(normalizedViewportIdentity({ width: 390, height: 844 }));
