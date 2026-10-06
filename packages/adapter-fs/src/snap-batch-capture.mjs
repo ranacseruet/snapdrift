@@ -82,7 +82,7 @@ async function fetchGetWithRetry(fetchImpl, url, headers = {}) {
  *
  * @param {{
  *   configPath?: string,
- *   routeIds?: string[],
+ *   routeIds?: Iterable<string>,
  *   outDir?: string,
  *   fetchFn?: typeof fetch,
  *   pollIntervalMs?: number,
@@ -320,7 +320,7 @@ export async function runSnapBatchCapture(options) {
   );
 
   // 6. Write results.json and manifest.json
-  /** @type {import('@snapdrift/manifest').ScreenshotManifest} */
+  /** @type {import('@snapdrift/manifest').VisualScreenshotManifest} */
   const manifest = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
