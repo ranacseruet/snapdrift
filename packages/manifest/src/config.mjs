@@ -1,5 +1,6 @@
 // @ts-check
 
+import net from 'node:net';
 import path from 'node:path';
 
 import { assertUniqueRouteIdFilenames } from './route-filenames.mjs';
@@ -16,6 +17,7 @@ export const LATEST_COMPARISON_POLICY_VERSION = 2;
 /** @deprecated v1 is retained only as the compatibility default; use policy v2 for new configurations. */
 export const COMPARISON_POLICY_VERSION = 1;
 export const VALID_PROVIDER_VALUES = ['local', 'snap'];
+export const VALID_CAPTURE_ENGINES = ['playwright', 'snap'];
 export const VALID_ON_UNAVAILABLE_MODES = ['fail', 'warn-and-skip', 'fallback-local'];
 
 export const SNAPDRIFT_NAVIGATION_TIMEOUT_MS = 30000;
@@ -28,6 +30,7 @@ const VALID_VIEWPORT_PRESETS = new Set(Object.keys(VIEWPORT_PRESETS));
 /** @type {Set<string>} */
 const VALID_DIFF_MODE_SET = new Set(VALID_DIFF_MODES);
 const VALID_PROVIDER_SET = new Set(VALID_PROVIDER_VALUES);
+const VALID_CAPTURE_ENGINE_SET = new Set(VALID_CAPTURE_ENGINES);
 const VALID_ON_UNAVAILABLE_SET = new Set(VALID_ON_UNAVAILABLE_MODES);
 
 /**
@@ -75,6 +78,33 @@ function isValidUrl(value) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Returns true if baseUrl is a loopback or localhost address.
+ * @param {string | undefined} baseUrl
+ * @returns {boolean}
+ */
+export function isLocalBaseUrl(baseUrl) {
+  if (!baseUrl) {
+    return false;
+  }
+
+  let hostname;
+  try {
+    hostname = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  const normalized = hostname.replace(/^\[/, '').replace(/\]$/, '');
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
+    return true;
+  }
+  if (normalized === '::1' || normalized === '0.0.0.0') {
+    return true;
+  }
+  return net.isIP(normalized) === 4 && normalized.startsWith('127.');
 }
 
 /**
@@ -212,6 +242,12 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
   if (candidate.provider !== undefined) {
     if (!isNonEmptyString(candidate.provider) || !VALID_PROVIDER_SET.has(candidate.provider)) {
       errors.push(`provider must be one of: ${VALID_PROVIDER_VALUES.join(', ')}.`);
+    }
+  }
+
+  if (candidate.capture !== undefined) {
+    if (!isNonEmptyString(candidate.capture) || !VALID_CAPTURE_ENGINE_SET.has(candidate.capture)) {
+      errors.push(`capture must be one of: ${VALID_CAPTURE_ENGINES.join(', ')}.`);
     }
   }
 

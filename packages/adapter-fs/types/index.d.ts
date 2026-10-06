@@ -149,3 +149,21 @@ export function assertNavigationOk(
   route: VisualRegressionRouteConfig,
   targetUrl: string
 ): void;
+
+// --- snap-batch-capture.mjs ---
+
+export interface RunSnapBatchCaptureOptions {
+  configPath?: string;
+  routeIds?: Iterable<string>;
+  outDir?: string;
+  fetchFn?: typeof fetch;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+}
+
+export function runSnapBatchCapture(options?: RunSnapBatchCaptureOptions): Promise<{
+  resultsPath: string;
+  manifestPath: string;
+  screenshotsRoot: string;
+  selectedRouteIds: string[];
+}>;

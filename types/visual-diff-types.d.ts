@@ -87,6 +87,7 @@ export interface VisualRegressionConfig {
   };
   selection?: VisualRegressionSelectionConfig;
   provider?: 'local' | 'snap';
+  capture?: 'playwright' | 'snap';
   snap?: SnapConfig;
 }
 

@@ -7,6 +7,7 @@ export { sanitizeRouteId, assertUniqueRouteIdFilenames } from './route-filenames
 export { determineDriftStatus, shouldFailDriftCheck } from './drift-status.mjs';
 export {
   validateSnapdriftConfig,
+  isLocalBaseUrl,
   selectConfiguredRoutes,
   selectRoutesForChangedFiles,
   resolveFromWorkingDirectory,
@@ -18,6 +19,7 @@ export {
   COMPARISON_ROW_KINDS,
   COMPARISON_FALLBACK_REASONS,
   VALID_PROVIDER_VALUES,
+  VALID_CAPTURE_ENGINES,
   VALID_ON_UNAVAILABLE_MODES,
   SNAPDRIFT_NAVIGATION_TIMEOUT_MS,
   SNAPDRIFT_SETTLE_DELAY_MS

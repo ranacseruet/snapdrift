@@ -32,6 +32,7 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 
 | Field | Type | Description |
 |:------|:-----|:------------|
+| `capture` | `string` | Capture engine for `provider: "local"`: `"playwright"` (default) or `"snap"` (Snap Cloud batch screenshot API) |
 | `selection.sharedPrefixes` | `string[]` | Prefixes that force the full route set |
 | `selection.sharedExact` | `string[]` | Exact files that force the full route set |
 | `provider` | `string` | `"local"` (default) or `"snap"` for hosted backend |
@@ -41,6 +42,8 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `snap.projectId` | `string` | Snap project ID or `"auto"` (default: `"auto"`, derives from `GITHUB_REPOSITORY`) |
 | `snap.onUnavailable` | `string` | Behavior when Snap is unreachable: `"fail"` (default), `"warn-and-skip"`, or `"fallback-local"` |
 | `diff.comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }` | Optional explicit comparison policy. Deprecated v1 remains the compatibility default; new configurations should use v2 for bounded vertical row alignment. `threshold` must match `diff.threshold` |
+
+When `capture: "snap"` is set (or overridden via `SNAPDRIFT_CAPTURE_ENGINE=snap`), SnapDrift routes baseline and diff captures to Snap Cloud's batch screenshot API (`POST /v1/screenshots`) instead of launching local Chromium via Playwright. Rendered PNGs are downloaded in parallel and diffed locally via `@snapdrift/compare-core`. This requires a public or preview `baseUrl` (loopback and private network URLs like `localhost`, `127.0.0.1`, `::1` are rejected) and an API key (configured in `snap.apiKeyEnv` / `snap.apiKey` or via `SNAP_API_KEY`). When `capture: "snap"` is used with a remote `baseUrl`, GitHub Actions wrapper actions (`actions/baseline`, `actions/pr-diff`) skip the `playwright install --with-deps chromium` step, accelerating CI workflows.
 
 When `provider: "snap"` is set, the `snap` block is required. Exactly one of `snap.apiKeyEnv` or `snap.apiKey` must be present. `snap.apiKey` accepts `${VAR}` interpolation (for example `"${SNAP_API_KEY}"`); the referenced environment variable must be set at runtime or the config loader throws.
 

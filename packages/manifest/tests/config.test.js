@@ -5,6 +5,7 @@ import {
   resolveFromWorkingDirectory,
   splitCommaList,
   VALID_DIFF_MODES,
+  VALID_CAPTURE_ENGINES,
   COMPARISON_POLICY_VERSION,
   LATEST_COMPARISON_POLICY_VERSION,
   SUPPORTED_COMPARISON_POLICY_VERSIONS,
@@ -278,5 +279,23 @@ describe('@snapdrift/manifest — constants', () => {
 
   test('SNAPDRIFT_SETTLE_DELAY_MS is positive', () => {
     expect(SNAPDRIFT_SETTLE_DELAY_MS).toBeGreaterThan(0);
+  });
+
+  test('VALID_CAPTURE_ENGINES contains expected engines', () => {
+    expect(VALID_CAPTURE_ENGINES).toEqual(['playwright', 'snap']);
+  });
+
+  test('accepts valid capture: playwright and snap', () => {
+    expect(validateSnapdriftConfig({ ...VALID_CONFIG, capture: 'playwright' }).capture).toBe('playwright');
+    expect(validateSnapdriftConfig({ ...VALID_CONFIG, capture: 'snap' }).capture).toBe('snap');
+  });
+
+  test('rejects invalid capture engine', () => {
+    expect(() => validateSnapdriftConfig({ ...VALID_CONFIG, capture: 'puppeteer' }))
+      .toThrow('capture must be one of: playwright, snap');
+    expect(() => validateSnapdriftConfig({ ...VALID_CONFIG, capture: 123 }))
+      .toThrow('capture must be one of: playwright, snap');
+    expect(() => validateSnapdriftConfig({ ...VALID_CONFIG, capture: '' }))
+      .toThrow('capture must be one of: playwright, snap');
   });
 });

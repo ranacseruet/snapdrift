@@ -10,6 +10,7 @@ import pngjs from 'pngjs';
 
 import { loadSnapdriftConfig, readFirstDefinedEnv, SNAPDRIFT_CAPTURE_CONCURRENCY } from './config.mjs';
 import { createConcurrencyLimiter } from './concurrency.mjs';
+import { runSnapBatchCapture } from './snap-batch-capture.mjs';
 import {
   selectConfiguredRoutes,
   splitCommaList,
@@ -239,10 +240,15 @@ async function captureViewportRoutes(browser, entries, baseUrl, screenshotsRoot,
  * @returns {Promise<{ resultsPath: string, manifestPath: string, screenshotsRoot: string, selectedRouteIds: string[] }>}
  */
 export async function runBaselineCapture(options = {}) {
+  const { config, configPath } = await loadSnapdriftConfig(options.configPath);
+  const captureEngine = process.env.SNAPDRIFT_CAPTURE_ENGINE || config.capture || 'playwright';
+  if (captureEngine === 'snap') {
+    return runSnapBatchCapture(options);
+  }
+
   const requestedRouteIds = [...(
     options.routeIds || splitCommaList(readFirstDefinedEnv(['SNAPDRIFT_ROUTE_IDS']))
   )];
-  const { config, configPath } = await loadSnapdriftConfig(options.configPath);
   const { routes, selectedRouteIds } = selectConfiguredRoutes(config, requestedRouteIds);
 
   // When outDir is provided (e.g. by the local CLI), store all outputs flat inside that directory

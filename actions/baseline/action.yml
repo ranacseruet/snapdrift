@@ -78,14 +78,16 @@ runs:
         const outputs = [
           `artifact_name=${config.baselineArtifactName}`,
           `provider=${config.provider || 'local'}`,
+          `capture_engine=${process.env.SNAPDRIFT_CAPTURE_ENGINE || config.capture || 'playwright'}`,
           `on_unavailable=${config.snap?.onUnavailable || 'fail'}`,
-          `snap_local_capture=${(config.provider || 'local') === 'snap' && isLocalBaseUrl(config.baseUrl) ? 'true' : 'false'}`
+          `snap_local_capture=${(config.provider || 'local') === 'snap' && isLocalBaseUrl(config.baseUrl) ? 'true' : 'false'}`,
+          `is_local_base_url=${isLocalBaseUrl(config.baseUrl) ? 'true' : 'false'}`
         ].join('\n') + '\n';
         await fs.appendFile(process.env.GITHUB_OUTPUT, outputs);
         EOF
 
     - name: Install Playwright Chromium
-      if: steps.config.outputs.provider != 'snap' || steps.config.outputs.on_unavailable == 'fallback-local' || steps.config.outputs.snap_local_capture == 'true'
+      if: (steps.config.outputs.provider != 'snap' && (steps.config.outputs.capture_engine != 'snap' || steps.config.outputs.is_local_base_url == 'true')) || steps.config.outputs.on_unavailable == 'fallback-local' || steps.config.outputs.snap_local_capture == 'true'
       shell: bash
       run: |
         "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium

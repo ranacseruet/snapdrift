@@ -12,7 +12,7 @@ jest.unstable_mockModule('@snapdrift/adapter-fs', () => ({ ...adapterFs, runBase
 const { createProvider, LocalProvider, providerSupports, PROVIDER_CAPABILITIES } = await import('../lib/provider.mjs');
 const { SnapProvider } = await import('../lib/snap-provider.mjs');
 const { buildReportCommentBody } = await import('@snapdrift/adapter-report-md');
-const { validateSnapdriftConfig, VALID_PROVIDER_VALUES, VALID_ON_UNAVAILABLE_MODES } = await import('@snapdrift/manifest');
+const { validateSnapdriftConfig, VALID_PROVIDER_VALUES, VALID_CAPTURE_ENGINES, VALID_ON_UNAVAILABLE_MODES } = await import('@snapdrift/manifest');
 
 const validBase = {
   baselineArtifactName: 'test-baseline',
@@ -347,5 +347,19 @@ describe('config validation — provider field', () => {
     expect(VALID_ON_UNAVAILABLE_MODES).toContain('fail');
     expect(VALID_ON_UNAVAILABLE_MODES).toContain('warn-and-skip');
     expect(VALID_ON_UNAVAILABLE_MODES).toContain('fallback-local');
+  });
+
+  it('accepts capture: "playwright" and "snap"', () => {
+    expect(validateSnapdriftConfig({ ...validBase, capture: 'playwright' }).capture).toBe('playwright');
+    expect(validateSnapdriftConfig({ ...validBase, capture: 'snap' }).capture).toBe('snap');
+  });
+
+  it('rejects invalid capture engine', () => {
+    expect(() => validateSnapdriftConfig({ ...validBase, capture: 'invalid' }))
+      .toThrow(/capture must be one of: playwright, snap/);
+  });
+
+  it('VALID_CAPTURE_ENGINES contains "playwright" and "snap"', () => {
+    expect(VALID_CAPTURE_ENGINES).toEqual(['playwright', 'snap']);
   });
 });

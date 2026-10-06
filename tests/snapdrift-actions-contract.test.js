@@ -185,6 +185,26 @@ describe('SnapDrift action contracts', () => {
         expect(prDiffInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
     });
 
+    it('skips Playwright install when capture: "snap" with remote baseUrl', async () => {
+        const baseline = await readAction('actions/baseline/action.yml');
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+
+        const baselineConfig = baseline.runs.steps.find((step) => step.id === 'config');
+        const baselineInstall = baseline.runs.steps.find((step) => step.name === 'Install Playwright Chromium');
+        const prDiffConfig = prDiff.runs.steps.find((step) => step.id === 'config');
+        const prDiffInstall = prDiff.runs.steps.find((step) => step.name === 'Install Playwright Chromium');
+
+        expect(baselineConfig.run).toContain('capture_engine=');
+        expect(baselineConfig.run).toContain('is_local_base_url=');
+        expect(baselineInstall.if).toContain("steps.config.outputs.capture_engine != 'snap'");
+        expect(baselineInstall.if).toContain("steps.config.outputs.is_local_base_url == 'true'");
+
+        expect(prDiffConfig.run).toContain('capture_engine=');
+        expect(prDiffConfig.run).toContain('is_local_base_url=');
+        expect(prDiffInstall.if).toContain("steps.config.outputs.capture_engine != 'snap'");
+        expect(prDiffInstall.if).toContain("steps.config.outputs.is_local_base_url == 'true'");
+    });
+
     it('resolve-baseline honors an absolute download-path instead of always prefixing the workspace', async () => {
       const resolveBaseline = await readAction('actions/resolve-baseline/action.yml');
       const pathsStep = resolveBaseline.runs.steps.find((step) => step.id === 'paths');
