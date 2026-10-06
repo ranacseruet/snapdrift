@@ -298,4 +298,34 @@ describe('@snapdrift/manifest — constants', () => {
     expect(() => validateSnapdriftConfig({ ...VALID_CONFIG, capture: '' }))
       .toThrow('capture must be one of: playwright, snap');
   });
+
+  test('rejects capture engine configuration when provider is "snap"', () => {
+    expect(() => validateSnapdriftConfig({
+      ...VALID_CONFIG,
+      provider: 'snap',
+      capture: 'snap',
+      snap: { apiKeyEnv: 'SNAP_KEY', projectId: 'proj' }
+    })).toThrow('capture engine configuration is only supported when provider is "local"');
+  });
+
+  test('validates snap configuration block even when provider is "local"', () => {
+    expect(() => validateSnapdriftConfig({
+      ...VALID_CONFIG,
+      provider: 'local',
+      snap: { apiUrl: 'not-a-url' }
+    })).toThrow('snap.apiUrl must be a valid URL when provided.');
+
+    expect(() => validateSnapdriftConfig({
+      ...VALID_CONFIG,
+      provider: 'local',
+      snap: { apiKeyEnv: 'KEY_ENV', apiKey: 'inline-key' }
+    })).toThrow('snap.apiKeyEnv and snap.apiKey are mutually exclusive');
+
+    expect(validateSnapdriftConfig({
+      ...VALID_CONFIG,
+      provider: 'local',
+      capture: 'snap',
+      snap: { apiKeyEnv: 'SNAP_KEY' }
+    }).snap.apiKeyEnv).toBe('SNAP_KEY');
+  });
 });

@@ -359,6 +359,18 @@ describe('config validation — provider field', () => {
       .toThrow(/capture must be one of: playwright, snap/);
   });
 
+  it('rejects capture engine when provider is "snap"', () => {
+    const snapConfig = { ...validBase, provider: 'snap', capture: 'snap', snap: { apiKeyEnv: 'SNAP_KEY', projectId: 'p1' } };
+    expect(() => validateSnapdriftConfig(snapConfig))
+      .toThrow(/capture engine configuration is only supported when provider is "local"/);
+  });
+
+  it('validates snap config when provider is "local"', () => {
+    const localWithBadSnap = { ...validBase, provider: 'local', snap: { apiUrl: 'bad-url' } };
+    expect(() => validateSnapdriftConfig(localWithBadSnap))
+      .toThrow(/snap.apiUrl must be a valid URL when provided/);
+  });
+
   it('VALID_CAPTURE_ENGINES contains "playwright" and "snap"', () => {
     expect(VALID_CAPTURE_ENGINES).toEqual(['playwright', 'snap']);
   });

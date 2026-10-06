@@ -353,14 +353,10 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
     };
     await fs.writeFile(configPath, JSON.stringify(config));
 
-    let postAttempts = 0;
+    let pollAttempts = 0;
 
     const mockFetch = async (url, options = {}) => {
       if (url.endsWith('/v1/screenshots') && options.method === 'POST') {
-        postAttempts++;
-        if (postAttempts === 1) {
-          return { ok: false, status: 500, statusText: 'Internal Server Error' };
-        }
         return {
           ok: true,
           status: 200,
@@ -368,6 +364,10 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
         };
       }
       if (url.endsWith('/v1/screenshots/batch_recovered')) {
+        pollAttempts++;
+        if (pollAttempts === 1) {
+          return { ok: false, status: 500, statusText: 'Internal Server Error' };
+        }
         return {
           ok: true,
           status: 200,
@@ -384,7 +384,7 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
     };
 
     const result = await runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10 });
-    expect(postAttempts).toBe(2);
+    expect(pollAttempts).toBe(2);
     expect(result.selectedRouteIds).toEqual(['home']);
   });
 
@@ -477,4 +477,173 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
     const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
     expect(manifest.captureProfile.engine.name).toBe('snap-batch');
   });
+
+  test('handles nested resultsFile and manifestFile paths without duplicate nesting', async () => {
+    process.env.SNAP_API_KEY = 'test-token';
+    const config = {
+      baselineArtifactName: 'baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'qa-artifacts/snapdrift/baseline/current/results.json',
+      manifestFile: 'qa-artifacts/snapdrift/baseline/current/manifest.json',
+      screenshotsRoot: 'qa-artifacts/snapdrift/baseline/current',
+      capture: 'snap',
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop', navigationTimeout: 45000 }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let capturedPostItem;
+    const mockFetch = async (url, options = {}) => {
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        const body = JSON.parse(options.body);
+        capturedPostItem = body.items[0];
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_nested', status: 'queued' })
+        };
+      }
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots/batch_nested')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: [{ status: 'succeeded', imageUrl: 'https://cdn.example.com/nested.png', durationMs: 120 }]
+          })
+        };
+      }
+      if (url === 'https://cdn.example.com/nested.png') {
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10 });
+
+    const expectedResultsPath = path.join(tempDir, 'qa-artifacts/snapdrift/baseline/current/results.json');
+    const expectedManifestPath = path.join(tempDir, 'qa-artifacts/snapdrift/baseline/current/manifest.json');
+    const expectedScreenshotsRoot = path.join(tempDir, 'qa-artifacts/snapdrift/baseline/current');
+
+    expect(result.resultsPath).toBe(expectedResultsPath);
+    expect(result.manifestPath).toBe(expectedManifestPath);
+    expect(result.screenshotsRoot).toBe(expectedScreenshotsRoot);
+
+    // Verify navTimeoutMs was passed from navigationTimeout
+    expect(capturedPostItem.navTimeoutMs).toBe(45000);
+
+    // Verify files were actually written to disk at the expected paths
+    const writtenResults = JSON.parse(await fs.readFile(expectedResultsPath, 'utf8'));
+    expect(writtenResults.engine).toBe('snap-batch');
+    expect(writtenResults.routes[0].id).toBe('home');
+
+    const writtenManifest = JSON.parse(await fs.readFile(expectedManifestPath, 'utf8'));
+    expect(writtenManifest.captureProfile.engine.name).toBe('snap-batch');
+    expect(writtenManifest.screenshots[0].id).toBe('home');
+  });
+
+  test('writes flat files when outDir is provided', async () => {
+    process.env.SNAP_API_KEY = 'test-token';
+    const outDir = path.join(tempDir, 'custom-flat-out');
+    const config = {
+      baselineArtifactName: 'baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'nested/dir/results.json',
+      manifestFile: 'nested/dir/manifest.json',
+      screenshotsRoot: 'nested/dir',
+      capture: 'snap',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    const mockFetch = async (url, options = {}) => {
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_flat', status: 'queued' })
+        };
+      }
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots/batch_flat')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: [{ status: 'succeeded', imageUrl: 'https://cdn.example.com/flat.png' }]
+          })
+        };
+      }
+      if (url === 'https://cdn.example.com/flat.png') {
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({ configPath, outDir, fetchFn: mockFetch, pollIntervalMs: 10 });
+    expect(result.resultsPath).toBe(path.join(outDir, 'results.json'));
+    expect(result.manifestPath).toBe(path.join(outDir, 'manifest.json'));
+    expect(result.screenshotsRoot).toBe(outDir);
+  });
+
+  test('retries on 429 during polling and recovers', async () => {
+    process.env.SNAP_API_KEY = 'test-token';
+    const config = {
+      baselineArtifactName: 'baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      capture: 'snap',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let pollAttempts = 0;
+    const mockFetch = async (url, options = {}) => {
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_429_test', status: 'queued' })
+        };
+      }
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots/batch_429_test')) {
+        pollAttempts++;
+        if (pollAttempts === 1) {
+          return {
+            ok: false,
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: new Map([['retry-after', '1']]),
+            json: async () => ({ error: 'too_many_inflight' })
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: [{ status: 'succeeded', imageUrl: 'https://cdn.example.com/img429.png' }]
+          })
+        };
+      }
+      if (url === 'https://cdn.example.com/img429.png') {
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10 });
+    expect(pollAttempts).toBe(2);
+    expect(result.selectedRouteIds).toEqual(['home']);
+  });
 });
+

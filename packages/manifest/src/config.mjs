@@ -248,12 +248,14 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
   if (candidate.capture !== undefined) {
     if (!isNonEmptyString(candidate.capture) || !VALID_CAPTURE_ENGINE_SET.has(candidate.capture)) {
       errors.push(`capture must be one of: ${VALID_CAPTURE_ENGINES.join(', ')}.`);
+    } else if (candidate.provider === 'snap') {
+      errors.push('capture engine configuration is only supported when provider is "local" (provider: "snap" uses hosted capture).');
     }
   }
 
-  if (candidate.provider === 'snap') {
+  if (candidate.snap !== undefined) {
     if (!isRecord(candidate.snap)) {
-      errors.push('snap config is required when provider is "snap".');
+      errors.push('snap config must be an object when provided.');
     } else {
       const snap = candidate.snap;
 
@@ -267,7 +269,7 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
       const hasApiKey = isNonEmptyString(snap.apiKey);
       if (hasApiKeyEnv && hasApiKey) {
         errors.push('snap.apiKeyEnv and snap.apiKey are mutually exclusive — provide exactly one.');
-      } else if (!hasApiKeyEnv && !hasApiKey) {
+      } else if (candidate.provider === 'snap' && !hasApiKeyEnv && !hasApiKey) {
         errors.push('snap requires exactly one of snap.apiKeyEnv or snap.apiKey.');
       }
 
@@ -281,6 +283,8 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
         }
       }
     }
+  } else if (candidate.provider === 'snap') {
+    errors.push('snap config is required when provider is "snap".');
   }
 
   if (errors.length > 0) {

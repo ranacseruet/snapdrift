@@ -128,6 +128,7 @@ export interface VisualBaselineResults {
   screenshotsRoot?: string;
   routes: VisualBaselineRouteResult[];
   passed?: boolean;
+  engine?: string;
 }
 
 /** Exact route/viewport capture identity persisted for hosted baseline validation. */

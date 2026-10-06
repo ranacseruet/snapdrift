@@ -90,10 +90,14 @@ function firstDifference(baseline, current, prefix = 'captureProfile') {
 export function checkCaptureProfileCompatibility(baseline, current) {
   validateCaptureProfile(baseline, 'baseline screenshot manifest');
   validateCaptureProfile(current, 'current screenshot manifest');
+  const allowedEngines = new Set(['snapdrift-local', 'snap-batch']);
   for (const [location, profile] of [['baseline', baseline], ['current', current]]) {
-    if (profile?.engine && profile.engine.name !== 'snapdrift-local') {
-      return { status: 'incompatible', reason: `${location} capture engine "${profile.engine.name}" is not snapdrift-local` };
+    if (profile?.engine && !allowedEngines.has(profile.engine.name)) {
+      return { status: 'incompatible', reason: `${location} capture engine "${profile.engine.name}" is not supported` };
     }
+  }
+  if (baseline?.engine?.name && current?.engine?.name && baseline.engine.name !== current.engine.name) {
+    return { status: 'incompatible', reason: `capture engine mismatch: baseline is "${baseline.engine.name}" but current is "${current.engine.name}"` };
   }
   if (baseline?.schemaVersion === CAPTURE_PROFILE_SCHEMA_VERSION && current?.schemaVersion === CAPTURE_PROFILE_SCHEMA_VERSION) {
     const difference = firstDifference(baseline, current);

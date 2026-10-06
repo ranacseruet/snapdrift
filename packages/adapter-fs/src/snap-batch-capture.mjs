@@ -25,6 +25,7 @@ const engineVersion = require('../package.json').version;
 export const DEFAULT_SNAP_API_URL = 'https://snap.i2dev.com';
 export const DEFAULT_POLL_INTERVAL_MS = 1500;
 export const DEFAULT_BATCH_TIMEOUT_MS = 5 * 60 * 1000;
+export const REQUEST_TIMEOUT_MS = 30 * 1000;
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 
@@ -37,21 +38,34 @@ function sleep(ms) {
 }
 
 /**
+ * Fetch helper for idempotent GET requests with retry on 5xx, 429, or network errors.
+ *
  * @param {typeof fetch} fetchImpl
  * @param {string} url
- * @param {RequestInit} init
+ * @param {Record<string, string>} [headers]
  * @returns {Promise<Response>}
  */
-async function fetchWithRetry(fetchImpl, url, init) {
+async function fetchGetWithRetry(fetchImpl, url, headers = {}) {
   let attempt = 0;
   let delay = INITIAL_RETRY_DELAY_MS;
 
   while (true) {
     attempt++;
     try {
-      const response = await fetchImpl(url, init);
-      if (response.status < 500 || attempt >= MAX_RETRIES) {
+      const response = await fetchImpl(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      });
+      if ((response.status < 500 && response.status !== 429) || attempt >= MAX_RETRIES) {
         return response;
+      }
+      if (response.status === 429) {
+        const retryAfter = response.headers?.get?.('retry-after');
+        const seconds = retryAfter ? Number.parseInt(retryAfter, 10) : 0;
+        if (Number.isFinite(seconds) && seconds > 0) {
+          delay = seconds * 1000;
+        }
       }
     } catch (error) {
       if (attempt >= MAX_RETRIES) {
@@ -108,11 +122,21 @@ export async function runSnapBatchCapture(options) {
     throw new Error('No routes selected for Snap Cloud batch capture.');
   }
 
-  const screenshotsRoot = options?.outDir ? path.resolve(options.outDir) : resolveFromWorkingDirectory(config, config.screenshotsRoot);
-  const resultsPath = path.resolve(screenshotsRoot, config.resultsFile || 'results.json');
-  const manifestPath = path.resolve(screenshotsRoot, config.manifestFile || 'manifest.json');
-  const screenshotsDir = path.resolve(screenshotsRoot, 'screenshots');
-  await fs.mkdir(screenshotsDir, { recursive: true });
+  const localOutDir = options?.outDir ? path.resolve(options.outDir) : null;
+  const resultsPath = localOutDir
+    ? path.join(localOutDir, path.basename(config.resultsFile))
+    : resolveFromWorkingDirectory(config, config.resultsFile);
+  const manifestPath = localOutDir
+    ? path.join(localOutDir, path.basename(config.manifestFile))
+    : resolveFromWorkingDirectory(config, config.manifestFile);
+  const screenshotsRoot = localOutDir || resolveFromWorkingDirectory(config, config.screenshotsRoot);
+  const screenshotsDir = path.join(screenshotsRoot, 'screenshots');
+
+  await Promise.all([
+    fs.mkdir(path.dirname(resultsPath), { recursive: true }),
+    fs.mkdir(path.dirname(manifestPath), { recursive: true }),
+    fs.mkdir(screenshotsDir, { recursive: true })
+  ]);
 
   const fetchImpl = options?.fetchFn || globalThis.fetch;
   if (typeof fetchImpl !== 'function') {
@@ -120,6 +144,7 @@ export async function runSnapBatchCapture(options) {
   }
 
   // 1. Build batch items
+  // Note: Snap Cloud batch screenshot API contract guarantees items are returned in the exact order submitted.
   const items = routes.map((route) => {
     const targetUrl = new URL(route.path, config.baseUrl).href;
     let width = 1440;
@@ -134,25 +159,36 @@ export async function runSnapBatchCapture(options) {
       width = route.viewport.width;
       height = route.viewport.height;
     }
-    return {
+    /** @type {{ url: string, viewport: { width: number, height: number }, navTimeoutMs?: number }} */
+    const item = {
       url: targetUrl,
       viewport: { width, height }
     };
+    if (typeof route.navigationTimeout === 'number' && route.navigationTimeout > 0) {
+      item.navTimeoutMs = route.navigationTimeout;
+    }
+    return item;
   });
 
-  // 2. Submit batch to Snap Cloud
-  const submitResponse = await fetchWithRetry(fetchImpl, `${apiUrl}/v1/screenshots`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      format: 'png',
-      fullPage: true,
-      items
-    })
-  });
+  // 2. Submit batch to Snap Cloud (POST is non-idempotent; do not retry 5xx to avoid duplicate billable batches)
+  let submitResponse;
+  try {
+    submitResponse = await fetchImpl(`${apiUrl}/v1/screenshots`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        format: 'png',
+        fullPage: true,
+        items
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+  } catch (error) {
+    throw new Error(`Failed to submit Snap Cloud batch screenshot request: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
 
   if (submitResponse.status === 401) {
     throw new Error('Unauthorized: Missing or invalid SNAP_API_KEY for Snap Cloud batch screenshot capture.');
@@ -195,11 +231,8 @@ export async function runSnapBatchCapture(options) {
       throw new Error(`Snap Cloud batch screenshot job "${batchId}" timed out after ${timeoutMs}ms.`);
     }
 
-    const pollResponse = await fetchWithRetry(fetchImpl, `${apiUrl}/v1/screenshots/${batchId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
+    const pollResponse = await fetchGetWithRetry(fetchImpl, `${apiUrl}/v1/screenshots/${batchId}`, {
+      'Authorization': `Bearer ${apiKey}`
     });
 
     if (!pollResponse.ok) {
@@ -212,7 +245,11 @@ export async function runSnapBatchCapture(options) {
       break;
     }
 
-    await sleep(pollIntervalMs);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      throw new Error(`Snap Cloud batch screenshot job "${batchId}" timed out after ${timeoutMs}ms.`);
+    }
+    await sleep(Math.min(pollIntervalMs, remainingMs));
   }
 
   // 4. Validate results
@@ -246,7 +283,7 @@ export async function runSnapBatchCapture(options) {
         throw new Error(`Route "${route.id}" completed without an imageUrl.`);
       }
 
-      const imgResponse = await fetchWithRetry(fetchImpl, imageUrl, { method: 'GET' });
+      const imgResponse = await fetchGetWithRetry(fetchImpl, imageUrl);
       if (!imgResponse.ok) {
         throw new Error(`Failed to download screenshot for route "${route.id}" (${imgResponse.status}): ${imgResponse.statusText}`);
       }
@@ -313,6 +350,7 @@ export async function runSnapBatchCapture(options) {
     startedAt,
     finishedAt: new Date().toISOString(),
     passed: true,
+    engine: 'snap-batch',
     baseUrl: config.baseUrl,
     suite: 'snapdrift-capture',
     configPath: path.relative(path.resolve('.'), resolvedConfigPath),
