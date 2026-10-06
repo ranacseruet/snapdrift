@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.16.0 - 2026-10-05
+
+Workspace releases this version:
+
+- `@snapdrift/manifest` 1.8.0 — capture engine configuration (`capture: "playwright" | "snap"`) under `provider: "local"`, export `isLocalBaseUrl`, and recognize `snap-batch` capture profile engine.
+- `@snapdrift/adapter-fs` 1.7.0 — Snap Cloud batch screenshot capture engine (`runSnapBatchCapture`) using POST `/v1/screenshots`, capture engine delegation in `runBaselineCapture`, and `isLocalBaseUrl` re-export.
+
+`@snapdrift/compare-core` stays 1.6.0 and `@snapdrift/adapter-report-md` stays 1.4.0. Root floors move to `@snapdrift/manifest ^1.8.0` and `@snapdrift/adapter-fs ^1.7.0`. The dispatcher pins `8e82795`, the #191 merge commit on `main`, which includes skipping Playwright installation in composite actions when `capture: "snap"` with a remote `baseUrl`.
+
+### Features
+
+- Added Snap Cloud batch screenshot capture engine (`capture: "snap"`) under `provider: "local"`. Dispatches route screenshots concurrently to Snap Cloud's batch screenshot API (`POST /v1/screenshots`), saving significant CI run time by offloading browser execution.
+- Added automatic Playwright setup skipping in composite actions (`actions/baseline` and `actions/pr-diff`) when `capture: "snap"` is configured with a remote `baseUrl`, avoiding unnecessary browser binary downloads.
+- Supported `SNAPDRIFT_CAPTURE_ENGINE` environment variable (`playwright` | `snap`) to override the configured capture engine at runtime.
+- Added actionable validation rejecting loopback and local `baseUrl` (`localhost`, `127.0.0.1`, `::1`) when `capture: "snap"` is used, directing users to use `playwright` or tunnel services.
+- Added capture profile engine validation in `@snapdrift/manifest` to recognize `snap-batch` and prevent comparing local Playwright captures against Snap Cloud batch captures.
+- Added resilient batch capture polling with retries on transient errors (HTTP 429, 5xx on GET status polls, network errors) while safely avoiding POST retries on 5xx to prevent duplicate jobs.
+
 ## 0.15.0 - 2026-09-22
 
 Workspace releases this version:
