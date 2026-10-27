@@ -1222,6 +1222,206 @@ describe('SnapProvider.capture()', () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  describe('local-upload latency', () => {
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function setupLocalFixture(routeCount, { onCapture } = {}) {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-local-latency-'));
+      const routes = Array.from({ length: routeCount }, (_, i) => ({ id: `r${i}`, path: `/p${i}`, viewport: 'desktop' }));
+      const localCaptureFn = async () => {
+        await onCapture?.();
+        const screenshotsRoot = path.join(tempDir, 'capture');
+        await fs.mkdir(path.join(screenshotsRoot, 'screenshots'), { recursive: true });
+        for (const route of routes) {
+          await fs.writeFile(path.join(screenshotsRoot, 'screenshots', `${route.id}.png`), `png-${route.id}`);
+        }
+        const resultsPath = path.join(screenshotsRoot, 'results.json');
+        const manifestPath = path.join(screenshotsRoot, 'manifest.json');
+        await fs.writeFile(resultsPath, JSON.stringify({ routes: routes.map((r) => ({ id: r.id, status: 'passed' })) }));
+        await fs.writeFile(
+          manifestPath,
+          JSON.stringify({
+            screenshots: routes.map((r) => ({ id: r.id, path: r.path, viewport: 'desktop', imagePath: `screenshots/${r.id}.png`, width: 10, height: 10 }))
+          })
+        );
+        return { resultsPath, manifestPath, screenshotsRoot, selectedRouteIds: routes.map((r) => r.id) };
+      };
+      const configPath = path.join(tempDir, 'snapdrift.json');
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({
+          baselineArtifactName: 'test',
+          workingDirectory: '.',
+          baseUrl: 'http://127.0.0.1:3000',
+          resultsFile: 'results.json',
+          manifestFile: 'manifest.json',
+          screenshotsRoot: 'screenshots',
+          routes,
+          diff: { threshold: 0.01, mode: 'report-only' }
+        })
+      );
+      return { tempDir, configPath, localCaptureFn, routeIds: routes.map((r) => r.id) };
+    }
+
+    it('uploads every route in parallel, capped at the upload concurrency', async () => {
+      const fixture = await setupLocalFixture(10);
+      const createdCaptureIds = new Set();
+      const uploadedCaptureIds = [];
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const mockFetch = async (url, opts) => {
+        if (url.includes('/baselines/latest')) return errorResponse(404, { error: 'no baseline' });
+        if (url.includes('/local-result')) {
+          const captureId = url.split('/captures/')[1].split('/')[0];
+          expect(createdCaptureIds.has(captureId)).toBe(true);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await delay(10);
+          inFlight -= 1;
+          uploadedCaptureIds.push(captureId);
+          return okResponse({ id: captureId, status: 'rendered' });
+        }
+        if (url.includes('/runs/') && url.includes('/captures')) {
+          createdCaptureIds.add(JSON.parse(opts.body).id);
+          return okResponse({ id: 'cap', status: 'pending' });
+        }
+        return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+      };
+      const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn: fixture.localCaptureFn });
+
+      try {
+        const result = await provider.capture({ configPath: fixture.configPath, routeIds: fixture.routeIds });
+        expect(result.selectedRouteIds).toEqual(fixture.routeIds);
+        expect(createdCaptureIds.size).toBe(10);
+        expect(new Set(uploadedCaptureIds)).toEqual(createdCaptureIds);
+        expect(maxInFlight).toBeGreaterThan(1);
+        expect(maxInFlight).toBeLessThanOrEqual(4);
+      } finally {
+        await fs.rm(fixture.tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('stops starting uploads after the first failure and surfaces that error', async () => {
+      const fixture = await setupLocalFixture(12);
+      let capturePosts = 0;
+      let uploadAttempts = 0;
+      const mockFetch = async (url) => {
+        if (url.includes('/baselines/latest')) return errorResponse(404, { error: 'no baseline' });
+        if (url.includes('/local-result')) {
+          const attempt = (uploadAttempts += 1);
+          await delay(10);
+          return attempt === 1 ? errorResponse(400, { error: 'bad image' }) : okResponse({ id: 'cap', status: 'rendered' });
+        }
+        if (url.includes('/runs/') && url.includes('/captures')) {
+          capturePosts += 1;
+          return okResponse({ id: 'cap', status: 'pending' });
+        }
+        return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+      };
+      const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn: fixture.localCaptureFn });
+
+      try {
+        await expect(provider.capture({ configPath: fixture.configPath, routeIds: fixture.routeIds })).rejects.toMatchObject({
+          name: 'SnapApiError',
+          status: 400
+        });
+        // Only the workers already running when the failure landed finish their route.
+        expect(capturePosts).toBeLessThan(12);
+        expect(capturePosts).toBeLessThanOrEqual(8);
+      } finally {
+        await fs.rm(fixture.tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('starts the latest-baseline lookup before local capture finishes and attaches the result', async () => {
+      let lookupSeen;
+      const lookupStarted = new Promise((resolve) => {
+        lookupSeen = resolve;
+      });
+      const fixture = await setupLocalFixture(1, {
+        // Rejects (failing the test) if the lookup is not issued while capture is running.
+        onCapture: async () => {
+          let timer;
+          const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('baseline lookup did not overlap capture')), 2000);
+          });
+          try {
+            await Promise.race([lookupStarted, timeout]);
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+      });
+      const requests = [];
+      const mockFetch = async (url, opts) => {
+        requests.push({ url, method: opts?.method, body: opts?.body ? JSON.parse(opts.body) : null });
+        if (url.includes('/baselines/latest')) {
+          lookupSeen();
+          return okResponse({ id: 'baseline-9' });
+        }
+        if (url.includes('/local-result')) return okResponse({ id: 'cap', status: 'rendered' });
+        if (url.includes('/runs/') && url.includes('/captures')) return okResponse({ id: 'cap', status: 'pending' });
+        return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+      };
+      const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn: fixture.localCaptureFn });
+
+      try {
+        await provider.capture({ configPath: fixture.configPath, routeIds: fixture.routeIds });
+        const runPost = requests.find((r) => r.method === 'POST' && /\/projects\/.+\/runs$/.test(r.url));
+        expect(runPost.body.baselineId).toBe('baseline-9');
+      } finally {
+        await fs.rm(fixture.tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('surfaces a failed baseline lookup after capture without creating a run', async () => {
+      const fixture = await setupLocalFixture(1);
+      const requests = [];
+      const mockFetch = async (url, opts) => {
+        requests.push({ url, method: opts?.method });
+        if (url.includes('/baselines/latest')) return errorResponse(403, { error: 'forbidden' });
+        return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+      };
+      const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn: fixture.localCaptureFn });
+
+      try {
+        await expect(provider.capture({ configPath: fixture.configPath, routeIds: fixture.routeIds })).rejects.toMatchObject({ status: 403 });
+        expect(requests.some((r) => r.method === 'POST')).toBe(false);
+      } finally {
+        await fs.rm(fixture.tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not leave an unhandled rejection when capture fails before a failing lookup settles', async () => {
+      const unhandled = [];
+      const onUnhandled = (reason) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      const fixture = await setupLocalFixture(1, {
+        onCapture: async () => {
+          await delay(20);
+          throw new Error('capture boom');
+        }
+      });
+      const mockFetch = async (url) => {
+        if (url.includes('/baselines/latest')) {
+          await delay(5);
+          return errorResponse(403, { error: 'forbidden' });
+        }
+        return okResponse({ id: 'run_abc123', status: 'pending', captures: [] });
+      };
+      const provider = new SnapProvider(validSnapConfig, { fetchFn: mockFetch, localCaptureFn: fixture.localCaptureFn });
+
+      try {
+        await expect(provider.capture({ configPath: fixture.configPath, routeIds: fixture.routeIds })).rejects.toThrow('capture boom');
+        await delay(30);
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        await fs.rm(fixture.tempDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

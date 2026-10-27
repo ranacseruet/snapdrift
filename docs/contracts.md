@@ -553,6 +553,8 @@ Publication sends `publicationMode: "complete"` and the source run id both as to
 
 If `baseUrl` resolves to a local address (see [`isLocalBaseUrl`](#islocalbaseurl-detection) below), SnapDrift runs Playwright on the runner to render the page and uploads the resulting screenshots to Snap. This is necessary whenever your `baseUrl` is a server only the runner can reach (the common case) — Snap's render worker cannot reach a `127.0.0.1` or `localhost` server.
 
+In the hybrid path, the latest-baseline lookup for diff runs starts before local capture so it overlaps with rendering, and the per-route capture-create and `local-result` uploads run with up to 4 routes in flight. The first failed upload stops further uploads and fails the capture. Local screenshot dimensions come from the PNG header (signature and IHDR are validated; pixel data is not decoded at capture time).
+
 The hybrid path is transparent to the user: the same provider factory picks it, and the output `results.json` carries `provider: "snap"` plus `captureMode: "local-upload"` so downstream consumers can tell which path produced the run. The action's `Install Playwright Chromium` step is gated on this hybrid, so a `provider: "snap"` config with a remote `baseUrl` will not download Playwright Chromium.
 
 ### API contract

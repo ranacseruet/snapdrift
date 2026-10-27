@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Performance
+
+- Hybrid (`provider: "snap"` with a local `baseUrl`) capture uploads screenshots to Snap with up to 4 routes in flight instead of one at a time, and stops starting new uploads after the first failure.
+- The latest-baseline lookup for hybrid diff runs now starts before local capture and overlaps with it.
+- Local Playwright capture reads screenshot width/height from the PNG header instead of fully decoding every PNG, which no longer blocks the event loop for all in-flight routes. A corrupt PNG body is no longer detected at capture time; a buffer without a valid PNG signature or IHDR chunk still fails the route.
+- Capture and upload phases log their duration (`Captured N route(s) in Xs`, `Uploaded N screenshot(s) to Snap in Xs`).
+
 ## 0.16.0 - 2026-10-05
 
 Workspace releases this version:
