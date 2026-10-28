@@ -49,6 +49,15 @@ describe('@snapdrift/adapter-fs — capture', () => {
       expect(() => readPngDimensions(Buffer.alloc(64))).toThrow(/not a valid PNG/);
     });
 
+    test.each([
+      ['width', 16],
+      ['height', 20]
+    ])('rejects a PNG header declaring zero %s', (_label, offset) => {
+      const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
+      png.writeUInt32BE(0, offset);
+      expect(() => readPngDimensions(png)).toThrow(/invalid dimensions/);
+    });
+
     test('rejects a PNG whose first chunk is not IHDR', () => {
       const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
       png.write('IDAT', 12, 'ascii');

@@ -96,7 +96,13 @@ export function readPngDimensions(buffer) {
   ) {
     throw new Error('Screenshot is not a valid PNG (missing signature or IHDR chunk).');
   }
-  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  // PNG spec (RFC 2083 §4.1.1): zero is invalid for either dimension.
+  if (width === 0 || height === 0) {
+    throw new Error(`Screenshot PNG header declares invalid dimensions ${width}x${height}.`);
+  }
+  return { width, height };
 }
 
 /** @typedef {import('../../manifest/types/index').VisualViewport} VisualViewport */
@@ -381,8 +387,8 @@ export async function runBaselineCapture(options = {}) {
         failures += 1;
       }
     }
+    console.log(`[SnapDrift] Captured ${routes.length - failures}/${routes.length} route(s) in ${((Date.now() - captureStartedAt) / 1000).toFixed(1)}s.`);
   } finally {
-    console.log(`[SnapDrift] Captured ${routes.length} route(s) in ${((Date.now() - captureStartedAt) / 1000).toFixed(1)}s.`);
     await browser.close();
     results.finishedAt = new Date().toISOString();
     results.passed = failures === 0;
