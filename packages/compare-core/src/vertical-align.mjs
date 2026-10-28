@@ -13,6 +13,11 @@ export const MAX_ALIGNMENT_ROWS = 100_000;
 // Keep the synchronous Myers search below a bounded sub-second budget for
 // dissimilar tall captures. Larger edit groups conservatively use v1.
 export const MAX_ALIGNMENT_EDIT_LENGTH = 2_048;
+// A row repeated this often on the other side (page background, card padding,
+// borders) carries no movement evidence: where it lands inside a run of
+// identical rows makes no visible difference. Rarer rows still trigger the
+// ambiguity fallback.
+export const MIN_STRUCTURAL_ROW_REPEATS = 16;
 export const COMPARISON_ROW_KINDS = /** @type {const} */ (['matched', 'changed', 'inserted', 'deleted']);
 export const COMPARISON_FALLBACK_REASONS = /** @type {const} */ (['width-mismatch', 'alignment-limit', 'ambiguous', 'verification-failed', 'ignore-regions']);
 
@@ -73,6 +78,32 @@ function rowsEqual(baseline, current, baselineY, currentY) {
 }
 
 /**
+ * @param {string[]} fingerprints
+ * @returns {Map<string, number>}
+ */
+function countFingerprints(fingerprints) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const fingerprint of fingerprints) {
+    counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * An unmatched row is ambiguous when it also occurs on the opposite side but
+ * not often enough to be a structural row.
+ *
+ * @param {Map<string, number>} oppositeCounts
+ * @param {string} fingerprint
+ * @returns {boolean}
+ */
+function isAmbiguousRow(oppositeCounts, fingerprint) {
+  const repeats = oppositeCounts.get(fingerprint) ?? 0;
+  return repeats > 0 && repeats < MIN_STRUCTURAL_ROW_REPEATS;
+}
+
+/**
  * Add a segment and coalesce adjacent segments with the same meaning.
  *
  * @param {AlignmentSegment[]} segments
@@ -129,8 +160,8 @@ export function alignRows(baseline, current) {
     return { kind: 'fallback', reason: 'alignment-limit' };
   }
 
-  const baselineFingerprintSet = new Set(baselineFingerprints);
-  const currentFingerprintSet = new Set(currentFingerprints);
+  const baselineFingerprintCounts = countFingerprints(baselineFingerprints);
+  const currentFingerprintCounts = countFingerprints(currentFingerprints);
   /** @type {AlignmentSegment[]} */
   const segments = [];
   let baselineIndex = 0;
@@ -191,8 +222,8 @@ export function alignRows(baseline, current) {
     // there is no reliable way to tell movement from insertion. Fall back to
     // coordinate comparison instead of painting an arbitrary occurrence green.
     if (
-      unmatchedAddedTail.some((fingerprint) => baselineFingerprintSet.has(fingerprint)) ||
-      unmatchedRemovedTail.some((fingerprint) => currentFingerprintSet.has(fingerprint))
+      unmatchedAddedTail.some((fingerprint) => isAmbiguousRow(baselineFingerprintCounts, fingerprint)) ||
+      unmatchedRemovedTail.some((fingerprint) => isAmbiguousRow(currentFingerprintCounts, fingerprint))
     ) {
       return { kind: 'fallback', reason: 'ambiguous' };
     }

@@ -1,0 +1,17 @@
+{
+  "description": "Browser-based LLM chat page before/after adding a web search tool. The Security & Privacy card grows by 22 rows (14 text rows plus 8 rows of card padding), shifting the rest of the page down.",
+  "pair": {
+    "baseline": { "file": "baseline.png", "sha256": "bf66b95ba64fa4ac1551312e527245f559acd7b08f30a91a04f9c8b4f5086f9e", "width": 1440, "height": 3364 },
+    "current": { "file": "current.png", "sha256": "6d127c841cade9375268b57db7374d56bda8f5e603eecbcbf208b49939365cc7", "width": 1440, "height": 3386 }
+  },
+  "preFix": {
+    "implementation": "compareImages alignment=vertical before structural rows were exempt from the ambiguity guard",
+    "comparison": {
+      "policyVersion": 2,
+      "mode": "coordinate-fallback",
+      "fallbackReason": "ambiguous",
+      "differentPixels": 527929,
+      "totalPixels": 4875840
+    }
+  }
+}

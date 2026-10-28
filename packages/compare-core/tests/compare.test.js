@@ -1,5 +1,5 @@
 import pngjs from 'pngjs';
-import { compareBuffers, compareImages, generateDiffImage, compareWithIgnoreRegions } from '../src/index.mjs';
+import { compareBuffers, compareImages, generateDiffImage, compareWithIgnoreRegions, MIN_STRUCTURAL_ROW_REPEATS } from '../src/index.mjs';
 
 const { PNG } = pngjs;
 
@@ -418,6 +418,18 @@ describe('@snapdrift/compare-core — compareImages', () => {
 
     const result = compareImages(baseline, current, { alignment: 'vertical' });
     expect(result.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'ambiguous' });
+  });
+
+  test('v2 ignores an inserted row that repeats as often as a structural row', () => {
+    const withRepeats = (/** @type {number} */ count) => rowPng([1, ...Array(count).fill(99), 2]);
+
+    const justBelow = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS - 1), withRepeats(MIN_STRUCTURAL_ROW_REPEATS), { alignment: 'vertical' });
+    expect(justBelow.comparison).toMatchObject({ mode: 'coordinate-fallback', fallbackReason: 'ambiguous' });
+
+    const atThreshold = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS), withRepeats(MIN_STRUCTURAL_ROW_REPEATS + 1), { alignment: 'vertical' });
+    expect(atThreshold.comparison).toMatchObject({ mode: 'vertical-aligned' });
+    expect(atThreshold.comparison.rowMapping.filter((segment) => segment.kind === 'inserted')).toHaveLength(1);
+    expect(atThreshold.differentPixels).toBe(4);
   });
 
   test('v2 does not treat paired rows as ambiguous when a duplicate row is deleted', () => {

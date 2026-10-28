@@ -144,6 +144,7 @@ export class ComparisonTooLargeError extends Error {
 export const MAX_COMPARISON_PIXELS: number;
 export const MAX_ALIGNMENT_ROWS: number;
 export const MAX_ALIGNMENT_EDIT_LENGTH: number;
+export const MIN_STRUCTURAL_ROW_REPEATS: number;
 
 export function compareBuffers(baselineBuffer: Buffer, currentBuffer: Buffer): CompareBuffersResult;
 /** Metrics-only overload: `diffImageBuffer` is not rendered. */

@@ -371,11 +371,12 @@ The Snap client never retries 4xx and never falls back, even when `onUnavailable
 **Screenshots have different dimensions**  
 SnapDrift compares the top-left-aligned union canvas by default. Policy v2 can
 align equal-width rows so unchanged content after an insertion is not painted
-as drift; width changes, ignored regions, ambiguous rows, and resource limits
-fall back to coordinate comparison. Either policy records the route in
-`changed[]`, and local runs write a diff PNG. Refresh the baseline after an
-intentional change when you want future runs to return to equal-size
-comparisons.
+as drift; width changes, ignored regions, ambiguous rows (an inserted or
+deleted row that also appears elsewhere but is not a repeated padding or
+background row), and resource limits fall back to coordinate comparison.
+Either policy records the route in `changed[]`, and local runs write a diff
+PNG. Refresh the baseline after an intentional change when you want future
+runs to return to equal-size comparisons.
 
 **A route appears in `errors[]`**  
 Capture failed before comparison. Confirm the app is fully ready and reachable before SnapDrift runs.
