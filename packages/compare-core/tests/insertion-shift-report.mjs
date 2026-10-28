@@ -150,6 +150,8 @@ for (let y = 5315; y < 5318; y += 1) {
 
 console.log(JSON.stringify({
   mode: rendered.comparison.mode,
+  alignmentStrategy: rendered.comparison.alignmentStrategy ?? null,
+  tolerance: rendered.comparison.tolerance ?? null,
   fallbackReason: rendered.comparison.fallbackReason ?? null,
   dimensionsChanged: rendered.comparison.dimensionsChanged,
   differentPixels: rendered.differentPixels,

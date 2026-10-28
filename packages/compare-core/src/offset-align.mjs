@@ -465,12 +465,22 @@ function collapseOffsetPath(costs, abstain) {
 }
 
 /**
+ * Per-row `hotRuns` computed at one recorded offset. `analyzeOffsetRuns` fills
+ * this once and reuses it in `summarizeIntervals`; a row whose final offset
+ * differs from the cached one is recomputed there.
+ *
+ * @typedef {{ offset: number, runs: { noise: number, structured: number, structuredHot: number } }} OffsetHotRunsCacheEntry
+ * @typedef {(OffsetHotRunsCacheEntry | undefined)[]} OffsetHotRunsCache
+ */
+
+/**
  * @param {DecodedPng} baseline
  * @param {DecodedPng} current
  * @param {OffsetRow[]} rows
+ * @param {OffsetHotRunsCache} hotRunsCache
  * @returns {OffsetInterval[]}
  */
-function summarizeIntervals(baseline, current, rows) {
+function summarizeIntervals(baseline, current, rows, hotRunsCache) {
   /** @type {OffsetInterval[]} */
   const runs = [];
   for (let index = 0; index < rows.length;) {
@@ -487,7 +497,13 @@ function summarizeIntervals(baseline, current, rows) {
     let structuredRows = 0;
     if (kind === 'stable' && offset !== null) {
       for (let y = start; y < index; y += 1) {
-        const runsAtOffset = hotRuns(baseline, current, y, offset);
+        // The run's rows share `offset`, but a merged content interval can
+        // alternate ±1 offsets. A row's cache entry was computed at its own
+        // offset, so only reuse it when that offset still matches.
+        const cached = hotRunsCache[y];
+        const runsAtOffset = cached && cached.offset === offset
+          ? cached.runs
+          : hotRuns(baseline, current, y, offset);
         if (runsAtOffset.noise >= HIGHLIGHT_RUN) {
           highlightRows += 1;
         }
@@ -606,11 +622,16 @@ export function analyzeOffsetRuns(baseline, current) {
   }
 
   const refined = refineNeighborOffsets(collapseOffsetPath(costs, abstain), costs);
-  const rows = absorbShortStable(bridgeShortGaps(refined.map((row) => {
+  /** @type {OffsetHotRunsCache} */
+  const hotRunsCache = new Array(baseline.height);
+  const residualFiltered = refined.map((row) => {
     if (row.kind !== 'stable' || row.offset === null) {
       return row;
     }
+    // Pass 1: one full-width scan per stable row, kept for the interval stats
+    // below instead of scanning those rows again.
     const residual = hotRuns(baseline, current, row.y, row.offset);
+    hotRunsCache[row.y] = { offset: row.offset, runs: residual };
     if (residual.structuredHot > STRUCTURED_HOT_LIMIT) {
       return {
         y: row.y,
@@ -622,12 +643,22 @@ export function analyzeOffsetRuns(baseline, current) {
       };
     }
     return row;
-  })));
+  });
+  // Bridging or absorbing can change a row's kind or offset after pass 1.
+  // Scan only the final stable rows whose cache entry is absent or stale.
+  const rows = absorbShortStable(bridgeShortGaps(residualFiltered));
+  for (let y = 0; y < rows.length; y += 1) {
+    const row = rows[y];
+    if (row.kind !== 'stable' || row.offset === null) continue;
+    const cached = hotRunsCache[y];
+    if (cached && cached.offset === row.offset) continue;
+    hotRunsCache[y] = { offset: row.offset, runs: hotRuns(baseline, current, row.y, row.offset) };
+  }
 
   return {
     kind: 'mapped',
     rows,
-    contentIntervals: summarizeIntervals(baseline, current, rows),
+    contentIntervals: summarizeIntervals(baseline, current, rows, hotRunsCache),
     scoreMs: performance.now() - started
   };
 }
