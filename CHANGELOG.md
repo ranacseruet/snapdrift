@@ -11,6 +11,7 @@
 ### Performance
 
 - `@snapdrift/compare-core`: policy v2 metrics-only comparisons (`renderDiffImage: false`) skip the per-pixel loop for byte-identical matched row runs and count them straight into the denominator.
+- `@snapdrift/compare-core`: offset-run analysis caches the pass-1 full-width `hotRuns` scan for each stable row and reuses it when summarizing content intervals, instead of scanning every stable row a second time. A row whose offset changes after gap bridging or sliver absorption is scanned once at its final offset. Interval `highlightRows`/`structuredRows`/`meanCost`, row plans, and metrics are unchanged. Measured on the insertion-shift fixture (1440×5622 baseline, 1440×5644 current) in plain Node, best of 3 alternating runs: `analyzeOffsetRuns` 2518.1 ms -> 2500.3 ms (-0.7%); `compareImages(renderDiffImage: false)` 2924.3 ms -> 2862.7 ms (-2.1%).
 
 ## 0.16.1 - 2026-10-27
 

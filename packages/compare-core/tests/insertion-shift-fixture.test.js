@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import pngjs from 'pngjs';
 import { compareOffsetAligned } from '../src/compare-images.mjs';
 import { compareImages } from '../src/index.mjs';
-import { analyzeOffsetRuns, MAX_OFFSET_MATRIX_BYTES, OFFSET_MAX, OFFSET_MIN } from '../src/offset-align.mjs';
+import { analyzeOffsetRuns, HIGHLIGHT_RUN, hotRuns, MAX_OFFSET_MATRIX_BYTES, OFFSET_MAX, OFFSET_MIN } from '../src/offset-align.mjs';
 import { syntheticAlignmentCases } from './synthetic-alignment-cases.mjs';
 
 const { PNG } = pngjs;
@@ -98,6 +98,34 @@ describe('insertion-shift fixture', () => {
       const rows = mapped.rows.slice(interval.start, interval.end);
       const rowMean = rows.reduce((sum, row) => sum + row.cost, 0) / rows.length;
       expect(interval.meanCost).toBeCloseTo(rowMean, 12);
+    }
+  }, 30_000);
+
+  test('interval highlight and structured counts equal a direct scan of final rows', async () => {
+    const baseline = PNG.sync.read(await readFixture('baseline.png'));
+    const current = PNG.sync.read(await readFixture('current.png'));
+    const mapped = analyzeOffsetRuns(baseline, current);
+    expect(mapped.kind).toBe('mapped');
+    if (mapped.kind !== 'mapped') return;
+    expect(mapped.contentIntervals.length).toBeGreaterThan(0);
+    expect(mapped.contentIntervals.some((interval) => interval.highlightRows > 0)).toBe(true);
+
+    // The cache reuse must be invisible in the diagnostic output: recompute
+    // `hotRuns` for every final stable row at its own recorded offset. Merged
+    // intervals alternate ±1 offsets, so the scan follows each row, not the
+    // interval's first offset.
+    for (const interval of mapped.contentIntervals) {
+      let highlightRows = 0;
+      let structuredRows = 0;
+      for (let y = interval.start; y < interval.end; y += 1) {
+        const row = mapped.rows[y];
+        if (row.kind !== 'stable' || row.offset === null) continue;
+        const runsAtOffset = hotRuns(baseline, current, row.y, row.offset);
+        if (runsAtOffset.noise >= HIGHLIGHT_RUN) highlightRows += 1;
+        if (runsAtOffset.structured >= 4) structuredRows += 1;
+      }
+      expect(interval.highlightRows).toBe(highlightRows);
+      expect(interval.structuredRows).toBe(structuredRows);
     }
   }, 30_000);
 });
