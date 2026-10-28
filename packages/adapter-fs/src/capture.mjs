@@ -6,6 +6,7 @@ import os from 'node:os';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
+import { readPngDimensions } from '@snapdrift/compare-core';
 
 import { loadSnapdriftConfig, readFirstDefinedEnv, SNAPDRIFT_CAPTURE_CONCURRENCY } from './config.mjs';
 import { createConcurrencyLimiter } from './concurrency.mjs';
@@ -74,35 +75,23 @@ export function assertNavigationOk(response, route, targetUrl) {
   }
 }
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const PNG_IHDR_END = 24;
-
 /**
- * Reads width/height from a PNG's IHDR chunk without decoding pixel data.
+ * Reads width/height from a screenshot's PNG header without decoding it.
  *
  * A full `PNG.sync.read` inflates the whole image synchronously, which blocks
- * the event loop for every in-flight route, just to learn two integers. The
- * signature and IHDR chunk-type checks keep a truncated or non-PNG buffer from
- * being recorded as a valid screenshot.
+ * the event loop for every in-flight route, just to learn two integers. A
+ * buffer without a valid header is rejected so it is never recorded as a valid
+ * screenshot; pixel data is not validated.
  *
  * @param {Buffer} buffer
  * @returns {{ width: number, height: number }}
  */
-export function readPngDimensions(buffer) {
-  if (
-    buffer.length < PNG_IHDR_END ||
-    !buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) ||
-    buffer.toString('ascii', 12, 16) !== 'IHDR'
-  ) {
-    throw new Error('Screenshot is not a valid PNG (missing signature or IHDR chunk).');
+export function requirePngDimensions(buffer) {
+  const dimensions = readPngDimensions(buffer);
+  if (!dimensions) {
+    throw new Error('Screenshot is not a valid PNG (missing signature or IHDR chunk, or invalid dimensions).');
   }
-  const width = buffer.readUInt32BE(16);
-  const height = buffer.readUInt32BE(20);
-  // PNG spec (RFC 2083 §4.1.1): zero is invalid for either dimension.
-  if (width === 0 || height === 0) {
-    throw new Error(`Screenshot PNG header declares invalid dimensions ${width}x${height}.`);
-  }
-  return { width, height };
+  return dimensions;
 }
 
 /** @typedef {import('../../manifest/types/index').VisualViewport} VisualViewport */
@@ -179,7 +168,7 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
       path: absoluteImagePath,
       ...screenshotSettings
     });
-    const { width, height } = readPngDimensions(screenshotBuffer);
+    const { width, height } = requirePngDimensions(screenshotBuffer);
 
     return {
       id: route.id,

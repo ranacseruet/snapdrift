@@ -3614,6 +3614,29 @@ describe('SnapProvider.exportBaselines()', () => {
     expect(exported.engine).toEqual({ name: 'snapdrift-local', version: 'v0' });
   });
 
+  it.each([
+    ['a non-PNG body', () => Buffer.from('not-a-png-at-all-not-a-png-at-all')],
+    ['a PNG header with zero dimensions', () => tinyPng(0, 0)]
+  ])('falls back to the viewport descriptor dimensions for %s', async (_label, makeBytes) => {
+    const tar = buildTar([
+      {
+        name: 'manifest.json',
+        body: JSON.stringify({ project: { id: 'test-project-42', slug: 'test' }, baselines: [makeBaseline()] })
+      },
+      { name: 'bsl_export_1/images/aaaa1111bbbb2222.png', body: makeBytes() },
+      { name: 'bsl_export_1/capture_profile.json', body: JSON.stringify({ schemaVersion: 1, engine: { name: 'snapdrift-local', version: 'v0' } }) }
+    ]);
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => tarResponse(tar),
+      sleepFn: () => Promise.resolve()
+    });
+
+    const exported = await provider.exportBaselines();
+
+    expect(exported.manifest.screenshots[0]).toMatchObject({ width: 1440, height: 900 });
+    expect(exported.results.routes[0]).toMatchObject({ width: 1440, height: 900 });
+  });
+
   it('picks the newest accepted baseline of two by createdAt', async () => {
     const png = tinyPng(1, 1);
     const older = makeBaseline({

@@ -1,5 +1,5 @@
 import pngjs from 'pngjs';
-import { runBaselineCapture, assertNavigationOk, readPngDimensions } from '../src/capture.mjs';
+import { runBaselineCapture, assertNavigationOk, requirePngDimensions } from '../src/capture.mjs';
 
 const { PNG } = pngjs;
 
@@ -34,34 +34,23 @@ describe('@snapdrift/adapter-fs — capture', () => {
     });
   });
 
-  describe('readPngDimensions', () => {
-    test('reads width and height from a real PNG without decoding it', () => {
-      const png = new PNG({ width: 7, height: 13 });
-      expect(readPngDimensions(PNG.sync.write(png))).toEqual({ width: 7, height: 13 });
+  describe('requirePngDimensions', () => {
+    test('returns width and height for a real PNG', () => {
+      expect(requirePngDimensions(PNG.sync.write(new PNG({ width: 7, height: 13 })))).toEqual({ width: 7, height: 13 });
     });
 
-    test('rejects a buffer shorter than the IHDR chunk', () => {
-      const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
-      expect(() => readPngDimensions(png.subarray(0, 20))).toThrow(/not a valid PNG/);
-    });
-
-    test('rejects a buffer without the PNG signature', () => {
-      expect(() => readPngDimensions(Buffer.alloc(64))).toThrow(/not a valid PNG/);
-    });
-
+    // Header validation itself is covered in @snapdrift/compare-core; these
+    // pin that capture turns a rejected header into a thrown route failure.
     test.each([
-      ['width', 16],
-      ['height', 20]
-    ])('rejects a PNG header declaring zero %s', (_label, offset) => {
-      const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
-      png.writeUInt32BE(0, offset);
-      expect(() => readPngDimensions(png)).toThrow(/invalid dimensions/);
-    });
-
-    test('rejects a PNG whose first chunk is not IHDR', () => {
-      const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
-      png.write('IDAT', 12, 'ascii');
-      expect(() => readPngDimensions(png)).toThrow(/not a valid PNG/);
+      ['truncated', () => PNG.sync.write(new PNG({ width: 2, height: 2 })).subarray(0, 20)],
+      ['no signature', () => Buffer.alloc(64)],
+      ['zero width', () => {
+        const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
+        png.writeUInt32BE(0, 16);
+        return png;
+      }]
+    ])('throws for a %s buffer so the route fails and is retried', (_label, makeBuffer) => {
+      expect(() => requirePngDimensions(makeBuffer())).toThrow(/not a valid PNG/);
     });
   });
 });

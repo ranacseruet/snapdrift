@@ -2,6 +2,7 @@
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const MIN_PNG_HEADER_LENGTH = 24;
+const MAX_PNG_DIMENSION = 2 ** 31 - 1;
 
 /**
  * @param {import('../types/index.d.ts').IgnoreRegion[]} regions
@@ -76,11 +77,13 @@ export function createDimensionMismatchError(baselinePng, currentPng) {
 
 /**
  * Parse the IHDR dimensions from a PNG buffer without decoding the image.
- * Returns undefined when the buffer is not a complete PNG header, so callers
- * can fall back to the decoder's own validation errors.
+ * Returns undefined when the buffer is not a complete PNG header (too short, no
+ * PNG signature, first chunk is not IHDR) or declares a dimension the PNG spec
+ * forbids (zero, or above 2^31 - 1), so callers can fall back to the decoder's
+ * own validation errors or reject the buffer as they see fit.
  *
  * @param {Buffer} buffer
- * @returns {{ width: number, height: number } | undefined}
+ * @returns {import('../types/index.d.ts').PngDimensions | undefined}
  */
 export function readPngDimensions(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < MIN_PNG_HEADER_LENGTH) {
@@ -94,8 +97,11 @@ export function readPngDimensions(buffer) {
   if (buffer.toString('ascii', 12, 16) !== 'IHDR') {
     return undefined;
   }
-  return {
-    width: buffer.readUInt32BE(16),
-    height: buffer.readUInt32BE(20)
-  };
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  // RFC 2083 section 4.1.1: zero is invalid and the maximum is 2^31 - 1.
+  if (width === 0 || height === 0 || width > MAX_PNG_DIMENSION || height > MAX_PNG_DIMENSION) {
+    return undefined;
+  }
+  return { width, height };
 }

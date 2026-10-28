@@ -10,6 +10,14 @@
 - GitHub Actions install only Playwright's Chromium headless shell (`playwright install --with-deps --only-shell chromium`) instead of full Chromium plus the shell. Capture already launches with `headless: true`, which uses the shell, so rendering is unchanged. Measured on `node:22-bookworm` with Playwright 1.63.0: install 22s -> 15s, browser cache 662 MB -> 269 MB, identical browser version and screenshot bytes.
 - Capture and upload phases log their duration (`Captured N route(s) in Xs`, `Uploaded N screenshot(s) to Snap in Xs`).
 
+### Features
+
+- `@snapdrift/compare-core` exports `readPngDimensions(buffer)`, which reads width/height from a PNG's IHDR chunk without decoding pixels and returns `undefined` for a buffer that is too short, lacks the PNG signature, does not start with IHDR, or declares a zero or above-2^31-1 dimension.
+
+### Refactors
+
+- Local capture (`@snapdrift/adapter-fs`) and the Snap baseline export (`lib/snap-provider.mjs`) now use the shared `readPngDimensions` instead of their own copies. The Snap baseline export is slightly stricter than before: an exported image whose header is not a valid IHDR (or declares a zero dimension) falls back to the viewport descriptor's dimensions instead of being recorded with the header's values. Requires the `@snapdrift/compare-core` release that adds the export; dependency floors are raised at release time. Closes #194.
+
 ## 0.16.0 - 2026-10-05
 
 Workspace releases this version:

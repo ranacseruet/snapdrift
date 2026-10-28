@@ -164,3 +164,16 @@ export function compareWithIgnoreRegions(baselineBuffer: Buffer, currentBuffer: 
  * `addedColor`/`removedColor` do not apply because equal dimensions preclude one-sided pixels.
  */
 export function generateDiffImage(baselineBuffer: Buffer, currentBuffer: Buffer, options?: DiffImageOptions): Buffer;
+
+export interface PngDimensions {
+  width: number;
+  height: number;
+}
+
+/**
+ * Reads width/height from a PNG's IHDR chunk without decoding pixel data.
+ * Returns `undefined` when the buffer is too short, lacks the PNG signature,
+ * does not start with an IHDR chunk, or declares a zero or out-of-range
+ * dimension. Pixel data is not validated.
+ */
+export function readPngDimensions(buffer: Buffer): PngDimensions | undefined;
