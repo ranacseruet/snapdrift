@@ -195,7 +195,7 @@ describe('SnapDrift action contracts', () => {
             expect(install.run).toContain('install --with-deps --only-shell chromium');
         }
         const captureSource = await fs.readFile('packages/adapter-fs/src/capture.mjs', 'utf8');
-        expect(captureSource).toMatch(/launchSettings = \{ headless: true,/);
+        expect(captureSource).toMatch(/launchSettings\s*=\s*\{[^}]*\bheadless:\s*true\b/);
         expect(captureSource).not.toMatch(/channel\s*:/);
     });
 
