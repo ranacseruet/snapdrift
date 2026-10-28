@@ -61,12 +61,15 @@ export interface ComparisonMetadata {
   /**
    * Strategy that produced an aligned result. `exact` matched byte-identical
    * rows with no tolerance; `offset` mapped piecewise vertical-offset runs and
-   * used a per-channel highlight tolerance. Absent for coordinate fallback.
+   * used a per-channel highlight tolerance for stable runs. Absent for
+   * coordinate fallback.
    */
   alignmentStrategy?: 'exact' | 'offset';
   /**
-   * Maximum per-channel delta that stays matched on the offset strategy
-   * (`STRUCTURED_DELTA`, 32). Present only with `alignmentStrategy: 'offset'`.
+   * Maximum per-channel delta that stays matched on stable offset-run rows
+   * (`STRUCTURED_DELTA`, 32). Local-mismatch residual bands use `NOISE_DELTA`
+   * (2) instead, so this field does not describe those rows. Present only with
+   * `alignmentStrategy: 'offset'`.
    */
   tolerance?: number;
   rowMapping?: ComparisonRowMapping[];

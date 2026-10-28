@@ -14,7 +14,7 @@
 
 ### Features
 
-- `@snapdrift/compare-core`: policy v2 aligned comparison metadata now identifies the row-alignment strategy (`alignmentStrategy: "exact" | "offset"`) and records the offset path's per-channel tolerance (`tolerance: 32`). `mode` remains `"vertical-aligned"`; a coordinate fallback carries neither field. Additive metadata so consumers can tell byte-identical exact matches from tolerant offset-run matches. Closes #200.
+- `@snapdrift/compare-core`: policy v2 aligned comparison metadata now identifies the row-alignment strategy (`alignmentStrategy: "exact" | "offset"`) and records the stable offset-run per-channel tolerance (`tolerance: 32`). Local-mismatch residual bands use a stricter `NOISE_DELTA` floor (2) and are not covered by `tolerance`. `mode` remains `"vertical-aligned"`; a coordinate fallback carries neither field. Additive metadata so consumers can tell byte-identical exact matches from tolerant stable-run matches and know residual bands are stricter. Closes #200.
 
 ## 0.16.1 - 2026-10-27
 

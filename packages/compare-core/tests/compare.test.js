@@ -1,6 +1,7 @@
 import pngjs from 'pngjs';
 import { compareBuffers, compareImages, generateDiffImage, compareWithIgnoreRegions, MIN_STRUCTURAL_ROW_REPEATS } from '../src/index.mjs';
 import { compareOffsetAligned } from '../src/compare-images.mjs';
+import { NOISE_DELTA, pixelIsHighlighted, STRUCTURED_DELTA } from '../src/offset-align.mjs';
 
 const { PNG } = pngjs;
 
@@ -596,6 +597,17 @@ describe('@snapdrift/compare-core — compareImages', () => {
       alignmentStrategy: 'offset',
       tolerance: 32
     });
+  });
+
+  test('offset metadata tolerance covers stable runs while residual bands are stricter', () => {
+    expect(STRUCTURED_DELTA).toBe(32);
+    expect(NOISE_DELTA).toBe(2);
+
+    // A 20-per-channel delta stays matched on a stable tolerant row but is
+    // highlighted inside a local-mismatch residual band. `tolerance: 32` in the
+    // metadata therefore describes stable runs only.
+    expect(pixelIsHighlighted(20, 'tolerant')).toBe(false);
+    expect(pixelIsHighlighted(20, 'residual')).toBe(true);
   });
 
   test('compares top-left overlap without counting empty union corners', () => {

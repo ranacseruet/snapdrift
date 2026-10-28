@@ -217,6 +217,9 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
     policyVersion: 2,
     mode: /** @type {const} */ ('vertical-aligned'),
     alignmentStrategy: /** @type {const} */ ('offset'),
+    // Stable offset-run rows use the 32-per-channel highlight rule. Local
+    // residual bands between stable runs use the stricter NOISE_DELTA floor,
+    // so this field describes stable runs only.
     tolerance: STRUCTURED_DELTA,
     rowMapping: segments
   });
