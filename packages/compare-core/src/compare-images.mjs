@@ -245,6 +245,10 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
  * vertical-offset runs supply the row plan. The result uses one output row
  * for every matched, changed, inserted, or deleted source row.
  *
+ * An aligned canvas past `maxPixels` falls back as `alignment-limit` so the
+ * caller can still use coordinate comparison. The coordinate union itself
+ * still throws when it exceeds the limit.
+ *
  * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
  * @param {{ data: Uint8Array, width: number, height: number }} currentPng
  * @param {{
@@ -271,15 +275,7 @@ function compareAlignedImages(baselinePng, currentPng, options) {
   const canvasWidth = baselinePng.width;
   const canvasHeight = alignment.height;
   if (canvasWidth * canvasHeight > options.maxPixels) {
-    throw new ComparisonTooLargeError(
-      baselinePng.width,
-      baselinePng.height,
-      currentPng.width,
-      currentPng.height,
-      canvasWidth,
-      canvasHeight,
-      options.maxPixels
-    );
+    return { kind: 'fallback', reason: 'alignment-limit' };
   }
 
   const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
