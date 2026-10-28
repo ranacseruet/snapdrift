@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.17.0 - 2026-10-28
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.8.0 — policy v2 offset-run alignment suppresses mobile rendering noise: structural padding is skipped, compensating duplicate bands are recognized, unresolved shift-boundary bands split into ink plus padding, localized glyph/badge displacement requires background and foreground evidence, a stable row keeps its own offset unless its own cost exceeds `LOCAL_MISMATCH_COST`, and the offset scoring budget admits a 1170×17187 pair. Ambiguous exact alignment tries the offset mapping before coordinate fallback.
+- `@snapdrift/adapter-fs` 1.7.2 — now depends on `@snapdrift/compare-core ^1.8.0` for the released comparison engine.
+
+`@snapdrift/manifest` stays 1.8.0 and `@snapdrift/adapter-report-md` stays 1.4.0. Root floors move to `@snapdrift/compare-core ^1.8.0` and `@snapdrift/adapter-fs ^1.7.2`; the previous `adapter-fs` 1.7.1 and `compare-core` 1.7.0 do not satisfy them, so installing `snapdrift` 0.17.0 always gets the released engine. The dispatcher pins `2d93a54`, the #212 merge commit on `main`, which includes the newest commit touching `actions/` (`1cbf629`, the shell-only Playwright install).
+
 ### Fixes
 
 - `@snapdrift/compare-core`: policy v2 (`alignment: 'vertical'`) no longer falls back to coordinate comparison with `fallbackReason: 'ambiguous'` just because a page grew by rows that match repeated card padding or background rows elsewhere in the image. An unmatched row now counts as ambiguous only when it occurs fewer than `MIN_STRUCTURAL_ROW_REPEATS` (16, newly exported) times on either side. On a real 1440x3386 page screenshot pair where one card grew by 22 rows, this took the reported drift from 10.83% in coordinate fallback to 1.43% aligned.
