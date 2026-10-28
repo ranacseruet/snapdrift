@@ -432,6 +432,25 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(atThreshold.differentPixels).toBe(4);
   });
 
+  test('v2 aligns a card that grows by text rows and padding rows repeated elsewhere on the page', () => {
+    const padding = (/** @type {number} */ count) => Array(count).fill(7);
+    const textRows = (/** @type {number} */ start, /** @type {number} */ count) => Array.from({ length: count }, (_, index) => start + index);
+    // Two cards of identical padding rows (24 copies, above the structural threshold) around unique text.
+    const baseline = rowPng([...textRows(10, 3), ...padding(12), ...textRows(20, 4), ...padding(12), ...textRows(30, 3)]);
+    // The second card gains 14 text rows and 8 padding rows, shifting the footer down by 22.
+    const current = rowPng([...textRows(10, 3), ...padding(12), ...textRows(20, 4), ...textRows(100, 14), ...padding(20), ...textRows(30, 3)]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    const rows = (/** @type {string} */ kind) =>
+      result.comparison.rowMapping.filter((segment) => segment.kind === kind).reduce((sum, segment) => sum + segment.length, 0);
+
+    expect(result.comparison).toMatchObject({ mode: 'vertical-aligned', canvas: { width: 4, height: 22 + 34 } });
+    expect(result.comparison.fallbackReason).toBeUndefined();
+    expect(rows('inserted')).toBe(22);
+    expect(rows('deleted')).toBe(0);
+    expect(result.differentPixels).toBe(22 * 4);
+  });
+
   test('v2 aligns a structural gap that grows from fewer repeats than the threshold', () => {
     const withGap = (/** @type {number} */ count) => rowPng([1, ...Array(count).fill(99), 2]);
 

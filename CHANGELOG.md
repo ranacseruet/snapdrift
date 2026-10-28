@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- `@snapdrift/compare-core`: policy v2 (`alignment: 'vertical'`) no longer falls back to coordinate comparison with `fallbackReason: 'ambiguous'` just because a page grew by rows that match repeated card padding or background rows elsewhere in the image. An unmatched row now counts as ambiguous only when it occurs fewer than `MIN_STRUCTURAL_ROW_REPEATS` (16, newly exported) times on either side. On the checked-in `structural-row-insertion` pair (a card grew by 22 rows) this takes the diff from 527,929 changed pixels in coordinate fallback to 69,928 aligned. A few 1 px green/red rows remain where the render shifted by one pixel; those are real raster differences.
+- `@snapdrift/compare-core`: policy v2 (`alignment: 'vertical'`) no longer falls back to coordinate comparison with `fallbackReason: 'ambiguous'` just because a page grew by rows that match repeated card padding or background rows elsewhere in the image. An unmatched row now counts as ambiguous only when it occurs fewer than `MIN_STRUCTURAL_ROW_REPEATS` (16, newly exported) times on either side. On a real 1440x3386 page screenshot pair where one card grew by 22 rows, this took the reported drift from 10.83% in coordinate fallback to 1.43% aligned.
 
 ## 0.16.1 - 2026-10-27
 
