@@ -1,5 +1,7 @@
 import pngjs from 'pngjs';
 import { compareBuffers, compareImages, generateDiffImage, compareWithIgnoreRegions, MIN_STRUCTURAL_ROW_REPEATS } from '../src/index.mjs';
+import { compareOffsetAligned } from '../src/compare-images.mjs';
+import { NOISE_DELTA, pixelIsHighlighted, STRUCTURED_DELTA } from '../src/offset-align.mjs';
 
 const { PNG } = pngjs;
 
@@ -19,6 +21,34 @@ function solidPng(width, height, color) {
     png.data[i + 3] = color[3];
   }
   return PNG.sync.write(png);
+}
+
+/**
+ * Create a decoded PNG whose rows carry deterministic pseudo-random noise.
+ * @param {number} width
+ * @param {number} height
+ * @param {number} seed
+ * @returns {import('pngjs').PNG}
+ */
+function noisePng(width, height, seed) {
+  const png = new PNG({ width, height });
+  let state = seed;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      state = (state * 1103515245 + 12345) >>> 0;
+      const red = 40 + (state % 180);
+      state = (state * 1103515245 + 12345) >>> 0;
+      const green = 40 + (state % 180);
+      state = (state * 1103515245 + 12345) >>> 0;
+      const blue = 40 + (state % 180);
+      const index = (y * width + x) * 4;
+      png.data[index] = red;
+      png.data[index + 1] = green;
+      png.data[index + 2] = blue;
+      png.data[index + 3] = 255;
+    }
+  }
+  return png;
 }
 
 /**
@@ -335,6 +365,7 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.comparison).toMatchObject({
       policyVersion: 2,
       mode: 'vertical-aligned',
+      alignmentStrategy: 'exact',
       canvas: { width: 4, height: 8 },
       rowMapping: [
         { outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 },
@@ -342,6 +373,7 @@ describe('@snapdrift/compare-core — compareImages', () => {
         { outputStart: 5, length: 3, kind: 'matched', baselineStart: 3, currentStart: 5 }
       ]
     });
+    expect(result.comparison.tolerance).toBeUndefined();
     for (const y of [0, 1, 2, 5, 6, 7]) {
       expect([...diffPng.data.slice(y * 16, y * 16 + 4)]).not.toEqual([0, 170, 0, 255]);
       expect([...diffPng.data.slice(y * 16, y * 16 + 4)]).not.toEqual([255, 140, 0, 255]);
@@ -359,6 +391,8 @@ describe('@snapdrift/compare-core — compareImages', () => {
     const diffPng = PNG.sync.read(result.diffImageBuffer);
 
     expect(result.comparison.mode).toBe('vertical-aligned');
+    expect(result.comparison.alignmentStrategy).toBe('exact');
+    expect(result.comparison.tolerance).toBeUndefined();
     expect(result.differentPixels).toBe(8);
     expect([...diffPng.data.slice(2 * 16, 2 * 16 + 4)]).toEqual([0, 170, 0, 255]);
     expect([...diffPng.data.slice(4 * 16, 4 * 16 + 4)]).toEqual([255, 140, 0, 255]);
@@ -404,12 +438,16 @@ describe('@snapdrift/compare-core — compareImages', () => {
 
     const widthFallback = compareImages(baseline, wider, { alignment: 'vertical' });
     expect(widthFallback.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'width-mismatch' });
+    expect(widthFallback.comparison.alignmentStrategy).toBeUndefined();
+    expect(widthFallback.comparison.tolerance).toBeUndefined();
 
     const ignoredFallback = compareImages(baseline, rowPng([10, 200, 20, 30], 4), {
       alignment: 'vertical',
       ignoreRegions: [{ x: 0, y: 1, width: 4, height: 1 }]
     });
     expect(ignoredFallback.comparison).toMatchObject({ policyVersion: 2, mode: 'coordinate-fallback', fallbackReason: 'ignore-regions' });
+    expect(ignoredFallback.comparison.alignmentStrategy).toBeUndefined();
+    expect(ignoredFallback.comparison.tolerance).toBeUndefined();
   });
 
   test('v2 falls back when a repeated row makes insertion location ambiguous', () => {
@@ -479,9 +517,11 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.comparison).toMatchObject({
       policyVersion: 2,
       mode: 'vertical-aligned',
+      alignmentStrategy: 'exact',
       totalPixels: 12,
       rowMapping: [{ outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 }]
     });
+    expect(result.comparison.tolerance).toBeUndefined();
   });
 
   test('v2 metrics are identical when diff rendering is disabled', () => {
@@ -495,6 +535,79 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(metrics.totalPixels).toBe(rendered.totalPixels);
     expect(metrics.mismatchRatio).toBe(rendered.mismatchRatio);
     expect(metrics.comparison).toEqual(rendered.comparison);
+  });
+
+  test('v2 metadata distinguishes exact matches from tolerant offset matches', () => {
+    const width = 64;
+    const inserted = 10;
+    const patchHeight = 10;
+    const patchWidth = 20;
+    const baseline = noisePng(width, 300, 123);
+    const current = new PNG({ width, height: baseline.height + inserted });
+
+    // Insert ten distinct solid rows at the top; the remaining baseline rows shift.
+    for (let y = 0; y < baseline.height; y++) {
+      current.data.set(baseline.data.subarray(y * width * 4, (y + 1) * width * 4), (y + inserted) * width * 4);
+    }
+    for (let y = 0; y < inserted; y++) {
+      const value = 230 + y;
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        current.data[index] = value;
+        current.data[index + 1] = value;
+        current.data[index + 2] = value;
+        current.data[index + 3] = 255;
+      }
+    }
+    // Darken a 20x10 patch on baseline rows 200-209 by 20 per channel. That is
+    // an exact edit, but below the offset path's 32 per-channel tolerance.
+    for (let y = 200; y < 200 + patchHeight; y++) {
+      for (let x = 20; x < 20 + patchWidth; x++) {
+        const index = ((y + inserted) * width + x) * 4;
+        current.data[index] -= 20;
+        current.data[index + 1] -= 20;
+        current.data[index + 2] -= 20;
+      }
+    }
+
+    const baselineBuffer = PNG.sync.write(baseline);
+    const currentBuffer = PNG.sync.write(current);
+    const exact = compareImages(baselineBuffer, currentBuffer, { alignment: 'vertical', renderDiffImage: false });
+    const offset = compareOffsetAligned(baseline, current, {
+      renderDiffImage: false,
+      changedColor: [255, 140, 0, 255],
+      addedColor: [0, 170, 0, 255],
+      removedColor: [255, 0, 0, 255],
+      maxPixels: 32 * 1024 * 1024
+    });
+
+    expect(exact.differentPixels).toBe(840);
+    expect(exact.comparison).toMatchObject({
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'exact',
+      canvas: { width: 64, height: 310 }
+    });
+    expect(exact.comparison.tolerance).toBeUndefined();
+
+    expect(offset.kind).toBe('aligned');
+    if (offset.kind !== 'aligned') return;
+    expect(offset.result.differentPixels).toBe(640);
+    expect(offset.result.comparison).toMatchObject({
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'offset',
+      tolerance: 32
+    });
+  });
+
+  test('offset metadata tolerance covers stable runs while residual bands are stricter', () => {
+    expect(STRUCTURED_DELTA).toBe(32);
+    expect(NOISE_DELTA).toBe(2);
+
+    // A 20-per-channel delta stays matched on a stable tolerant row but is
+    // highlighted inside a local-mismatch residual band. `tolerance: 32` in the
+    // metadata therefore describes stable runs only.
+    expect(pixelIsHighlighted(20, 'tolerant')).toBe(false);
+    expect(pixelIsHighlighted(20, 'residual')).toBe(true);
   });
 
   test('compares top-left overlap without counting empty union corners', () => {
