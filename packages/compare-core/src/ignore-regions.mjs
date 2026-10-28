@@ -2,7 +2,8 @@
 
 import pngjs from 'pngjs';
 
-import { buildIgnoreMask, createDimensionMismatchError, validateIgnoreRegions } from './shared.mjs';
+import { createDimensionMismatchError, validateIgnoreRegions } from './shared.mjs';
+import { compareStrictPixels } from './strict-compare.mjs';
 
 const { PNG } = pngjs;
 
@@ -26,36 +27,11 @@ export function compareWithIgnoreRegions(baselineBuffer, currentBuffer, regions)
     throw createDimensionMismatchError(baselinePng, currentPng);
   }
 
-  const width = baselinePng.width;
-  const height = baselinePng.height;
-  const ignored = buildIgnoreMask(width, height, regions);
-
-  let differentPixels = 0;
-  let totalPixels = 0;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (ignored && ignored[y * width + x]) {
-        continue;
-      }
-      totalPixels += 1;
-      const i = (y * width + x) * 4;
-      if (
-        baselinePng.data[i] !== currentPng.data[i] ||
-        baselinePng.data[i + 1] !== currentPng.data[i + 1] ||
-        baselinePng.data[i + 2] !== currentPng.data[i + 2] ||
-        baselinePng.data[i + 3] !== currentPng.data[i + 3]
-      ) {
-        differentPixels += 1;
-      }
-    }
-  }
-
-  const mismatchRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
+  const { differentPixels, totalPixels, mismatchRatio } = compareStrictPixels(baselinePng, currentPng, { ignoreRegions: regions });
 
   return {
-    width,
-    height,
+    width: baselinePng.width,
+    height: baselinePng.height,
     differentPixels,
     totalPixels,
     mismatchRatio,

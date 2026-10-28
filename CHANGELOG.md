@@ -12,6 +12,10 @@
 
 - `@snapdrift/compare-core`: policy v2 metrics-only comparisons (`renderDiffImage: false`) skip the per-pixel loop for byte-identical matched row runs and count them straight into the denominator.
 
+### Refactors
+
+- `@snapdrift/compare-core`: `compareBuffers`, `compareWithIgnoreRegions`, and `generateDiffImage` now delegate to one internal strict decoded-PNG pixel loop instead of keeping three copies of RGBA equality, ignore-mask handling, and diff painting. Public signatures, dimension-mismatch errors, result shapes, byte-equality and re-encode behavior, ignore gray, highlight color, and the hidden-RGB semantics are unchanged. Closes #203.
+
 ## 0.16.1 - 2026-10-27
 
 Workspace releases this version:

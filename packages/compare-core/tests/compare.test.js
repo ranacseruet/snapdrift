@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import pngjs from 'pngjs';
 import { compareBuffers, compareImages, generateDiffImage, compareWithIgnoreRegions, MIN_STRUCTURAL_ROW_REPEATS } from '../src/index.mjs';
 
@@ -39,6 +40,50 @@ function rowPng(rows, width = 4) {
     }
   });
   return PNG.sync.write(png);
+}
+
+/**
+ * Create a PNG from an explicit per-pixel RGBA palette.
+ * @param {number} width
+ * @param {number} height
+ * @param {[number, number, number, number][]} pixels - Row-major RGBA colors.
+ * @returns {Buffer}
+ */
+function rgbaPng(width, height, pixels) {
+  const png = new PNG({ width, height });
+  pixels.forEach((color, index) => {
+    const offset = index * 4;
+    png.data[offset] = color[0];
+    png.data[offset + 1] = color[1];
+    png.data[offset + 2] = color[2];
+    png.data[offset + 3] = color[3];
+  });
+  return PNG.sync.write(png);
+}
+
+/**
+ * @param {Buffer} buffer
+ * @returns {string}
+ */
+function sha256(buffer) {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Keep only the public metric fields, excluding comparison metadata.
+ * @param {{ width: number, height: number, differentPixels: number, totalPixels: number, mismatchRatio: number, pct: number, pixelsChanged: number }} result
+ * @returns {{ width: number, height: number, differentPixels: number, totalPixels: number, mismatchRatio: number, pct: number, pixelsChanged: number }}
+ */
+function pickMetrics(result) {
+  return {
+    width: result.width,
+    height: result.height,
+    differentPixels: result.differentPixels,
+    totalPixels: result.totalPixels,
+    mismatchRatio: result.mismatchRatio,
+    pct: result.pct,
+    pixelsChanged: result.pixelsChanged
+  };
 }
 
 describe('@snapdrift/compare-core — compareBuffers', () => {
@@ -700,5 +745,231 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(() => compareImages(baseline, baseline, { highlightColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/highlightColor must be an array of four integers/);
     expect(() => compareImages(baseline, baseline, { addedColor: /** @type {any} */ ([-1, 0, 0, 255]) })).toThrow(/addedColor must be an array of four integers/);
     expect(() => compareImages(baseline, baseline, { removedColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(/removedColor must be an array of four integers/);
+  });
+});
+
+describe('@snapdrift/compare-core — shared strict comparator parity', () => {
+  // Captured from the pre-refactor implementation (main 8271935) before the
+  // strict loop was moved into strict-compare.mjs. These pins prove the legacy
+  // exports kept their exact metrics, messages, and encoded diff bytes.
+  const equalBaseline = rgbaPng(3, 2, [
+    [10, 20, 30, 255],
+    [40, 50, 60, 255],
+    [0, 0, 0, 0],
+    [70, 80, 90, 255],
+    [100, 110, 120, 128],
+    [200, 210, 220, 255]
+  ]);
+  const equalCurrent = rgbaPng(3, 2, [
+    [10, 20, 30, 255],
+    [41, 50, 60, 255],
+    [255, 255, 255, 0],
+    [70, 80, 90, 255],
+    [100, 110, 120, 128],
+    [201, 210, 220, 255]
+  ]);
+
+  const maskedBaseline = rgbaPng(4, 3, [
+    [0, 0, 0, 255], [10, 20, 30, 255], [0, 0, 0, 0], [40, 50, 60, 255],
+    [5, 5, 5, 255], [10, 20, 30, 255], [70, 80, 90, 255], [80, 90, 100, 255],
+    [10, 10, 10, 255], [11, 11, 11, 255], [12, 12, 12, 255], [13, 13, 13, 255]
+  ]);
+  const maskedCurrent = rgbaPng(4, 3, [
+    [0, 0, 0, 255], [11, 20, 30, 255], [255, 255, 255, 0], [41, 50, 60, 255],
+    [5, 5, 5, 255], [10, 20, 30, 255], [71, 80, 90, 255], [80, 90, 100, 255],
+    [10, 10, 10, 255], [11, 11, 11, 255], [12, 12, 12, 255], [13, 13, 13, 255]
+  ]);
+  const mask = [
+    { x: 1, y: 0, width: 2, height: 2 },
+    { x: 2, y: 2, width: 3, height: 2 }
+  ];
+  const identical = rgbaPng(2, 2, [
+    [12, 34, 56, 255], [78, 90, 123, 255],
+    [145, 160, 175, 128], [0, 0, 0, 0]
+  ]);
+  const small = rgbaPng(2, 2, [
+    [1, 2, 3, 255], [4, 5, 6, 255],
+    [7, 8, 9, 255], [10, 11, 12, 255]
+  ]);
+  const large = rgbaPng(3, 3, [
+    [1, 2, 3, 255], [4, 5, 6, 255], [7, 8, 9, 255],
+    [10, 11, 12, 255], [13, 14, 15, 255], [16, 17, 18, 255],
+    [19, 20, 21, 255], [22, 23, 24, 255], [25, 26, 27, 255]
+  ]);
+
+  const PINNED = {
+    equalChanged: {
+      compareBuffers: {
+        width: 3,
+        height: 2,
+        differentPixels: 3,
+        totalPixels: 6,
+        mismatchRatio: 0.5,
+        pct: 0.5,
+        pixelsChanged: 3
+      },
+      diffSha: 'd95f6b681246a82ae23c3362f8fedab057732f4d6ebe847e57c25ef5ef209f48',
+      customDiffSha: 'efa6f90b82a8ddad9ce20c7d3eb59da4aaa51e2d6b5d9338eef97bdc2cd7271a'
+    },
+    masked: {
+      compareWithIgnoreRegions: {
+        width: 4,
+        height: 3,
+        differentPixels: 1,
+        totalPixels: 6,
+        mismatchRatio: 0.16666666666666666,
+        pct: 0.16666666666666666,
+        pixelsChanged: 1
+      },
+      diffSha: '4fe01187c521552d7a67e39a1faca5f1fec1d18f87b7ac76a388ad9229bd397a',
+      customDiffSha: '77b69f55801d712a935d04d3dfc8cb35ab306c6c19ff0d5500c380ccc82d9ebd'
+    },
+    identical: {
+      compareBuffers: {
+        width: 2,
+        height: 2,
+        differentPixels: 0,
+        totalPixels: 4,
+        mismatchRatio: 0,
+        pct: 0,
+        pixelsChanged: 0
+      },
+      compareWithIgnoreRegions: {
+        width: 2,
+        height: 2,
+        differentPixels: 0,
+        totalPixels: 2,
+        mismatchRatio: 0,
+        pct: 0,
+        pixelsChanged: 0
+      },
+      compareWithIgnoreRegionsCoverAll: {
+        width: 2,
+        height: 2,
+        differentPixels: 0,
+        totalPixels: 0,
+        mismatchRatio: 0,
+        pct: 0,
+        pixelsChanged: 0
+      },
+      diffSha: '22bf300cb5dc6599435443e2377778690af72099e2247a74d135efed75d98345',
+      withIgnoreDiffSha: 'fefe5a416929cc6e89c2a11b41aac21db60a1e880fb7784801fa23fb3876519f'
+    },
+    dimensionMismatch: 'Dimension mismatch: baseline 2x2, current 3x3.'
+  };
+
+  test('keeps pre-refactor compareBuffers metrics exactly', () => {
+    expect(compareBuffers(equalBaseline, equalCurrent)).toEqual(PINNED.equalChanged.compareBuffers);
+  });
+
+  test('keeps pre-refactor compareWithIgnoreRegions metrics exactly', () => {
+    expect(compareWithIgnoreRegions(maskedBaseline, maskedCurrent, mask)).toEqual(PINNED.masked.compareWithIgnoreRegions);
+  });
+
+  test('keeps pre-refactor generateDiffImage bytes exactly', () => {
+    expect(sha256(generateDiffImage(equalBaseline, equalCurrent))).toBe(PINNED.equalChanged.diffSha);
+    expect(sha256(generateDiffImage(equalBaseline, equalCurrent, { highlightColor: [0, 255, 0, 128] }))).toBe(
+      PINNED.equalChanged.customDiffSha
+    );
+    expect(sha256(generateDiffImage(maskedBaseline, maskedCurrent, { ignoreRegions: mask }))).toBe(PINNED.masked.diffSha);
+    expect(sha256(generateDiffImage(maskedBaseline, maskedCurrent, { ignoreRegions: mask, highlightColor: [0, 255, 0, 128] }))).toBe(
+      PINNED.masked.customDiffSha
+    );
+  });
+
+  test('keeps pre-refactor byte-identical outputs exactly', () => {
+    expect(compareBuffers(identical, identical)).toEqual(PINNED.identical.compareBuffers);
+    expect(compareWithIgnoreRegions(identical, identical, mask)).toEqual(PINNED.identical.compareWithIgnoreRegions);
+    expect(compareWithIgnoreRegions(identical, identical, [{ x: 0, y: 0, width: 5, height: 5 }])).toEqual(
+      PINNED.identical.compareWithIgnoreRegionsCoverAll
+    );
+    expect(sha256(generateDiffImage(identical, identical))).toBe(PINNED.identical.diffSha);
+    expect(sha256(generateDiffImage(identical, identical, { ignoreRegions: mask }))).toBe(PINNED.identical.withIgnoreDiffSha);
+  });
+
+  test('keeps pre-refactor dimension-mismatch messages exactly', () => {
+    expect(() => compareBuffers(small, large)).toThrow(PINNED.dimensionMismatch);
+    expect(() => compareWithIgnoreRegions(small, large, [])).toThrow(PINNED.dimensionMismatch);
+    expect(() => generateDiffImage(small, large)).toThrow(PINNED.dimensionMismatch);
+  });
+
+  test('compareBuffers metrics match compareImages coordinate metrics', () => {
+    const strict = pickMetrics(compareBuffers(equalBaseline, equalCurrent));
+    const coordinate = pickMetrics(compareImages(equalBaseline, equalCurrent, { renderDiffImage: false }));
+
+    expect(strict).toEqual(coordinate);
+    expect(coordinate.totalPixels).toBe(6);
+    expect(coordinate.differentPixels).toBe(3);
+  });
+
+  test('compareWithIgnoreRegions metrics match compareImages with the same regions', () => {
+    const strict = pickMetrics(compareWithIgnoreRegions(maskedBaseline, maskedCurrent, mask));
+    const coordinate = pickMetrics(compareImages(maskedBaseline, maskedCurrent, { ignoreRegions: mask, renderDiffImage: false }));
+
+    expect(strict).toEqual(coordinate);
+    expect(coordinate.totalPixels).toBe(6);
+    expect(coordinate.differentPixels).toBe(1);
+
+    const identicalMasked = pickMetrics(compareWithIgnoreRegions(identical, identical, mask));
+    const identicalCoordinate = pickMetrics(compareImages(identical, identical, { ignoreRegions: mask, renderDiffImage: false }));
+    expect(identicalMasked).toEqual(identicalCoordinate);
+  });
+
+  test('generateDiffImage bytes match compareImages diff bytes for equal dimensions', () => {
+    expect(generateDiffImage(equalBaseline, equalCurrent)).toEqual(compareImages(equalBaseline, equalCurrent).diffImageBuffer);
+    expect(generateDiffImage(equalBaseline, equalCurrent, { highlightColor: [0, 255, 0, 128] })).toEqual(
+      compareImages(equalBaseline, equalCurrent, { highlightColor: [0, 255, 0, 128] }).diffImageBuffer
+    );
+  });
+
+  test('generateDiffImage matches compareImages ignore gray and custom highlight pixels', () => {
+    const options = { ignoreRegions: mask, highlightColor: [0, 255, 0, 128] };
+    const strictDiff = generateDiffImage(maskedBaseline, maskedCurrent, options);
+    const coordinateDiff = compareImages(maskedBaseline, maskedCurrent, options).diffImageBuffer;
+
+    expect(strictDiff).toEqual(coordinateDiff);
+
+    const diffPng = PNG.sync.read(strictDiff);
+    // (1,0) and (2,1) are masked pixels; (1,0) is gray, and the one changed
+    // pixel outside the masks, (3,0), uses the custom highlight color.
+    expect([...diffPng.data.slice(4, 8)]).toEqual([128, 128, 128, 128]);
+    expect([...diffPng.data.slice((1 * 4 + 2) * 4, (1 * 4 + 2) * 4 + 4)]).toEqual([128, 128, 128, 128]);
+    expect([...diffPng.data.slice(12, 16)]).toEqual([0, 255, 0, 128]);
+  });
+
+  test('byte-identical strict diff re-encodes while compareImages reuses the baseline buffer', () => {
+    const strictDiff = generateDiffImage(identical, identical);
+    const coordinateDiff = compareImages(identical, identical).diffImageBuffer;
+
+    expect(strictDiff).not.toBe(identical);
+    expect(coordinateDiff).toBe(identical);
+    expect(PNG.sync.read(strictDiff).data).toEqual(PNG.sync.read(identical).data);
+    expect(PNG.sync.read(coordinateDiff).data).toEqual(PNG.sync.read(identical).data);
+  });
+
+  test('keeps hidden RGB counted as changed for fully transparent pixels (#201 unchanged)', () => {
+    const hiddenBaseline = rgbaPng(1, 1, [[0, 0, 0, 0]]);
+    const hiddenCurrent = rgbaPng(1, 1, [[255, 255, 255, 0]]);
+
+    expect(compareBuffers(hiddenBaseline, hiddenCurrent).differentPixels).toBe(1);
+    expect(compareWithIgnoreRegions(hiddenBaseline, hiddenCurrent, []).differentPixels).toBe(1);
+    expect(compareImages(hiddenBaseline, hiddenCurrent, { renderDiffImage: false }).differentPixels).toBe(1);
+
+    const diffPng = PNG.sync.read(generateDiffImage(hiddenBaseline, hiddenCurrent));
+    expect([...diffPng.data.slice(0, 4)]).toEqual([255, 140, 0, 255]);
+  });
+
+  test('keeps each legacy export’s validation order', () => {
+    const malformedRegion = [/** @type {any} */ ({ x: 0.5, y: 0, width: 1, height: 1 })];
+
+    // compareWithIgnoreRegions validates regions before decoding.
+    expect(() => compareWithIgnoreRegions(small, large, malformedRegion)).toThrow(/ignoreRegions\[0\]\.x must be a safe integer/);
+    // generateDiffImage rejects a dimension mismatch before parsing options.
+    expect(() => generateDiffImage(small, large, { highlightColor: /** @type {any} */ ([1, 2, 3]) })).toThrow(PINNED.dimensionMismatch);
+    // It parses the highlight color before validating ignore regions.
+    expect(() => generateDiffImage(small, small, {
+      highlightColor: /** @type {any} */ ([1, 2, 3]),
+      ignoreRegions: malformedRegion
+    })).toThrow(/highlightColor must be an array of four integers/);
   });
 });
