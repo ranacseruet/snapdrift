@@ -311,8 +311,17 @@ function refineNeighborOffsets(rows, costs) {
     if (row.kind !== 'stable' || row.offset === null) {
       return row;
     }
+    // Only a row that is itself a local mismatch (> {@link LOCAL_MISMATCH_COST})
+    // may be compared one row above or below. A stable row with a small residual
+    // keeps its own offset: choosing a cheaper ±1 neighbor would consume its
+    // nominal current row without comparing it, and a newly added mark on that
+    // row would disappear from the result.
+    const ownCost = costs[row.y][row.offset - OFFSET_MIN];
+    if (ownCost <= LOCAL_MISMATCH_COST) {
+      return { ...row };
+    }
     let bestOffset = row.offset;
-    let bestCost = costs[row.y][row.offset - OFFSET_MIN];
+    let bestCost = ownCost;
     for (const delta of [-1, 1]) {
       const offset = row.offset + delta;
       if (offset < OFFSET_MIN || offset > OFFSET_MAX) {

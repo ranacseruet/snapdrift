@@ -185,12 +185,17 @@ function pixelsEqual(pngA, indexA, pngB, indexB) {
 }
 
 /**
- * Bitmask of relative offsets within {@link STRUCTURAL_DUPLICATE_WINDOW} where
+ * Bitmasks of relative offsets within {@link STRUCTURAL_DUPLICATE_WINDOW} where
  * one mismatched pixel of a paired row duplicates a row the plan already claims
  * in the other image. Zero is excluded: the mismatched pair cannot be equal at
- * its own plan offset. A current-side copy gives a positive relative offset; a
- * baseline-side copy gives its negation. All bits are candidates, so a row's
- * masks are intersected to find offsets that explain every mismatched pixel.
+ * its own plan offset. `backgroundMask` records a current-side copy: the
+ * baseline pixel exists in a claimed current row, which proves the old
+ * background moved. `foregroundMask` records a baseline-side copy: the current
+ * pixel exists in a claimed baseline row, which proves the new foreground came
+ * from somewhere in the baseline. A newly added mark on uniform background has
+ * only a background copy, so it must not be suppressed as displacement. Bits
+ * are relative to the compared rows, and a row intersects both masks across
+ * every mismatched pixel.
  *
  * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
  * @param {{ data: Uint8Array, width: number, height: number }} currentPng
@@ -199,11 +204,12 @@ function pixelsEqual(pngA, indexA, pngB, indexB) {
  * @param {number} x
  * @param {Set<number>} claimedBaseline
  * @param {Set<number>} claimedCurrent
- * @returns {number}
+ * @returns {{ backgroundMask: number, foregroundMask: number }}
  */
-function displacementCandidateMask(baselinePng, currentPng, baselineY, pixelY, x, claimedBaseline, claimedCurrent) {
+function displacementEvidenceMasks(baselinePng, currentPng, baselineY, pixelY, x, claimedBaseline, claimedCurrent) {
   const window = STRUCTURAL_DUPLICATE_WINDOW;
-  let mask = 0;
+  let backgroundMask = 0;
+  let foregroundMask = 0;
   for (let delta = -window; delta <= window; delta += 1) {
     if (delta === 0) continue;
     const currentY = pixelY + delta;
@@ -211,7 +217,7 @@ function displacementCandidateMask(baselinePng, currentPng, baselineY, pixelY, x
       const baselineIndex = (baselineY * baselinePng.width + x) * 4;
       const currentIndex = (currentY * currentPng.width + x) * 4;
       if (pixelsEqual(baselinePng, baselineIndex, currentPng, currentIndex)) {
-        mask |= 1 << (delta + window);
+        backgroundMask |= 1 << (delta + window);
       }
     }
     const baselineCandidateY = baselineY + delta;
@@ -219,11 +225,11 @@ function displacementCandidateMask(baselinePng, currentPng, baselineY, pixelY, x
       const baselineIndex = (baselineCandidateY * baselinePng.width + x) * 4;
       const currentIndex = (pixelY * currentPng.width + x) * 4;
       if (pixelsEqual(currentPng, currentIndex, baselinePng, baselineIndex)) {
-        mask |= 1 << (-delta + window);
+        foregroundMask |= 1 << (-delta + window);
       }
     }
   }
-  return mask;
+  return { backgroundMask, foregroundMask };
 }
 
 /**
@@ -271,6 +277,17 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
     if (step.role === 'paired') {
       claimedBaseline.add(step.baselineY);
       claimedCurrent.add(step.currentY);
+    } else if (step.role === 'inserted') {
+      // An inserted row is still a row of the current image that the plan
+      // outputs. A glyph shifted onto it is old content claimed by the plan,
+      // not a new mark, so displacement evidence may use it as a current-side
+      // duplicate.
+      claimedCurrent.add(step.currentY);
+    } else {
+      // A deleted row is still a row of the baseline image. Foreground evidence
+      // may find the new current pixel in it only when the pixel is a duplicate
+      // of old content.
+      claimedBaseline.add(step.baselineY);
     }
   }
   /** @type {(number | null)[]} */
@@ -297,9 +314,11 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
   // A mismatched pixel inside a paired row can duplicate a pixel of a row the
   // plan already claims three offsets away: the glyph or badge edge was drawn a
   // few rows higher or lower relative to the text than row-level alignment can
-  // represent. If every mismatched pixel of a row has such a claimed duplicate
-  // at one common relative offset, the row carries no new content; its
-  // mismatches are a localized rendering displacement. A row with at least
+  // represent. Suppression needs both halves of that story: the old baseline
+  // pixel must exist in a claimed current row (background evidence) and the
+  // new current pixel must exist in a claimed baseline row (foreground
+  // evidence). A new small mark on a uniform background has only a background
+  // copy and is content, not displacement. A row with at least
   // {@link CONTENT_INK_MIN} mismatched pixels is a structured edit (a changed
   // glyph or region), not an edge displacement, so it stays painted. Suppress
   // displacement only when the contiguous run of displaced rows borders matched
@@ -319,21 +338,24 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
     const pixelRow = step.pixelY * canvasWidth * 4;
     /** @type {number[]} */
     const mismatches = [];
-    let commonMask = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
+    let commonBackground = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
+    let commonForeground = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
     for (let x = 0; x < canvasWidth; x += 1) {
       const delta = channelDelta(baselinePng.data, currentPng.data, baselineRow + x * 4, pixelRow + x * 4);
       if (!pixelIsHighlighted(delta, step.paint)) continue;
       mismatches.push(x);
-      if (commonMask !== 0) {
-        const candidateMask = displacementCandidateMask(baselinePng, currentPng, step.baselineY, step.pixelY, x, claimedBaseline, claimedCurrent);
-        commonMask &= candidateMask;
+      if (commonBackground !== 0 || commonForeground !== 0) {
+        const evidence = displacementEvidenceMasks(baselinePng, currentPng, step.baselineY, step.pixelY, x, claimedBaseline, claimedCurrent);
+        commonBackground &= evidence.backgroundMask;
+        commonForeground &= evidence.foregroundMask;
       }
     }
     pairedMismatches[index] = mismatches;
     displacement[index] =
       mismatches.length > 0 &&
       mismatches.length < CONTENT_INK_MIN &&
-      commonMask !== 0;
+      commonBackground !== 0 &&
+      commonForeground !== 0;
   }
   for (let start = 0; start < plan.steps.length; start += 1) {
     if (!displacement[start]) continue;

@@ -70,9 +70,10 @@ export function syntheticAlignmentCases() {
     return row;
   });
   // Six distinct gray rows. A handful of pixels inside one row are repainted
-  // with the value of a claimed row one offset away: a localized rendering
-  // displacement, not a content edit, because every mismatched pixel finds its
-  // duplicate in the same claimed row.
+  // with the value of a claimed row one offset away. The current pixel has a
+  // baseline-side duplicate (foreground evidence), but the old baseline pixel
+  // has no claimed current-side copy (no background evidence): the mark is new
+  // content, not a displaced old pixel.
   const grayRows = [10, 20, 60, 100, 120, 140].map((value) => fill(WIDTH, value));
   const displacedRows = grayRows.map((row) => [...row]);
   for (let x = 8; x < 12; x += 1) {
@@ -82,12 +83,42 @@ export function syntheticAlignmentCases() {
   for (let x = 8; x < 24; x += 1) {
     wideDisplacedRows[3][x] = 60;
   }
-  // The same displacement plus an unexplained edit on the neighbor row. The
-  // displaced run borders content that the plan cannot explain, so it is part
+  // The same one-sided copy plus an unexplained edit on the neighbor row. The
+  // mismatched run borders content that the plan cannot explain, so it is part
   // of that edit and must stay painted.
   const borderedRows = displacedRows.map((row) => [...row]);
   for (let x = 0; x < 3; x += 1) {
     borderedRows[4][x] = 25;
+  }
+  // A glyph marker moved one row down. Row 3's old marker exists in the claimed
+  // current row 4 (background evidence) and row 3's new background exists in
+  // the claimed baseline row 2 (foreground evidence). Row 4 has the mirror
+  // evidence. Both displaced rows are rendering displacement, not content.
+  const glyphRow = fill(WIDTH, 60);
+  for (let x = 8; x < 12; x += 1) {
+    glyphRow[x] = 220;
+  }
+  const wideGlyphRow = fill(WIDTH, 60);
+  for (let x = 8; x < 24; x += 1) {
+    wideGlyphRow[x] = 220;
+  }
+  const glyphShiftBaseline = [fill(WIDTH, 10), fill(WIDTH, 20), fill(WIDTH, 60), glyphRow, fill(WIDTH, 60), fill(WIDTH, 140)];
+  const glyphShiftCurrent = [fill(WIDTH, 10), fill(WIDTH, 20), fill(WIDTH, 60), fill(WIDTH, 60), glyphRow, fill(WIDTH, 140)];
+  // The displaced glyph run plus unexplained content at its bottom border. The
+  // run is part of that edit and stays painted with it.
+  const borderedGlyphCurrent = glyphShiftCurrent.map((row) => [...row]);
+  for (let x = 0; x < 3; x += 1) {
+    borderedGlyphCurrent[5][x] = 25;
+  }
+  const wideGlyphShiftBaseline = [fill(WIDTH, 10), fill(WIDTH, 20), fill(WIDTH, 60), wideGlyphRow, fill(WIDTH, 60), fill(WIDTH, 140)];
+  const wideGlyphShiftCurrent = [fill(WIDTH, 10), fill(WIDTH, 20), fill(WIDTH, 60), fill(WIDTH, 60), wideGlyphRow, fill(WIDTH, 140)];
+  // Uniform white rows with a six-pixel black mark added on row 3. The old
+  // white background exists in claimed current rows, but the new black mark
+  // exists nowhere in the baseline: only one side has evidence.
+  const whiteRows = Array.from({ length: 6 }, () => fill(WIDTH, 255));
+  const smallMarkRows = whiteRows.map((row) => [...row]);
+  for (let x = 8; x < 14; x += 1) {
+    smallMarkRows[3][x] = 0;
   }
 
   return {
@@ -144,17 +175,37 @@ export function syntheticAlignmentCases() {
     localizedDisplacement: {
       baseline: pngFromRows(WIDTH, grayRows),
       current: pngFromRows(WIDTH, displacedRows),
-      note: 'Four pixels inside a paired row duplicate a claimed row one offset away, so the row is rendering displacement.'
+      note: 'Four pixels duplicate a claimed row on the current side only; without a baseline-side foreground copy this is new content and stays painted.'
     },
     localizedDisplacementBordered: {
       baseline: pngFromRows(WIDTH, grayRows),
       current: pngFromRows(WIDTH, borderedRows),
-      note: 'The same displacement next to unexplained content; the run borders a real edit and must stay painted.'
+      note: 'The same one-sided duplicate next to unexplained content; the run borders a real edit and stays painted with it.'
     },
     localizedDisplacementWide: {
       baseline: pngFromRows(WIDTH, grayRows),
       current: pngFromRows(WIDTH, wideDisplacedRows),
-      note: 'Sixteen pixels duplicate a claimed row one offset away; that is a structured recolor, not an edge displacement.'
+      note: 'Sixteen one-sided duplicates on one row; that is a structured recolor, not an edge displacement.'
+    },
+    displacementBothSides: {
+      baseline: pngFromRows(WIDTH, glyphShiftBaseline),
+      current: pngFromRows(WIDTH, glyphShiftCurrent),
+      note: 'A four-pixel glyph marker moves one row down; every mismatch has both a claimed current-side background copy and a claimed baseline-side foreground copy.'
+    },
+    displacementBordered: {
+      baseline: pngFromRows(WIDTH, glyphShiftBaseline),
+      current: pngFromRows(WIDTH, borderedGlyphCurrent),
+      note: 'A both-sided glyph displacement next to unexplained content; the run borders a real edit and stays painted with it.'
+    },
+    displacementWide: {
+      baseline: pngFromRows(WIDTH, wideGlyphShiftBaseline),
+      current: pngFromRows(WIDTH, wideGlyphShiftCurrent),
+      note: 'A both-sided 16-pixel glyph shift reaches CONTENT_INK_MIN on each row, so it is a structured recolor, not displacement.'
+    },
+    smallMarkUniformBackground: {
+      baseline: pngFromRows(WIDTH, whiteRows),
+      current: pngFromRows(WIDTH, smallMarkRows),
+      note: 'Six black pixels added on a uniform white background; the old background has claimed current copies but the new foreground exists nowhere in the baseline.'
     },
     structuralDuplicateBand: {
       baseline: pngFromRows(WIDTH, [
