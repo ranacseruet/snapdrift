@@ -2,7 +2,16 @@
 
 import pngjs from 'pngjs';
 
-import { buildOffsetRenderPlan, pixelIsHighlighted, STRUCTURED_DELTA } from './offset-align.mjs';
+import {
+  buildOffsetRenderPlan,
+  pixelIsHighlighted,
+  CONTENT_INK_MIN,
+  rowHasContentInk,
+  rowInkCost,
+  STRUCTURED_DELTA,
+  STRUCTURAL_DUPLICATE_COST,
+  STRUCTURAL_DUPLICATE_WINDOW
+} from './offset-align.mjs';
 import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
 import { alignRows, appendSegment } from './vertical-align.mjs';
 
@@ -115,6 +124,109 @@ function channelDelta(baseline, current, baselineIndex, currentIndex) {
 }
 
 /**
+ * Whether a one-sided content row duplicates a row the plan already claims in
+ * the other image. Search offsets around the neighboring stable runs: a
+ * compensating band of repeated fill rows is a rendering duplicate, while a
+ * text line inserted by reflow matches nowhere and stays content.
+ *
+ * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
+ * @param {{ data: Uint8Array, width: number, height: number }} currentPng
+ * @param {'inserted' | 'deleted'} role
+ * @param {number} sourceY
+ * @param {Set<number>} claimedBaseline
+ * @param {Set<number>} claimedCurrent
+ * @param {number | null} beforeOffset
+ * @param {number | null} afterOffset
+ * @returns {boolean}
+ */
+function isStructuralDuplicate(baselinePng, currentPng, role, sourceY, claimedBaseline, claimedCurrent, beforeOffset, afterOffset) {
+  const neighbors = [beforeOffset, afterOffset].filter((offset) => offset !== null);
+  if (neighbors.length === 0) {
+    return false;
+  }
+  const minOffset = Math.min(...neighbors) - STRUCTURAL_DUPLICATE_WINDOW;
+  const maxOffset = Math.max(...neighbors) + STRUCTURAL_DUPLICATE_WINDOW;
+  if (role === 'inserted') {
+    for (let offset = minOffset; offset <= maxOffset; offset += 1) {
+      const baselineY = sourceY - offset;
+      if (baselineY < 0 || baselineY >= baselinePng.height) continue;
+      if (!claimedBaseline.has(baselineY) || !rowHasContentInk(baselinePng, baselineY)) continue;
+      if (rowInkCost(baselinePng, currentPng, baselineY, offset) <= STRUCTURAL_DUPLICATE_COST) {
+        return true;
+      }
+    }
+    return false;
+  }
+  for (let offset = minOffset; offset <= maxOffset; offset += 1) {
+    const currentY = sourceY + offset;
+    if (currentY < 0 || currentY >= currentPng.height) continue;
+    if (!claimedCurrent.has(currentY) || !rowHasContentInk(currentPng, currentY)) continue;
+    if (rowInkCost(baselinePng, currentPng, sourceY, offset) <= STRUCTURAL_DUPLICATE_COST) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether two pixels are byte-identical.
+ *
+ * @param {{ data: Uint8Array }} pngA
+ * @param {number} indexA
+ * @param {{ data: Uint8Array }} pngB
+ * @param {number} indexB
+ * @returns {boolean}
+ */
+function pixelsEqual(pngA, indexA, pngB, indexB) {
+  return pngA.data[indexA] === pngB.data[indexB] &&
+    pngA.data[indexA + 1] === pngB.data[indexB + 1] &&
+    pngA.data[indexA + 2] === pngB.data[indexB + 2] &&
+    pngA.data[indexA + 3] === pngB.data[indexB + 3];
+}
+
+/**
+ * Bitmask of relative offsets within {@link STRUCTURAL_DUPLICATE_WINDOW} where
+ * one mismatched pixel of a paired row duplicates a row the plan already claims
+ * in the other image. Zero is excluded: the mismatched pair cannot be equal at
+ * its own plan offset. A current-side copy gives a positive relative offset; a
+ * baseline-side copy gives its negation. All bits are candidates, so a row's
+ * masks are intersected to find offsets that explain every mismatched pixel.
+ *
+ * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
+ * @param {{ data: Uint8Array, width: number, height: number }} currentPng
+ * @param {number} baselineY
+ * @param {number} pixelY
+ * @param {number} x
+ * @param {Set<number>} claimedBaseline
+ * @param {Set<number>} claimedCurrent
+ * @returns {number}
+ */
+function displacementCandidateMask(baselinePng, currentPng, baselineY, pixelY, x, claimedBaseline, claimedCurrent) {
+  const window = STRUCTURAL_DUPLICATE_WINDOW;
+  let mask = 0;
+  for (let delta = -window; delta <= window; delta += 1) {
+    if (delta === 0) continue;
+    const currentY = pixelY + delta;
+    if (currentY >= 0 && currentY < currentPng.height && claimedCurrent.has(currentY)) {
+      const baselineIndex = (baselineY * baselinePng.width + x) * 4;
+      const currentIndex = (currentY * currentPng.width + x) * 4;
+      if (pixelsEqual(baselinePng, baselineIndex, currentPng, currentIndex)) {
+        mask |= 1 << (delta + window);
+      }
+    }
+    const baselineCandidateY = baselineY + delta;
+    if (baselineCandidateY >= 0 && baselineCandidateY < baselinePng.height && claimedBaseline.has(baselineCandidateY)) {
+      const baselineIndex = (baselineCandidateY * baselinePng.width + x) * 4;
+      const currentIndex = (pixelY * currentPng.width + x) * 4;
+      if (pixelsEqual(currentPng, currentIndex, baselinePng, baselineIndex)) {
+        mask |= 1 << (-delta + window);
+      }
+    }
+  }
+  return mask;
+}
+
+/**
  * Render a page from piecewise vertical-offset runs.
  * Used when exact row alignment exhausts its edit budget. Callers that still
  * have an exact Myers script should keep that script: short byte-identical
@@ -151,17 +263,125 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
   let differentPixels = 0;
   let outputY = 0;
 
+  /** @type {Set<number>} */
+  const claimedBaseline = new Set();
+  /** @type {Set<number>} */
+  const claimedCurrent = new Set();
   for (const step of plan.steps) {
+    if (step.role === 'paired') {
+      claimedBaseline.add(step.baselineY);
+      claimedCurrent.add(step.currentY);
+    }
+  }
+  /** @type {(number | null)[]} */
+  const nearestBefore = new Array(plan.steps.length).fill(null);
+  let previousOffset = null;
+  for (let index = 0; index < plan.steps.length; index += 1) {
+    nearestBefore[index] = previousOffset;
+    const step = plan.steps[index];
+    if (step.role === 'paired') {
+      previousOffset = step.currentY - step.baselineY;
+    }
+  }
+  /** @type {(number | null)[]} */
+  const nearestAfter = new Array(plan.steps.length).fill(null);
+  let nextOffset = null;
+  for (let index = plan.steps.length - 1; index >= 0; index -= 1) {
+    nearestAfter[index] = nextOffset;
+    const step = plan.steps[index];
+    if (step.role === 'paired') {
+      nextOffset = step.currentY - step.baselineY;
+    }
+  }
+
+  // A mismatched pixel inside a paired row can duplicate a pixel of a row the
+  // plan already claims three offsets away: the glyph or badge edge was drawn a
+  // few rows higher or lower relative to the text than row-level alignment can
+  // represent. If every mismatched pixel of a row has such a claimed duplicate
+  // at one common relative offset, the row carries no new content; its
+  // mismatches are a localized rendering displacement. A row with at least
+  // {@link CONTENT_INK_MIN} mismatched pixels is a structured edit (a changed
+  // glyph or region), not an edge displacement, so it stays painted. Suppress
+  // displacement only when the contiguous run of displaced rows borders matched
+  // rows, so a run that borders unexplained content remains part of that
+  // content edit.
+  /** @type {number[][]} */
+  const pairedMismatches = new Array(plan.steps.length);
+  /** @type {boolean[]} */
+  const displacement = new Array(plan.steps.length).fill(false);
+  /** @type {boolean[]} */
+  const suppressRow = new Array(plan.steps.length).fill(false);
+  const allCandidateBits = (1 << (STRUCTURAL_DUPLICATE_WINDOW * 2 + 1)) - 1;
+  for (let index = 0; index < plan.steps.length; index += 1) {
+    const step = plan.steps[index];
+    if (step.role !== 'paired') continue;
+    const baselineRow = step.baselineY * canvasWidth * 4;
+    const pixelRow = step.pixelY * canvasWidth * 4;
+    /** @type {number[]} */
+    const mismatches = [];
+    let commonMask = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
+    for (let x = 0; x < canvasWidth; x += 1) {
+      const delta = channelDelta(baselinePng.data, currentPng.data, baselineRow + x * 4, pixelRow + x * 4);
+      if (!pixelIsHighlighted(delta, step.paint)) continue;
+      mismatches.push(x);
+      if (commonMask !== 0) {
+        const candidateMask = displacementCandidateMask(baselinePng, currentPng, step.baselineY, step.pixelY, x, claimedBaseline, claimedCurrent);
+        commonMask &= candidateMask;
+      }
+    }
+    pairedMismatches[index] = mismatches;
+    displacement[index] =
+      mismatches.length > 0 &&
+      mismatches.length < CONTENT_INK_MIN &&
+      commonMask !== 0;
+  }
+  for (let start = 0; start < plan.steps.length; start += 1) {
+    if (!displacement[start]) continue;
+    let end = start;
+    while (end + 1 < plan.steps.length && displacement[end + 1]) end += 1;
+    let contentBoundary = false;
+    for (const neighbor of [start - 1, end + 1]) {
+      if (neighbor < 0 || neighbor >= plan.steps.length) continue;
+      const neighborStep = plan.steps[neighbor];
+      if (neighborStep.role === 'paired') {
+        if (pairedMismatches[neighbor].length > 0) {
+          contentBoundary = true;
+          break;
+        }
+      } else {
+        const sourcePng = neighborStep.role === 'inserted' ? currentPng : baselinePng;
+        const sourceY = neighborStep.role === 'inserted' ? neighborStep.currentY : neighborStep.baselineY;
+        const structural =
+          !rowHasContentInk(sourcePng, sourceY) ||
+          isStructuralDuplicate(
+            baselinePng, currentPng, neighborStep.role, sourceY,
+            claimedBaseline, claimedCurrent, nearestBefore[neighbor], nearestAfter[neighbor]
+          );
+        if (!structural) {
+          contentBoundary = true;
+          break;
+        }
+      }
+    }
+    if (!contentBoundary) {
+      for (let index = start; index <= end; index += 1) suppressRow[index] = true;
+    }
+    start = end;
+  }
+
+  for (let index = 0; index < plan.steps.length; index += 1) {
+    const step = plan.steps[index];
     let highlighted = 0;
     if (step.role === 'paired') {
-      const baselineRow = step.baselineY * canvasWidth * 4;
       const pixelRow = step.pixelY * canvasWidth * 4;
+      const mismatches = pairedMismatches[index];
+      let nextMismatch = 0;
       for (let x = 0; x < canvasWidth; x += 1) {
-        const baselineIndex = baselineRow + x * 4;
         const currentIndex = pixelRow + x * 4;
         const outputIndex = (outputY * canvasWidth + x) * 4;
-        const delta = channelDelta(baselinePng.data, currentPng.data, baselineIndex, currentIndex);
-        if (pixelIsHighlighted(delta, step.paint)) {
+        const mismatched = nextMismatch < mismatches.length && mismatches[nextMismatch] === x;
+        if (mismatched) nextMismatch += 1;
+        if (mismatched && !suppressRow[index]) {
           highlighted += 1;
           if (diffPng) {
             diffPng.data[outputIndex] = options.changedColor[0];
@@ -187,15 +407,27 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
         ...(comparedOffset === undefined ? {} : { comparedOffset })
       });
     } else {
-      highlighted = canvasWidth;
-      const color = step.role === 'inserted' ? options.addedColor : options.removedColor;
+      const sourcePng = step.role === 'inserted' ? currentPng : baselinePng;
+      const sourceY = step.role === 'inserted' ? step.currentY : step.baselineY;
+      // Structural padding carries no content ink. Colouring a spacer or an
+      // antialias tail green or red would report a page-height difference as a
+      // content change, and a full-row colour over seven pixels inflates it.
+      // A content row that duplicates a claimed row nearby is the same kind of
+      // rendering artifact: a compensating band of repeated fill rows, not a
+      // new line.
+      const blank =
+        !rowHasContentInk(sourcePng, sourceY) ||
+        isStructuralDuplicate(baselinePng, currentPng, step.role, sourceY, claimedBaseline, claimedCurrent, nearestBefore[index], nearestAfter[index]);
+      highlighted = blank ? 0 : canvasWidth;
       if (diffPng) {
+        const color = step.role === 'inserted' ? options.addedColor : options.removedColor;
         for (let x = 0; x < canvasWidth; x += 1) {
           const outputIndex = (outputY * canvasWidth + x) * 4;
-          diffPng.data[outputIndex] = color[0];
-          diffPng.data[outputIndex + 1] = color[1];
-          diffPng.data[outputIndex + 2] = color[2];
-          diffPng.data[outputIndex + 3] = color[3];
+          const sourceIndex = (sourceY * canvasWidth + x) * 4;
+          diffPng.data[outputIndex] = blank ? sourcePng.data[sourceIndex] : color[0];
+          diffPng.data[outputIndex + 1] = blank ? sourcePng.data[sourceIndex + 1] : color[1];
+          diffPng.data[outputIndex + 2] = blank ? sourcePng.data[sourceIndex + 2] : color[2];
+          diffPng.data[outputIndex + 3] = blank ? sourcePng.data[sourceIndex + 3] : color[3];
         }
       }
       appendSegment(segments, step.role === 'inserted'
@@ -263,7 +495,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
 function compareAlignedImages(baselinePng, currentPng, options) {
   const alignment = alignRows(baselinePng, currentPng);
   if (alignment.kind === 'fallback') {
-    if (alignment.reason === 'alignment-limit') {
+    if (alignment.reason === 'alignment-limit' || alignment.reason === 'ambiguous') {
       const offsetAligned = compareOffsetAligned(baselinePng, currentPng, options);
       if (offsetAligned.kind === 'aligned') {
         return offsetAligned;

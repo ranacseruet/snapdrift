@@ -46,8 +46,23 @@ export const STRUCTURED_HOT_LIMIT = 40;
 export const INK_LUMA = 32;
 /** Fewer ink samples than this and the row abstains (cost 0 at every in-range offset). */
 export const MIN_INK_SAMPLES = 8;
+/**
+ * Full-width ink floor for a row that carries content rather than structural
+ * padding. This is {@link MIN_INK_SAMPLES} scaled from the scoring stride, so a
+ * one-sided row below it is a glyph tail or spacer, not an insertion/deletion
+ * that paints the whole row.
+ */
+export const CONTENT_INK_MIN = MIN_INK_SAMPLES * SEARCH_STRIDE;
 /** Contiguous above-noise pixels that mark a structured residual inside a stable run. */
 export const HIGHLIGHT_RUN = 6;
+/**
+ * An inserted or deleted content row within this ink cost of a claimed row in
+ * the other image is a duplicate rendering of that row, not new content. Text
+ * reflow inserts rows that match nowhere and stay well above this bar.
+ */
+export const STRUCTURAL_DUPLICATE_COST = 0.05;
+/** Offsets around the neighboring stable runs searched for a duplicate row. */
+export const STRUCTURAL_DUPLICATE_WINDOW = 3;
 /**
  * Extra cost of leaving the current offset. A one-row border preference must
  * not split a run; a short run of text that only matches a new offset must.
@@ -63,7 +78,7 @@ export const UNMATCHED_COST = 0.45;
  * The acceptance pair (5622 × 1440) is about 8.1e8 visits and scored in about
  * 1.2s. Past this budget the page keeps the coordinate fallback.
  */
-export const MAX_OFFSET_SCORE_VISITS = 1_500_000_000;
+export const MAX_OFFSET_SCORE_VISITS = 2_500_000_000;
 /**
  * Bytes for the per-row cost table (Float64) plus the Viterbi backpointers
  * (Int16). The acceptance pair is about 11 MB. A narrow million-row image
@@ -145,13 +160,64 @@ function rowAbstains(baseline, baselineY) {
 }
 
 /**
+ * Whether a row carries any ink pixel at all. Unlike {@link rowAbstains},
+ * descenders and sparse glyph tails still count: they belong to their line and
+ * must not be bridged onto a shifted blank band. A row with zero ink is
+ * structural padding and is not painted as an insertion or deletion.
+ *
+ * @param {DecodedPng} png
+ * @param {number} y
+ * @returns {boolean}
+ */
+export function rowHasAnyInk(png, y) {
+  if (y < 0 || y >= png.height) {
+    return false;
+  }
+  const width = png.width;
+  const rowStart = y * width * 4;
+  for (let x = 0; x < width; x += 1) {
+    if (isBaselineInk(png.data, rowStart + x * 4)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a row carries enough ink to be a content row. A one-sided row below
+ * {@link CONTENT_INK_MIN} is structural padding (a spacer or an antialias tail),
+ * so it is not painted as an insertion or deletion; a real glyph row is.
+ *
+ * @param {DecodedPng} png
+ * @param {number} y
+ * @returns {boolean}
+ */
+export function rowHasContentInk(png, y) {
+  if (y < 0 || y >= png.height) {
+    return false;
+  }
+  const width = png.width;
+  const rowStart = y * width * 4;
+  let ink = 0;
+  for (let x = 0; x < width; x += 1) {
+    if (isBaselineInk(png.data, rowStart + x * 4)) {
+      ink += 1;
+      if (ink >= CONTENT_INK_MIN) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * @param {DecodedPng} baseline
  * @param {DecodedPng} current
  * @param {number} baselineY
  * @param {number} offset
  * @returns {number}
  */
-function rowInkCost(baseline, current, baselineY, offset) {
+export function rowInkCost(baseline, current, baselineY, offset) {
   const currentY = baselineY + offset;
   if (currentY < 0 || currentY >= current.height) {
     return 1;
@@ -259,11 +325,23 @@ function refineNeighborOffsets(rows, costs) {
       }
     }
     if (bestCost > LOCAL_MISMATCH_COST) {
+      // A ±1 neighbor cannot reach a shift boundary several rows away (e.g. an
+      // offset jump of 3). Search the full window for evidence so the render
+      // plan pairs the row at its real position instead of deleting it.
+      let evidenceOffset = bestOffset;
+      let evidenceCost = bestCost;
+      for (let offset = OFFSET_MIN; offset <= OFFSET_MAX; offset += 1) {
+        const cost = costs[row.y][offset - OFFSET_MIN];
+        if (cost < evidenceCost) {
+          evidenceCost = cost;
+          evidenceOffset = offset;
+        }
+      }
       return {
         y: row.y,
         kind: /** @type {const} */ ('unresolved'),
         offset: null,
-        compareOffset: bestOffset,
+        compareOffset: evidenceOffset,
         cost: bestCost,
         abstain: row.abstain
       };
@@ -402,8 +480,13 @@ function collapseOffsetPath(costs, abstain) {
     }
     // Several offsets matching perfectly means this row carries no distinctive
     // shape. It must not fund a jump onto an arbitrary offset, and it must not
-    // push a deleted band out of the unmatched state.
-    const lowInformation = zeroOffsets >= 3;
+    // push a deleted band out of the unmatched state. The incumbent is only free
+    // when its own cost is zero: a row that matches several offsets but has ink
+    // residue at the incumbent still votes for leaving it. Charging every other
+    // state here would keep a shifted run on the wrong offset.
+    const incumbentFree =
+      zeroOffsets >= 3 && (bestPrevious === unmatched || costs[y][bestPrevious] === 0);
+    const lowInformation = incumbentFree;
     for (let state = 0; state < unmatched; state += 1) {
       const emission = lowInformation ? (state === bestPrevious ? 0 : 1) : costs[y][state];
       const stay = previous[state];
@@ -443,11 +526,23 @@ function collapseOffsetPath(costs, abstain) {
 
   return chosen.map((chosenState, y) => {
     if (chosenState === unmatched) {
+      // Keep the best in-window offset as evidence. A changed line's ink is
+      // still closest to its own vertical position; a deleted band's best
+      // offset lands on blank current rows. The render plan uses this to pair
+      // local glyph edits at their real position instead of deleting them.
+      let bestOffset = OFFSET_MIN;
+      let bestCost = costs[y][0];
+      for (let index = 1; index < offsetCount; index += 1) {
+        if (costs[y][index] < bestCost) {
+          bestCost = costs[y][index];
+          bestOffset = OFFSET_MIN + index;
+        }
+      }
       return {
         y,
         kind: /** @type {const} */ ('unresolved'),
         offset: null,
-        compareOffset: null,
+        compareOffset: bestOffset,
         cost: UNMATCHED_COST,
         abstain: abstain[y]
       };
@@ -714,6 +809,30 @@ function isLocalGap(rows, start, end) {
 }
 
 /**
+ * An evidence offset is only usable when it sits near the stable runs on either
+ * side of the gap. An unmatched row's evidence can be a tie at the window's low
+ * end (e.g. `-40`), which points into current rows an earlier run already
+ * claimed; pairing there manufactures an overlap and abandons the whole page.
+ *
+ * @param {number | null} offset
+ * @param {number | null} beforeOffset
+ * @param {number | null} afterOffset
+ * @returns {boolean}
+ */
+function isOffsetNearRunBoundary(offset, beforeOffset, afterOffset) {
+  if (offset === null) {
+    return false;
+  }
+  const neighbors = [beforeOffset, afterOffset].filter((neighbor) => neighbor !== null);
+  if (neighbors.length === 0) {
+    return false;
+  }
+  const minOffset = Math.min(...neighbors) - STRUCTURAL_DUPLICATE_WINDOW;
+  const maxOffset = Math.max(...neighbors) + STRUCTURAL_DUPLICATE_WINDOW;
+  return offset >= minOffset && offset <= maxOffset;
+}
+
+/**
  * Turn the offset-run mapping into a monotonic row plan.
  *
  * Stable runs that differ by one pixel share one recorded offset so a ±1
@@ -742,6 +861,33 @@ export function buildOffsetRenderPlan(baseline, current) {
   const evidenceMean = evidence.reduce((sum, row) => sum + row.cost, 0) / evidence.length;
   if (evidenceMean > EVIDENCE_MEAN_COST_LIMIT) {
     return { kind: 'fallback', reason: 'alignment-limit' };
+  }
+
+  // Current rows already claimed by the stable runs. A blank row or a content
+  // row whose candidate offset lands on one of these rows is structural padding
+  // or deleted content: pairing there manufactures an overlap with the neighbor
+  // and abandons the whole page.
+  /** @type {Set<number>} */
+  const claimedCurrent = new Set();
+  for (const row of mapped.rows) {
+    if (row.kind === 'stable' && row.offset !== null) {
+      claimedCurrent.add(row.y + row.offset);
+    }
+  }
+  /**
+   * @param {number} offset
+   * @param {number} start
+   * @param {number} end
+   * @returns {boolean}
+   */
+  function allCurrentFree(offset, start, end) {
+    for (let y = start; y < end; y += 1) {
+      const candidate = y + offset;
+      if (candidate < 0 || candidate >= current.height || claimedCurrent.has(candidate)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** @type {Array<{ role: 'paired', baselineY: number, pixelY: number, paint: OffsetPaint } | { role: 'deleted', baselineY: number }>} */
@@ -773,6 +919,129 @@ export function buildOffsetRenderPlan(baseline, current) {
           pixelY: y + pixelOffset,
           paint: 'residual'
         });
+        claimedCurrent.add(y + pixelOffset);
+      }
+      continue;
+    }
+    // An unresolved band at a shift boundary can contain both real edits and
+    // structural padding. Ink rows are a changed line when the current row at
+    // the preceding offset also carries ink; otherwise they are a deleted
+    // band. Zero-ink rows split: leading padding stays with the preceding offset
+    // and trailing padding follows the last paired content offset, so a spacer
+    // stays inside its line instead of starting a run that overlaps a neighbor.
+    // A candidate offset that lands on a current row a stable run already claims
+    // is not a free partner: those rows are deleted.
+    const beforeOffset = start > 0 ? mapped.rows[start - 1].offset : null;
+    const afterOffset = index < mapped.rows.length ? mapped.rows[index].offset : null;
+    let lastInk = start - 1;
+    let firstInk = -1;
+    for (let y = start; y < index; y += 1) {
+      if (rowHasAnyInk(baseline, y)) {
+        if (firstInk < 0) firstInk = y;
+        lastInk = y;
+      }
+    }
+    if (lastInk >= start) {
+      // Leading blank rows are card padding or a deleted heading's blank tail.
+      // They stay with the preceding offset only when every candidate current
+      // row is free; otherwise they belong to the deleted region.
+      const leadingOffset = beforeOffset ?? mapped.rows[start].compareOffset ?? 0;
+      if (allCurrentFree(leadingOffset, start, firstInk)) {
+        for (let y = start; y < firstInk; y += 1) {
+          labeled.push({
+            role: 'paired',
+            baselineY: y,
+            pixelY: y + leadingOffset,
+            paint: 'tolerant'
+          });
+          claimedCurrent.add(y + leadingOffset);
+        }
+      } else {
+        for (let y = start; y < firstInk; y += 1) {
+          labeled.push({ role: 'deleted', baselineY: y });
+        }
+      }
+      let lastContentOffset = null;
+      for (let y = firstInk; y <= lastInk; y += 1) {
+        let offset = null;
+        if (beforeOffset !== null && rowHasAnyInk(current, y + beforeOffset)) {
+          const candidate = y + beforeOffset;
+          if (candidate < current.height && !claimedCurrent.has(candidate)) {
+            offset = beforeOffset;
+          }
+        }
+        if (offset === null) {
+          const evidence = mapped.rows[y].compareOffset;
+          if (isOffsetNearRunBoundary(evidence, beforeOffset, afterOffset)) {
+            const candidate = y + evidence;
+            if (
+              candidate >= 0 &&
+              candidate < current.height &&
+              rowHasAnyInk(current, candidate) &&
+              !claimedCurrent.has(candidate)
+            ) {
+              offset = evidence;
+            }
+          }
+        }
+        if (offset === null) {
+          labeled.push({ role: 'deleted', baselineY: y });
+          continue;
+        }
+        labeled.push({
+          role: 'paired',
+          baselineY: y,
+          pixelY: y + offset,
+          paint: 'residual'
+        });
+        claimedCurrent.add(y + offset);
+        lastContentOffset = offset;
+      }
+      // Trailing blank rows belong to the line they follow. When every candidate
+      // current row is free they extend the last paired content run; otherwise
+      // they are the blank tail of the deleted region.
+      const trailingOffset = lastContentOffset ?? afterOffset ?? beforeOffset;
+      if (trailingOffset !== null && allCurrentFree(trailingOffset, lastInk + 1, index)) {
+        for (let y = lastInk + 1; y < index; y += 1) {
+          labeled.push({
+            role: 'paired',
+            baselineY: y,
+            pixelY: y + trailingOffset,
+            paint: 'tolerant'
+          });
+          claimedCurrent.add(y + trailingOffset);
+        }
+      } else {
+        for (let y = lastInk + 1; y < index; y += 1) {
+          labeled.push({ role: 'deleted', baselineY: y });
+        }
+      }
+      continue;
+    }
+    // A zero-ink band bridges onto the following run only when the following
+    // offset has free current rows for the whole band; otherwise it tries the
+    // preceding offset and finally becomes a deleted structural band.
+    if (afterOffset !== null && allCurrentFree(afterOffset, start, index)) {
+      for (let y = start; y < index; y += 1) {
+        labeled.push({
+          role: 'paired',
+          baselineY: y,
+          pixelY: y + afterOffset,
+          paint: 'tolerant'
+        });
+        claimedCurrent.add(y + afterOffset);
+      }
+      continue;
+    }
+    if (beforeOffset !== null && allCurrentFree(beforeOffset, start, index)) {
+      for (let y = start; y < index; y += 1) {
+        labeled.push({
+          role: 'paired',
+          baselineY: y,
+          pixelY: y + beforeOffset,
+          paint: 'tolerant'
+        });
+        claimedCurrent.add(y + beforeOffset);
       }
       continue;
     }
@@ -832,8 +1101,20 @@ export function buildOffsetRenderPlan(baseline, current) {
       if (block.role !== 'paired' || block.rows.length === 0) continue;
       const start = block.rows[0].baselineY + block.mapOffset;
       const end = start + block.rows.length;
-      if (start < 0 || end > current.height) {
+      if (start < 0) {
         return { kind: 'fallback', reason: 'alignment-limit' };
+      }
+      // A run whose final rows have no current partner is a deletion at the
+      // page edge, not a reason to abandon the whole mapping.
+      if (end > current.height) {
+        const overflow = end - current.height;
+        const trimmed = block.rows.splice(block.rows.length - overflow, overflow);
+        blocks.splice(index + 1, 0, /** @type {PlanBlock} */ ({
+          role: 'deleted',
+          baselineYs: trimmed.map((row) => row.baselineY)
+        }));
+        changed = true;
+        continue;
       }
       let nextIndex = index + 1;
       while (nextIndex < blocks.length && blocks[nextIndex].role !== 'paired') {

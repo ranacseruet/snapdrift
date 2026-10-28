@@ -59,6 +59,36 @@ export function syntheticAlignmentCases() {
   for (let x = 12; x < 18; x += 1) {
     glyph[x] = 220;
   }
+  // Six distinct text rows. The marker sits on every sampled column so an
+  // offset search cannot pair two text rows by skipping the one pixel that
+  // differs: only the row's own copy at the true offset scores zero.
+  const textRows = Array.from({ length: 6 }, (_, index) => {
+    const row = fill(WIDTH, 60);
+    for (let x = 4; x < WIDTH; x += 2) {
+      row[x] = 220 - index * 20;
+    }
+    return row;
+  });
+  // Six distinct gray rows. A handful of pixels inside one row are repainted
+  // with the value of a claimed row one offset away: a localized rendering
+  // displacement, not a content edit, because every mismatched pixel finds its
+  // duplicate in the same claimed row.
+  const grayRows = [10, 20, 60, 100, 120, 140].map((value) => fill(WIDTH, value));
+  const displacedRows = grayRows.map((row) => [...row]);
+  for (let x = 8; x < 12; x += 1) {
+    displacedRows[3][x] = 60;
+  }
+  const wideDisplacedRows = grayRows.map((row) => [...row]);
+  for (let x = 8; x < 24; x += 1) {
+    wideDisplacedRows[3][x] = 60;
+  }
+  // The same displacement plus an unexplained edit on the neighbor row. The
+  // displaced run borders content that the plan cannot explain, so it is part
+  // of that edit and must stay painted.
+  const borderedRows = displacedRows.map((row) => [...row]);
+  for (let x = 0; x < 3; x += 1) {
+    borderedRows[4][x] = 25;
+  }
 
   return {
     pureInsertion: {
@@ -110,6 +140,42 @@ export function syntheticAlignmentCases() {
       baseline: pngFromRows(WIDTH, [40, 70, 100, 130, 160].map((value) => fill(WIDTH, value))),
       current: pngFromRows(WIDTH, [40, 200, 70, 100, 220, 130, 160].map((value) => fill(WIDTH, value))),
       note: 'Two inserted rows between distinct neighbors.'
+    },
+    localizedDisplacement: {
+      baseline: pngFromRows(WIDTH, grayRows),
+      current: pngFromRows(WIDTH, displacedRows),
+      note: 'Four pixels inside a paired row duplicate a claimed row one offset away, so the row is rendering displacement.'
+    },
+    localizedDisplacementBordered: {
+      baseline: pngFromRows(WIDTH, grayRows),
+      current: pngFromRows(WIDTH, borderedRows),
+      note: 'The same displacement next to unexplained content; the run borders a real edit and must stay painted.'
+    },
+    localizedDisplacementWide: {
+      baseline: pngFromRows(WIDTH, grayRows),
+      current: pngFromRows(WIDTH, wideDisplacedRows),
+      note: 'Sixteen pixels duplicate a claimed row one offset away; that is a structured recolor, not an edge displacement.'
+    },
+    structuralDuplicateBand: {
+      baseline: pngFromRows(WIDTH, [
+        fill(WIDTH, 10), fill(WIDTH, 10),
+        fill(WIDTH, 120), fill(WIDTH, 150), fill(WIDTH, 180),
+        ...textRows,
+        fill(WIDTH, 180), fill(WIDTH, 180), fill(WIDTH, 180),
+        fill(WIDTH, 150), fill(WIDTH, 120), fill(WIDTH, 90), fill(WIDTH, 60),
+        fill(WIDTH, 10), fill(WIDTH, 10)
+      ]),
+      current: pngFromRows(WIDTH, [
+        fill(WIDTH, 10), fill(WIDTH, 10),
+        fill(WIDTH, 120), fill(WIDTH, 150), fill(WIDTH, 180),
+        fill(WIDTH, 180), fill(WIDTH, 180), fill(WIDTH, 180),
+        ...textRows,
+        fill(WIDTH, 180),
+        fill(WIDTH, 150), fill(WIDTH, 120), fill(WIDTH, 90), fill(WIDTH, 60),
+        fill(WIDTH, 10), fill(WIDTH, 10),
+        fill(WIDTH, 10), fill(WIDTH, 10), fill(WIDTH, 10)
+      ]),
+      note: 'Three near-duplicate fill rows compensate at the top and bottom of a block while identical text rows shift by three; none of them are content.'
     }
   };
 }
