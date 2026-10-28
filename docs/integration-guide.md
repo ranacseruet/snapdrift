@@ -289,7 +289,7 @@ When your application deploys preview URLs (e.g., Vercel, Netlify, Cloudflare Pa
 ```
 
 ### Why use `capture: "snap"`?
-- **Skips Playwright Installation in CI:** The GitHub Actions wrapper actions (`actions/baseline` and `actions/pr-diff`) detect `capture: "snap"` with a remote `baseUrl` and skip `playwright install --with-deps chromium`, saving 45–90 seconds per workflow run.
+- **Skips Playwright Installation in CI:** The GitHub Actions wrapper actions (`actions/baseline` and `actions/pr-diff`) detect `capture: "snap"` with a remote `baseUrl` and skip `playwright install --with-deps --only-shell chromium`, saving 45–90 seconds per workflow run.
 - **Parallel Cloud Rendering:** Snap Cloud renders full-page screenshots concurrently via its batch API (`POST /v1/screenshots`).
 - **Local Diff Engine:** Screenshots are downloaded and diffed locally on the runner with `@snapdrift/compare-core`, keeping full artifact bundles and PR comments in GitHub Actions without requiring hosted project configuration.
 

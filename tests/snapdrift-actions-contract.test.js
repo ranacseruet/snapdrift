@@ -185,6 +185,20 @@ describe('SnapDrift action contracts', () => {
         expect(prDiffInstall.if).toContain("steps.config.outputs.snap_local_capture == 'true'");
     });
 
+    it('installs only the Chromium headless shell, which is what the headless capture launch uses', async () => {
+        // `headless: true` launches chromium-headless-shell, so the full Chromium
+        // download is dead weight. If capture ever launches headed or via a
+        // channel, the shell-only install would break it and this must change.
+        for (const actionPath of ['actions/capture/action.yml', 'actions/baseline/action.yml', 'actions/pr-diff/action.yml']) {
+            const action = await readAction(actionPath);
+            const install = action.runs.steps.find((step) => step.name === 'Install Playwright Chromium');
+            expect(install.run).toContain('install --with-deps --only-shell chromium');
+        }
+        const captureSource = await fs.readFile('packages/adapter-fs/src/capture.mjs', 'utf8');
+        expect(captureSource).toMatch(/launchSettings = \{ headless: true,/);
+        expect(captureSource).not.toMatch(/channel\s*:/);
+    });
+
     it('skips Playwright install when capture: "snap" with remote baseUrl', async () => {
         const baseline = await readAction('actions/baseline/action.yml');
         const prDiff = await readAction('actions/pr-diff/action.yml');

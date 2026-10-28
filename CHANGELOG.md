@@ -7,6 +7,7 @@
 - Hybrid (`provider: "snap"` with a local `baseUrl`) capture uploads screenshots to Snap with up to 4 routes in flight instead of one at a time, and stops starting new uploads after the first failure.
 - The latest-baseline lookup for hybrid diff runs now starts before local capture and overlaps with it.
 - Local Playwright capture reads screenshot width/height from the PNG header instead of fully decoding every PNG, which no longer blocks the event loop for all in-flight routes. A corrupt PNG body is no longer detected at capture time; a buffer without a valid PNG signature or IHDR chunk still fails the route.
+- GitHub Actions install only Playwright's Chromium headless shell (`playwright install --with-deps --only-shell chromium`) instead of full Chromium plus the shell. Capture already launches with `headless: true`, which uses the shell, so rendering is unchanged. Measured on `node:22-bookworm` with Playwright 1.63.0: install 22s -> 15s, browser cache 662 MB -> 269 MB, identical browser version and screenshot bytes.
 - Capture and upload phases log their duration (`Captured N route(s) in Xs`, `Uploaded N screenshot(s) to Snap in Xs`).
 
 ## 0.16.0 - 2026-10-05

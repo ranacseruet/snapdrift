@@ -48,7 +48,7 @@ runs:
     - name: Install Playwright Chromium
       shell: bash
       run: |
-        "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps chromium
+        "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps --only-shell chromium
 
     - id: capture
       shell: bash
