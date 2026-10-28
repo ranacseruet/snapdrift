@@ -423,13 +423,22 @@ describe('@snapdrift/compare-core — compareImages', () => {
   test('v2 ignores an inserted row that repeats as often as a structural row', () => {
     const withRepeats = (/** @type {number} */ count) => rowPng([1, ...Array(count).fill(99), 2]);
 
-    const justBelow = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS - 1), withRepeats(MIN_STRUCTURAL_ROW_REPEATS), { alignment: 'vertical' });
+    const justBelow = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS - 2), withRepeats(MIN_STRUCTURAL_ROW_REPEATS - 1), { alignment: 'vertical' });
     expect(justBelow.comparison).toMatchObject({ mode: 'coordinate-fallback', fallbackReason: 'ambiguous' });
 
-    const atThreshold = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS), withRepeats(MIN_STRUCTURAL_ROW_REPEATS + 1), { alignment: 'vertical' });
+    const atThreshold = compareImages(withRepeats(MIN_STRUCTURAL_ROW_REPEATS - 1), withRepeats(MIN_STRUCTURAL_ROW_REPEATS), { alignment: 'vertical' });
     expect(atThreshold.comparison).toMatchObject({ mode: 'vertical-aligned' });
     expect(atThreshold.comparison.rowMapping.filter((segment) => segment.kind === 'inserted')).toHaveLength(1);
     expect(atThreshold.differentPixels).toBe(4);
+  });
+
+  test('v2 aligns a structural gap that grows from fewer repeats than the threshold', () => {
+    const withGap = (/** @type {number} */ count) => rowPng([1, ...Array(count).fill(99), 2]);
+
+    const result = compareImages(withGap(MIN_STRUCTURAL_ROW_REPEATS - 1), withGap(MIN_STRUCTURAL_ROW_REPEATS * 4), { alignment: 'vertical' });
+
+    expect(result.comparison).toMatchObject({ mode: 'vertical-aligned' });
+    expect(result.comparison.rowMapping.filter((segment) => segment.kind === 'inserted').reduce((sum, segment) => sum + segment.length, 0)).toBe(MIN_STRUCTURAL_ROW_REPEATS * 3 + 1);
   });
 
   test('v2 does not treat paired rows as ambiguous when a duplicate row is deleted', () => {

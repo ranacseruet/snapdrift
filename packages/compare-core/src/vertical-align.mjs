@@ -13,7 +13,7 @@ export const MAX_ALIGNMENT_ROWS = 100_000;
 // Keep the synchronous Myers search below a bounded sub-second budget for
 // dissimilar tall captures. Larger edit groups conservatively use v1.
 export const MAX_ALIGNMENT_EDIT_LENGTH = 2_048;
-// A row repeated this often on the other side (page background, card padding,
+// A row repeated this often on either side (page background, card padding,
 // borders) carries no movement evidence: where it lands inside a run of
 // identical rows makes no visible difference. Rarer rows still trigger the
 // ambiguity fallback.
@@ -91,16 +91,18 @@ function countFingerprints(fingerprints) {
 }
 
 /**
- * An unmatched row is ambiguous when it also occurs on the opposite side but
- * not often enough to be a structural row.
+ * An unmatched row is ambiguous when it also occurs on the opposite side, unless
+ * it repeats often enough, on either side, to be a structural row.
  *
- * @param {Map<string, number>} oppositeCounts
+ * @param {Map<string, number>} ownCounts rows of the image the unmatched row came from
+ * @param {Map<string, number>} oppositeCounts rows of the other image
  * @param {string} fingerprint
  * @returns {boolean}
  */
-function isAmbiguousRow(oppositeCounts, fingerprint) {
-  const repeats = oppositeCounts.get(fingerprint) ?? 0;
-  return repeats > 0 && repeats < MIN_STRUCTURAL_ROW_REPEATS;
+function isAmbiguousRow(ownCounts, oppositeCounts, fingerprint) {
+  const oppositeRepeats = oppositeCounts.get(fingerprint) ?? 0;
+  const ownRepeats = ownCounts.get(fingerprint) ?? 0;
+  return oppositeRepeats > 0 && Math.max(oppositeRepeats, ownRepeats) < MIN_STRUCTURAL_ROW_REPEATS;
 }
 
 /**
@@ -221,9 +223,11 @@ export function alignRows(baseline, current) {
     // If a truly unmatched row is also present elsewhere in the opposite image,
     // there is no reliable way to tell movement from insertion. Fall back to
     // coordinate comparison instead of painting an arbitrary occurrence green.
+    // Rows repeated MIN_STRUCTURAL_ROW_REPEATS times or more on either side
+    // are structural padding and are exempt (see isAmbiguousRow).
     if (
-      unmatchedAddedTail.some((fingerprint) => isAmbiguousRow(baselineFingerprintCounts, fingerprint)) ||
-      unmatchedRemovedTail.some((fingerprint) => isAmbiguousRow(currentFingerprintCounts, fingerprint))
+      unmatchedAddedTail.some((fingerprint) => isAmbiguousRow(currentFingerprintCounts, baselineFingerprintCounts, fingerprint)) ||
+      unmatchedRemovedTail.some((fingerprint) => isAmbiguousRow(baselineFingerprintCounts, currentFingerprintCounts, fingerprint))
     ) {
       return { kind: 'fallback', reason: 'ambiguous' };
     }
