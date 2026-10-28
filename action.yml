@@ -155,7 +155,7 @@ runs:
     - name: SnapDrift baseline
       id: baseline
       if: inputs.mode == 'baseline'
-      uses: ranacseruet/snapdrift/actions/baseline@8e827952c33415ba2d8f1fdab944d519534013a6 # v0.16.0
+      uses: ranacseruet/snapdrift/actions/baseline@1cbf62965475bc856218ce46eb46dccf7c05326f # v0.16.1
       with:
         repo-config-path: ${{ inputs.repo-config-path }}
         route-ids: ${{ inputs.route-ids }}
@@ -165,7 +165,7 @@ runs:
     - name: SnapDrift pull request diff
       id: pr-diff
       if: inputs.mode == 'pr-diff'
-      uses: ranacseruet/snapdrift/actions/pr-diff@8e827952c33415ba2d8f1fdab944d519534013a6 # v0.16.0
+      uses: ranacseruet/snapdrift/actions/pr-diff@1cbf62965475bc856218ce46eb46dccf7c05326f # v0.16.1
       with:
         github-token: ${{ inputs.github-token }}
         repo-config-path: ${{ inputs.repo-config-path }}

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.16.1 - 2026-10-27
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.7.0 — new public `readPngDimensions` export (PNG IHDR width/height without decoding pixels).
+- `@snapdrift/adapter-fs` 1.7.1 — local capture reads screenshot dimensions from the PNG header instead of fully decoding every PNG, and now depends on `@snapdrift/compare-core ^1.7.0` for that reader.
+
+`@snapdrift/manifest` stays 1.8.0 and `@snapdrift/adapter-report-md` stays 1.4.0. Root floors move to `@snapdrift/compare-core ^1.7.0` and `@snapdrift/adapter-fs ^1.7.1`; the previous `adapter-fs` 1.7.0 and `compare-core` 1.6.0 do not satisfy them, so installing `snapdrift` 0.16.1 always gets the shared reader. The dispatcher pins `1cbf629`, the #195 merge commit on `main`, which is the newest commit touching `actions/` and includes the shell-only Playwright install.
+
 ### Performance
 
 - Hybrid (`provider: "snap"` with a local `baseUrl`) capture uploads screenshots to Snap with up to 4 routes in flight instead of one at a time, and stops starting new uploads after the first failure.
