@@ -2,7 +2,7 @@
 
 import pngjs from 'pngjs';
 
-import { buildOffsetRenderPlan, pixelIsHighlighted } from './offset-align.mjs';
+import { buildOffsetRenderPlan, pixelIsHighlighted, STRUCTURED_DELTA } from './offset-align.mjs';
 import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
 import { alignRows, appendSegment } from './vertical-align.mjs';
 
@@ -216,6 +216,11 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
     totalPixels,
     policyVersion: 2,
     mode: /** @type {const} */ ('vertical-aligned'),
+    alignmentStrategy: /** @type {const} */ ('offset'),
+    // Stable offset-run rows use the 32-per-channel highlight rule. Local
+    // residual bands between stable runs use the stricter NOISE_DELTA floor,
+    // so this field describes stable runs only.
+    tolerance: STRUCTURED_DELTA,
     rowMapping: segments
   });
   return {
@@ -239,6 +244,10 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
  * alignment is tried first. When that search hits its edit cap, piecewise
  * vertical-offset runs supply the row plan. The result uses one output row
  * for every matched, changed, inserted, or deleted source row.
+ *
+ * An aligned canvas past `maxPixels` falls back as `alignment-limit` so the
+ * caller can still use coordinate comparison. The coordinate union itself
+ * still throws when it exceeds the limit.
  *
  * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
  * @param {{ data: Uint8Array, width: number, height: number }} currentPng
@@ -266,15 +275,7 @@ function compareAlignedImages(baselinePng, currentPng, options) {
   const canvasWidth = baselinePng.width;
   const canvasHeight = alignment.height;
   if (canvasWidth * canvasHeight > options.maxPixels) {
-    throw new ComparisonTooLargeError(
-      baselinePng.width,
-      baselinePng.height,
-      currentPng.width,
-      currentPng.height,
-      canvasWidth,
-      canvasHeight,
-      options.maxPixels
-    );
+    return { kind: 'fallback', reason: 'alignment-limit' };
   }
 
   const comparison = /** @type {import('../types/index.d.ts').ComparisonMetadata} */ ({
@@ -285,6 +286,7 @@ function compareAlignedImages(baselinePng, currentPng, options) {
     totalPixels: 0,
     policyVersion: 2,
     mode: /** @type {const} */ ('vertical-aligned'),
+    alignmentStrategy: /** @type {const} */ ('exact'),
     rowMapping: alignment.segments
   });
   const diffPng = options.renderDiffImage ? new PNG({ width: canvasWidth, height: canvasHeight }) : undefined;
@@ -481,6 +483,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
       totalPixels,
       policyVersion: 2,
       mode: /** @type {const} */ ('vertical-aligned'),
+      alignmentStrategy: /** @type {const} */ ('exact'),
       rowMapping: canvasHeight > 0
         ? [{ outputStart: 0, length: canvasHeight, kind: /** @type {const} */ ('matched'), baselineStart: 0, currentStart: 0 }]
         : []

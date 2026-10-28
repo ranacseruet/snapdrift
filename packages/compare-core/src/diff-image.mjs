@@ -2,12 +2,12 @@
 
 import pngjs from 'pngjs';
 
-import { buildIgnoreMask, createDimensionMismatchError, parseHighlightColor, validateIgnoreRegions } from './shared.mjs';
+import { createDimensionMismatchError, parseHighlightColor, validateIgnoreRegions } from './shared.mjs';
+import { compareStrictPixels } from './strict-compare.mjs';
 
 const { PNG } = pngjs;
 
 const DEFAULT_HIGHLIGHT_COLOR = /** @type {const} */ ([255, 140, 0, 255]);
-const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
 
 /**
  * Generate a visual diff PNG buffer from two image buffers.
@@ -32,46 +32,17 @@ export function generateDiffImage(baselineBuffer, currentBuffer, options = {}) {
     throw createDimensionMismatchError(baselinePng, currentPng);
   }
 
-  const [r, g, b, a] = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
-  const width = baselinePng.width;
-  const height = baselinePng.height;
+  const highlightColor = parseHighlightColor(options.highlightColor || DEFAULT_HIGHLIGHT_COLOR);
   const ignoreRegions = options.ignoreRegions || [];
   validateIgnoreRegions(ignoreRegions);
-  const ignored = buildIgnoreMask(width, height, ignoreRegions);
 
-  const diffPng = new PNG({ width, height });
+  const result = compareStrictPixels(baselinePng, currentPng, {
+    ignoreRegions,
+    highlightColor,
+    renderDiffImage: true
+  });
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-
-      if (ignored && ignored[y * width + x]) {
-        diffPng.data[i] = IGNORE_REGION_COLOR[0];
-        diffPng.data[i + 1] = IGNORE_REGION_COLOR[1];
-        diffPng.data[i + 2] = IGNORE_REGION_COLOR[2];
-        diffPng.data[i + 3] = IGNORE_REGION_COLOR[3];
-        continue;
-      }
-
-      const changed =
-        baselinePng.data[i] !== currentPng.data[i] ||
-        baselinePng.data[i + 1] !== currentPng.data[i + 1] ||
-        baselinePng.data[i + 2] !== currentPng.data[i + 2] ||
-        baselinePng.data[i + 3] !== currentPng.data[i + 3];
-
-      if (changed) {
-        diffPng.data[i] = r;
-        diffPng.data[i + 1] = g;
-        diffPng.data[i + 2] = b;
-        diffPng.data[i + 3] = a;
-      } else {
-        diffPng.data[i] = baselinePng.data[i];
-        diffPng.data[i + 1] = baselinePng.data[i + 1];
-        diffPng.data[i + 2] = baselinePng.data[i + 2];
-        diffPng.data[i + 3] = baselinePng.data[i + 3];
-      }
-    }
-  }
-
-  return PNG.sync.write(diffPng);
+  // Always re-encode, even when the decoded pixels are byte-identical: this
+  // export's contract is a PNG buffer, not a pass-through of the input.
+  return PNG.sync.write(/** @type {import('pngjs').PNG} */ (result.diffPng));
 }
