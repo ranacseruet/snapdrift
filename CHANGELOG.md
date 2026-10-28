@@ -11,6 +11,7 @@
 ### Performance
 
 - `@snapdrift/compare-core`: policy v2 metrics-only comparisons (`renderDiffImage: false`) skip the per-pixel loop for byte-identical matched row runs and count them straight into the denominator.
+- `@snapdrift/compare-core`: exact row alignment now fingerprints rows with two independent 32-bit FNV-style accumulators over `Uint32Array` word views (byte hashing when the view cannot be built) packed into one combined 53-bit JS safe integer (`high * 2^32 + low`) instead of Node SHA-1 hex digests. A plain 32-bit value over ~16k rows has a few-percent birthday collision chance (~1.6% at 16,384 rows over 2^32); the packed 53-bit value shrinks that to roughly 7.5e-9, and `rowsEqual` still byte-verifies every Myers match, so a collision still falls back as `verification-failed`. No BigInt is used. Best of 3 in plain Node outside Jest: the insertion-shift fixture (1440x5622) fingerprint-only 58.4ms -> 53.2ms (-8.9%) and alignRows 168.2ms -> 150.9ms (-10.3%); a tall synthetic 1440x8000 pair with one inserted row fingerprint-only 64.6ms -> 51.8ms (-19.8%), alignRows 64.7ms -> 51.9ms (-19.7%), and full metrics-only `compareImages` 402.9ms -> 386.3ms (-4.1%). Row mappings and metrics are identical before and after; the fixture's full comparison is dominated by the unchanged offset-run path, so its metrics-only time stayed ~2890ms.
 
 ## 0.16.1 - 2026-10-27
 
