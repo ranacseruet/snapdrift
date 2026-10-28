@@ -5,6 +5,12 @@
 ### Fixes
 
 - `@snapdrift/compare-core`: policy v2 (`alignment: 'vertical'`) no longer falls back to coordinate comparison with `fallbackReason: 'ambiguous'` just because a page grew by rows that match repeated card padding or background rows elsewhere in the image. An unmatched row now counts as ambiguous only when it occurs fewer than `MIN_STRUCTURAL_ROW_REPEATS` (16, newly exported) times on either side. On a real 1440x3386 page screenshot pair where one card grew by 22 rows, this took the reported drift from 10.83% in coordinate fallback to 1.43% aligned.
+- `@snapdrift/compare-core`: offset-run content intervals now report a row-weighted `meanCost` when adjacent ±1 runs merge, instead of averaging the two run means. This is diagnostic output only; row plans and metrics are unchanged.
+- `@snapdrift/compare-core`: the exact row alignment no longer wraps the Myers search in a bare `catch`. An exhausted edit budget still falls back as `alignment-limit`; an unexpected error now surfaces instead of being reported as that fallback.
+
+### Performance
+
+- `@snapdrift/compare-core`: policy v2 metrics-only comparisons (`renderDiffImage: false`) skip the per-pixel loop for byte-identical matched row runs and count them straight into the denominator.
 
 ## 0.16.1 - 2026-10-27
 

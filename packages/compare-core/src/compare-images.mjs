@@ -4,7 +4,7 @@ import pngjs from 'pngjs';
 
 import { buildOffsetRenderPlan, pixelIsHighlighted } from './offset-align.mjs';
 import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
-import { alignRows } from './vertical-align.mjs';
+import { alignRows, appendSegment } from './vertical-align.mjs';
 
 const { PNG } = pngjs;
 
@@ -95,52 +95,6 @@ export class ComparisonTooLargeError extends Error {
 }
 
 /**
- * Compare two equal-width images after aligning their rows. The result uses
- * one output row for every matched, changed, inserted, or deleted source row.
- *
- * @param {{ data: Uint8Array, width: number, height: number }} baselinePng
- * @param {{ data: Uint8Array, width: number, height: number }} currentPng
- * @param {{
- *   renderDiffImage: boolean,
- *   changedColor: [number, number, number, number],
- *   addedColor: [number, number, number, number],
- *   removedColor: [number, number, number, number],
- *   maxPixels: number
- * }} options
- * @returns {{ kind: 'aligned', result: CompareImagesImplementationResult } | { kind: 'fallback', reason: string }}
- */
-/**
- * @param {import('./vertical-align.mjs').AlignmentSegment[]} segments
- * @param {import('./vertical-align.mjs').AlignmentSegment} segment
- * @returns {void}
- */
-function appendAlignmentSegment(segments, segment) {
-  const previous = segments.at(-1);
-  const baselineContiguous =
-    previous?.baselineStart === undefined ||
-    segment.baselineStart === undefined ||
-    previous.baselineStart + previous.length === segment.baselineStart;
-  const currentContiguous =
-    previous?.currentStart === undefined ||
-    segment.currentStart === undefined ||
-    previous.currentStart + previous.length === segment.currentStart;
-
-  const sameComparedRow = (previous?.comparedOffset ?? 0) === (segment.comparedOffset ?? 0);
-  if (
-    previous &&
-    previous.kind === segment.kind &&
-    baselineContiguous &&
-    currentContiguous &&
-    sameComparedRow &&
-    previous.outputStart + previous.length === segment.outputStart
-  ) {
-    previous.length += segment.length;
-    return;
-  }
-  segments.push(segment);
-}
-
-/**
  * Max absolute difference across RGBA. Highlighting includes alpha so a mapped
  * row whose opacity changed is not reported as matched. Scoring ignores fully
  * transparent pixels and treats only a large opacity change as a mismatch.
@@ -224,7 +178,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
       }
       const comparedDelta = step.pixelY - step.currentY;
       const comparedOffset = comparedDelta === -1 || comparedDelta === 1 ? comparedDelta : undefined;
-      appendAlignmentSegment(segments, {
+      appendSegment(segments, {
         outputStart: outputY,
         length: 1,
         kind: highlighted > 0 ? 'changed' : 'matched',
@@ -244,7 +198,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
           diffPng.data[outputIndex + 3] = color[3];
         }
       }
-      appendAlignmentSegment(segments, step.role === 'inserted'
+      appendSegment(segments, step.role === 'inserted'
         ? { outputStart: outputY, length: 1, kind: 'inserted', currentStart: step.currentY }
         : { outputStart: outputY, length: 1, kind: 'deleted', baselineStart: step.baselineY });
     }
@@ -338,6 +292,12 @@ function compareAlignedImages(baselinePng, currentPng, options) {
   let totalPixels = 0;
 
   for (const segment of alignment.segments) {
+    // Matched rows are byte-identical and contribute nothing but the
+    // denominator when no image is rendered.
+    if (!diffPng && segment.kind === 'matched') {
+      totalPixels += canvasWidth * segment.length;
+      continue;
+    }
     for (let offset = 0; offset < segment.length; offset++) {
       const outputY = segment.outputStart + offset;
       const baselineY = segment.baselineStart === undefined ? undefined : segment.baselineStart + offset;
@@ -375,11 +335,12 @@ function compareAlignedImages(baselinePng, currentPng, options) {
           diffPng.data[outputIndex + 2] = color[2];
           diffPng.data[outputIndex + 3] = color[3];
         } else {
-          const sourceIndex = currentIndex >= 0 ? currentIndex : baselineIndex;
-          diffPng.data[outputIndex] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex] : baselinePng.data[sourceIndex]) : 0;
-          diffPng.data[outputIndex + 1] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 1] : baselinePng.data[sourceIndex + 1]) : 0;
-          diffPng.data[outputIndex + 2] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 2] : baselinePng.data[sourceIndex + 2]) : 0;
-          diffPng.data[outputIndex + 3] = sourceIndex >= 0 ? (currentIndex >= 0 ? currentPng.data[sourceIndex + 3] : baselinePng.data[sourceIndex + 3]) : 0;
+          // Uncolored rows are matched or changed, so both sides are present;
+          // the current pixel is shown.
+          diffPng.data[outputIndex] = currentPng.data[currentIndex];
+          diffPng.data[outputIndex + 1] = currentPng.data[currentIndex + 1];
+          diffPng.data[outputIndex + 2] = currentPng.data[currentIndex + 2];
+          diffPng.data[outputIndex + 3] = currentPng.data[currentIndex + 3];
         }
       }
     }

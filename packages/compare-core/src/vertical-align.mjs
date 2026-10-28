@@ -106,13 +106,14 @@ function isAmbiguousRow(ownCounts, oppositeCounts, fingerprint) {
 }
 
 /**
- * Add a segment and coalesce adjacent segments with the same meaning.
+ * Add a segment and coalesce adjacent segments with the same meaning,
+ * including the same `comparedOffset`.
  *
  * @param {AlignmentSegment[]} segments
  * @param {AlignmentSegment} segment
  * @returns {void}
  */
-function appendSegment(segments, segment) {
+export function appendSegment(segments, segment) {
   const previous = segments.at(-1);
   const baselineContiguous =
     previous?.baselineStart === undefined ||
@@ -123,7 +124,15 @@ function appendSegment(segments, segment) {
     segment.currentStart === undefined ||
     previous.currentStart + previous.length === segment.currentStart;
 
-  if (previous && previous.kind === segment.kind && baselineContiguous && currentContiguous && previous.outputStart + previous.length === segment.outputStart) {
+  const sameComparedRow = (previous?.comparedOffset ?? 0) === (segment.comparedOffset ?? 0);
+  if (
+    previous &&
+    previous.kind === segment.kind &&
+    baselineContiguous &&
+    currentContiguous &&
+    sameComparedRow &&
+    previous.outputStart + previous.length === segment.outputStart
+  ) {
     previous.length += segment.length;
     return;
   }
@@ -150,14 +159,10 @@ export function alignRows(baseline, current) {
   const baselineFingerprints = Array.from({ length: baseline.height }, (_, y) => rowFingerprint(baseline, y));
   const currentFingerprints = Array.from({ length: current.height }, (_, y) => rowFingerprint(current, y));
 
-  let changes;
-  try {
-    changes = diffArrays(baselineFingerprints, currentFingerprints, {
-      maxEditLength: Math.min(MAX_ALIGNMENT_EDIT_LENGTH, rowCount)
-    });
-  } catch {
-    return { kind: 'fallback', reason: 'alignment-limit' };
-  }
+  // diffArrays returns undefined once the edit budget is exhausted.
+  const changes = diffArrays(baselineFingerprints, currentFingerprints, {
+    maxEditLength: Math.min(MAX_ALIGNMENT_EDIT_LENGTH, rowCount)
+  });
   if (!changes) {
     return { kind: 'fallback', reason: 'alignment-limit' };
   }

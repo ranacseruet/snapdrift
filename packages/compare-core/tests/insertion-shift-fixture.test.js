@@ -82,6 +82,24 @@ describe('insertion-shift fixture', () => {
     expect(report.localHighlights).toBeGreaterThan(0);
     expect(report.localGapKind).not.toBe('deleted');
   }, 30_000);
+
+  test('reports each merged content interval with the row-weighted mean cost', async () => {
+    const mapped = analyzeOffsetRuns(PNG.sync.read(await readFixture('baseline.png')), PNG.sync.read(await readFixture('current.png')));
+    expect(mapped.kind).toBe('mapped');
+    if (mapped.kind !== 'mapped') return;
+
+    // Adjacent ±1 runs merge into one interval; pin that the fixture has one
+    // so the weighted mean is exercised rather than a single-run average.
+    const merged = mapped.contentIntervals.filter((interval) =>
+      new Set(mapped.rows.slice(interval.start, interval.end).map((row) => row.offset)).size > 1
+    );
+    expect(merged.length).toBeGreaterThan(0);
+    for (const interval of mapped.contentIntervals) {
+      const rows = mapped.rows.slice(interval.start, interval.end);
+      const rowMean = rows.reduce((sum, row) => sum + row.cost, 0) / rows.length;
+      expect(interval.meanCost).toBeCloseTo(rowMean, 12);
+    }
+  }, 30_000);
 });
 
 describe('synthetic alignment cases', () => {

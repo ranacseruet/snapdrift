@@ -106,14 +106,6 @@ export const MAX_OFFSET_CONTENT_INTERVALS = 64;
  */
 
 /**
- * Baseline ink below the sample minimum cannot vote. Out-of-range offsets
- * still cost 1; this flag only describes the in-range abstention.
- *
- * @param {DecodedPng} baseline
- * @param {number} baselineY
- * @returns {boolean}
- */
-/**
  * @param {Uint8Array} data
  * @param {number} index
  * @returns {boolean}
@@ -129,6 +121,14 @@ function isBaselineInk(data, index) {
   return luma >= INK_LUMA;
 }
 
+/**
+ * Baseline ink below the sample minimum cannot vote. Out-of-range offsets
+ * still cost 1; this flag only describes the in-range abstention.
+ *
+ * @param {DecodedPng} baseline
+ * @param {number} baselineY
+ * @returns {boolean}
+ */
 function rowAbstains(baseline, baselineY) {
   const width = baseline.width;
   const baselineRow = baselineY * width * 4;
@@ -519,10 +519,12 @@ function summarizeIntervals(baseline, current, rows) {
       run.offset !== null &&
       Math.abs(previous.offset - run.offset) <= 1;
     if (previous && adjacentShift) {
+      const previousRows = previous.end - previous.start;
+      const runRows = run.end - run.start;
+      previous.meanCost = (previous.meanCost * previousRows + run.meanCost * runRows) / (previousRows + runRows);
       previous.end = run.end;
       previous.highlightRows += run.highlightRows;
       previous.structuredRows += run.structuredRows;
-      previous.meanCost = (previous.meanCost + run.meanCost) / 2;
       continue;
     }
     contentIntervals.push({ ...run });
