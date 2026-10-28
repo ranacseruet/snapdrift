@@ -41,6 +41,17 @@ export interface ComparisonMetadata {
   totalPixels: number;
   policyVersion?: 2;
   mode?: 'vertical-aligned' | 'coordinate-fallback';
+  /**
+   * Strategy that produced an aligned result. `exact` matched byte-identical
+   * rows with no tolerance; `offset` mapped piecewise vertical-offset runs and
+   * used a per-channel highlight tolerance. Absent for coordinate fallback.
+   */
+  alignmentStrategy?: 'exact' | 'offset';
+  /**
+   * Maximum per-channel delta that stays matched on the offset strategy
+   * (`STRUCTURED_DELTA`, 32). Present only with `alignmentStrategy: 'offset'`.
+   */
+  tolerance?: number;
   rowMapping?: ComparisonRowMapping[];
   fallbackReason?: ComparisonFallbackReason;
 }

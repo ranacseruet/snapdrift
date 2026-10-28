@@ -12,6 +12,10 @@
 
 - `@snapdrift/compare-core`: policy v2 metrics-only comparisons (`renderDiffImage: false`) skip the per-pixel loop for byte-identical matched row runs and count them straight into the denominator.
 
+### Features
+
+- `@snapdrift/compare-core`: policy v2 aligned comparison metadata now identifies the row-alignment strategy (`alignmentStrategy: "exact" | "offset"`) and records the offset path's per-channel tolerance (`tolerance: 32`). `mode` remains `"vertical-aligned"`; a coordinate fallback carries neither field. Additive metadata so consumers can tell byte-identical exact matches from tolerant offset-run matches. Closes #200.
+
 ## 0.16.1 - 2026-10-27
 
 Workspace releases this version:

@@ -45,6 +45,8 @@ describe('insertion-shift fixture', () => {
     const report = JSON.parse(child.stdout);
     expect(report).toMatchObject({
       mode: 'vertical-aligned',
+      alignmentStrategy: 'offset',
+      tolerance: 32,
       fallbackReason: null,
       dimensionsChanged: true,
       canvas: { width: 1440, height: expect.any(Number) },

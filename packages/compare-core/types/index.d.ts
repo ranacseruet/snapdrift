@@ -71,6 +71,17 @@ export interface ComparisonMetadata {
   /** Whether v2 aligned rows or fell back to coordinate comparison. */
   mode?: 'vertical-aligned' | 'coordinate-fallback';
   /**
+   * Strategy that produced an aligned result. `exact` matched byte-identical
+   * rows with no tolerance; `offset` mapped piecewise vertical-offset runs and
+   * used a per-channel highlight tolerance. Absent for coordinate fallback.
+   */
+  alignmentStrategy?: 'exact' | 'offset';
+  /**
+   * Maximum per-channel delta that stays matched on the offset strategy
+   * (`STRUCTURED_DELTA`, 32). Present only with `alignmentStrategy: 'offset'`.
+   */
+  tolerance?: number;
+  /**
    * Row mapping used to render and score an aligned result.
    * On an offset-run match, `matched` means mapped and below the highlight rule.
    * `comparedOffset` names a one-pixel neighbor when that row was the one compared.
