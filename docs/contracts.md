@@ -393,7 +393,10 @@ since a caller may raise it per call.
 Policy v2 uses the aligned output height for this same budget. Because an
 inserted row and a deleted row each occupy an output row, that height can be up
 to the sum of the baseline and current heights. If the aligned canvas exceeds
-the budget, v2 returns `comparison_too_large` before allocating a diff image.
+the budget, both the exact-row alignment path and the offset-run path fall back
+to coordinate comparison with `fallbackReason: 'alignment-limit'`; the
+coordinate union must still fit, and an oversized coordinate union still throws
+`comparison_too_large` before allocating a diff image.
 
 `32 × 1024 × 1024` is the *default* ceiling, not an algorithm property. The cost
 is dominated by the decoded images: both RGBA inputs (4 bytes per pixel each) are
