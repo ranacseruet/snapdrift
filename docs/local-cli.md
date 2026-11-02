@@ -214,6 +214,13 @@ normalized viewport. A mismatch produces an
 signal. Matching profiles can still have route-identity errors:
 `summary.captureCompatibility.status` describes profiles only.
 
+SnapDrift 0.18.0 raises the Playwright floor to 1.64.1, which installs Chromium
+156 (`156.0.8078.4`, revision 1248) instead of Chromium 153 (`153.0.8010.12`,
+revision 1243). Every local baseline captured with Playwright 1.63.x is
+incompatible until refreshed, even when the rendered pixels are byte-identical;
+the profile check has no version tolerance. Refresh on the upgraded environment
+before expecting PR diffs to compare pixels.
+
 To refresh, serve the intended accepted application state using the same capture
 environment and route config as future diffs. With `provider: "local"`, run:
 
