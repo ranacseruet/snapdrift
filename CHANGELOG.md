@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.18.0 - 2026-11-02
+
+Workspace releases this version:
+
+- `@snapdrift/adapter-fs` 1.8.0 — local capture now requires Playwright `^1.64.1`, which installs Chromium `156.0.8078.4` (revision `1248`) instead of Chromium `153.0.8010.12` (revision `1243`). Existing local baselines captured with Playwright 1.63.x persist a different `captureProfile.browserRevision` / `playwrightVersion`, so comparison reports `incompatible_capture` and does not compare pixels until the baseline is refreshed in the upgraded environment. Pixel rendering may still be byte-identical; the capture-profile contract has no version tolerance.
+
+`@snapdrift/manifest` stays 1.8.0, `@snapdrift/compare-core` stays 1.8.0, and `@snapdrift/adapter-report-md` stays 1.4.0. Root floors move to `@snapdrift/adapter-fs ^1.8.0` and `playwright ^1.64.1`; the previous `adapter-fs` 1.7.2 and the Playwright 1.63 floor do not satisfy them. The dispatcher pins `3831623`, the #216 merge commit on `main`, which includes the newest commit touching `actions/` (`1cbf629`, the shell-only Playwright install).
+
+### Changes
+
+- Local capture raises the Playwright floor to `^1.64.1`; installs now provision Chromium `156.0.8078.4` (revision `1248`). GitHub Actions keep the shell-only Chromium install (`playwright install --with-deps --only-shell chromium`).
+- **Baseline refresh required:** local baselines captured under the previous Playwright floor (`1.63.x`, Chromium `153.0.8010.12`, revision `1243`) are incompatible until recaptured. A real local-capture verification on a deterministic page produced byte-identical desktop (1440×900) and mobile (1170×2955) PNGs across both versions, but diffing the old baseline against a 1.64.1 current capture returned `incomplete` with two `incompatible_capture` errors (reason: `captureProfile.browserRevision differs between baseline and current capture`); recapturing on 1.64.1 then diffing returned `clean` with `captureCompatibility: verified`.
+
+### Documentation
+
+- `docs/local-cli.md` now states the upgrade path explicitly: refresh every local baseline in the upgraded Playwright/Chromium environment before expecting PR diffs to compare pixels, even when rendering is byte-identical.
+- Existing guidance on refreshing or acknowledging local baselines remains unchanged; `report-only` keeps incompatibility visible and never forces pixel comparison.
+
 ## 0.17.0 - 2026-10-28
 
 Workspace releases this version:
