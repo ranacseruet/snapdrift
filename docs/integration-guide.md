@@ -8,7 +8,7 @@ Examples use the public release tag for readability. If your organization requir
 
 - SnapDrift provisions Node 22 internally.
 - The consumer app can use any stack as long as it can be started and reached at `baseUrl`.
-- The runner must be Ubuntu-compatible because Playwright Chromium is installed with system dependencies.
+- The runner must be pinned to a stable Ubuntu-compatible image (for example `ubuntu-24.04`) because Playwright Chromium is installed with system dependencies and local capture profiles fingerprint the OS. Avoid a moving `ubuntu-latest` label between baseline and PR captures.
 - The runner must have outbound network access to fetch Playwright Chromium.
 
 Your repository still owns:
@@ -112,7 +112,7 @@ permissions:
 
 jobs:
   snapdrift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -154,7 +154,7 @@ permissions:
 
 jobs:
   snapdrift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
