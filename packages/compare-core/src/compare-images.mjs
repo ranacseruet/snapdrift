@@ -12,7 +12,7 @@ import {
   STRUCTURAL_DUPLICATE_COST,
   STRUCTURAL_DUPLICATE_WINDOW
 } from './offset-align.mjs';
-import { buildIgnoreMask, parseHighlightColor, readPngDimensions, validateIgnoreRegions } from './shared.mjs';
+import { buildIgnoreMask, parseHighlightColor, readPngDimensions, rgbaChannelDelta, rgbaPixelsEqual, validateIgnoreRegions } from './shared.mjs';
 import { alignRows, appendSegment } from './vertical-align.mjs';
 
 const { PNG } = pngjs;
@@ -104,26 +104,6 @@ export class ComparisonTooLargeError extends Error {
 }
 
 /**
- * Max absolute difference across RGBA. Highlighting includes alpha so a mapped
- * row whose opacity changed is not reported as matched. Scoring ignores fully
- * transparent pixels and treats only a large opacity change as a mismatch.
- *
- * @param {Uint8Array} baseline
- * @param {Uint8Array} current
- * @param {number} baselineIndex
- * @param {number} currentIndex
- * @returns {number}
- */
-function channelDelta(baseline, current, baselineIndex, currentIndex) {
-  return Math.max(
-    Math.abs(baseline[baselineIndex] - current[currentIndex]),
-    Math.abs(baseline[baselineIndex + 1] - current[currentIndex + 1]),
-    Math.abs(baseline[baselineIndex + 2] - current[currentIndex + 2]),
-    Math.abs(baseline[baselineIndex + 3] - current[currentIndex + 3])
-  );
-}
-
-/**
  * Whether a one-sided content row duplicates a row the plan already claims in
  * the other image. Search offsets around the neighboring stable runs: a
  * compensating band of repeated fill rows is a rendering duplicate, while a
@@ -169,22 +149,6 @@ function isStructuralDuplicate(baselinePng, currentPng, role, sourceY, claimedBa
 }
 
 /**
- * Whether two pixels are byte-identical.
- *
- * @param {{ data: Uint8Array }} pngA
- * @param {number} indexA
- * @param {{ data: Uint8Array }} pngB
- * @param {number} indexB
- * @returns {boolean}
- */
-function pixelsEqual(pngA, indexA, pngB, indexB) {
-  return pngA.data[indexA] === pngB.data[indexB] &&
-    pngA.data[indexA + 1] === pngB.data[indexB + 1] &&
-    pngA.data[indexA + 2] === pngB.data[indexB + 2] &&
-    pngA.data[indexA + 3] === pngB.data[indexB + 3];
-}
-
-/**
  * Bitmasks of relative offsets within {@link STRUCTURAL_DUPLICATE_WINDOW} where
  * one mismatched pixel of a paired row duplicates a row the plan already claims
  * in the other image. Zero is excluded: the mismatched pair cannot be equal at
@@ -216,7 +180,7 @@ function displacementEvidenceMasks(baselinePng, currentPng, baselineY, pixelY, x
     if (currentY >= 0 && currentY < currentPng.height && claimedCurrent.has(currentY)) {
       const baselineIndex = (baselineY * baselinePng.width + x) * 4;
       const currentIndex = (currentY * currentPng.width + x) * 4;
-      if (pixelsEqual(baselinePng, baselineIndex, currentPng, currentIndex)) {
+      if (rgbaPixelsEqual(baselinePng.data, baselineIndex, currentPng.data, currentIndex)) {
         backgroundMask |= 1 << (delta + window);
       }
     }
@@ -224,7 +188,7 @@ function displacementEvidenceMasks(baselinePng, currentPng, baselineY, pixelY, x
     if (baselineCandidateY >= 0 && baselineCandidateY < baselinePng.height && claimedBaseline.has(baselineCandidateY)) {
       const baselineIndex = (baselineCandidateY * baselinePng.width + x) * 4;
       const currentIndex = (pixelY * currentPng.width + x) * 4;
-      if (pixelsEqual(currentPng, currentIndex, baselinePng, baselineIndex)) {
+      if (rgbaPixelsEqual(currentPng.data, currentIndex, baselinePng.data, baselineIndex)) {
         foregroundMask |= 1 << (-delta + window);
       }
     }
@@ -235,7 +199,7 @@ function displacementEvidenceMasks(baselinePng, currentPng, baselineY, pixelY, x
 /**
  * Render a page from piecewise vertical-offset runs.
  * Used when exact row alignment exhausts its edit budget. Callers that still
- * have an exact Myers script should keep that script: short byte-identical
+ * have an exact Myers script should keep that script: short visible-identical
  * edits are cheaper and already precise. An offset canvas past `maxPixels`
  * falls back so the caller can still use coordinate comparison. The coordinate
  * union itself still throws when it exceeds the limit.
@@ -341,7 +305,7 @@ export function compareOffsetAligned(baselinePng, currentPng, options) {
     let commonBackground = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
     let commonForeground = allCandidateBits & ~(1 << STRUCTURAL_DUPLICATE_WINDOW);
     for (let x = 0; x < canvasWidth; x += 1) {
-      const delta = channelDelta(baselinePng.data, currentPng.data, baselineRow + x * 4, pixelRow + x * 4);
+      const delta = rgbaChannelDelta(baselinePng.data, baselineRow + x * 4, currentPng.data, pixelRow + x * 4);
       if (!pixelIsHighlighted(delta, step.paint)) continue;
       mismatches.push(x);
       if (commonBackground !== 0 || commonForeground !== 0) {
@@ -548,8 +512,9 @@ function compareAlignedImages(baselinePng, currentPng, options) {
   let totalPixels = 0;
 
   for (const segment of alignment.segments) {
-    // Matched rows are byte-identical and contribute nothing but the
-    // denominator when no image is rendered.
+    // Matched rows are visible-identical (fully transparent pairs may differ in
+    // hidden RGB) and contribute nothing but the denominator when no image is
+    // rendered.
     if (!diffPng && segment.kind === 'matched') {
       totalPixels += canvasWidth * segment.length;
       continue;
@@ -567,10 +532,7 @@ function compareAlignedImages(baselinePng, currentPng, options) {
         const changed = segment.kind !== 'matched' && (
           segment.kind === 'inserted' ||
           segment.kind === 'deleted' ||
-          baselinePng.data[baselineIndex] !== currentPng.data[currentIndex] ||
-          baselinePng.data[baselineIndex + 1] !== currentPng.data[currentIndex + 1] ||
-          baselinePng.data[baselineIndex + 2] !== currentPng.data[currentIndex + 2] ||
-          baselinePng.data[baselineIndex + 3] !== currentPng.data[currentIndex + 3]
+          !rgbaPixelsEqual(baselinePng.data, baselineIndex, currentPng.data, currentIndex)
         );
 
         if (changed) {
@@ -639,7 +601,8 @@ function compareAlignedImages(baselinePng, currentPng, options) {
  * Diff rendering is semantic: pixels present only in the current image are
  * additions (green by default), pixels present only in the baseline image are
  * removals (red by default), and overlapping pixels that differ use
- * `highlightColor` (orange by default). One-sided pixels still count as
+ * `highlightColor` (orange by default). An overlap pair whose two alphas are
+ * both 0 is equal regardless of hidden RGB. One-sided pixels still count as
  * changed in the metrics, matching comparison policy v1.
  *
  * When ignore regions cover the whole canvas, `totalPixels` is 0 and
@@ -840,11 +803,7 @@ export function compareImages(baselineBuffer, currentBuffer, options = {}) {
       if (inBaseline && inCurrent) {
         const baselineIndex = (y * baselinePng.width + x) * 4;
         const currentIndex = (y * currentPng.width + x) * 4;
-        changed =
-          baselinePng.data[baselineIndex] !== currentPng.data[currentIndex] ||
-          baselinePng.data[baselineIndex + 1] !== currentPng.data[currentIndex + 1] ||
-          baselinePng.data[baselineIndex + 2] !== currentPng.data[currentIndex + 2] ||
-          baselinePng.data[baselineIndex + 3] !== currentPng.data[currentIndex + 3];
+        changed = !rgbaPixelsEqual(baselinePng.data, baselineIndex, currentPng.data, currentIndex);
 
         if (!changed && diffPng) {
           diffPng.data[diffIndex] = baselinePng.data[baselineIndex];

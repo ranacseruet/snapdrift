@@ -1,5 +1,7 @@
 // @ts-check
 
+import { rgbaChannelDelta } from './shared.mjs';
+
 /**
  * Piecewise vertical-offset alignment for comparison policy v2.
  *
@@ -10,7 +12,8 @@
  *
  * Scoring uses baseline ink only: luminance at or above {@link INK_LUMA} and
  * alpha at or above that same floor. Fully transparent pixels do not vote,
- * even when their RGB is bright. A channel delta at or below {@link NOISE_DELTA}
+ * even when their RGB is bright, and a pixel that is fully transparent on both
+ * sides is equal regardless of hidden RGB. A channel delta at or below {@link NOISE_DELTA}
  * is the measured rendering floor. A delta above {@link STRUCTURED_DELTA} is a
  * structured residual, including an opacity change of that size. A smaller
  * opacity change stays in the mapping and the highlight rule decides whether
@@ -274,12 +277,7 @@ export function hotRuns(baseline, current, baselineY, offset) {
   for (let x = 0; x < width; x += 1) {
     const baselineIndex = baselineRow + x * 4;
     const currentIndex = currentRow + x * 4;
-    const delta = Math.max(
-      Math.abs(baseline.data[baselineIndex] - current.data[currentIndex]),
-      Math.abs(baseline.data[baselineIndex + 1] - current.data[currentIndex + 1]),
-      Math.abs(baseline.data[baselineIndex + 2] - current.data[currentIndex + 2]),
-      Math.abs(baseline.data[baselineIndex + 3] - current.data[currentIndex + 3])
-    );
+    const delta = rgbaChannelDelta(baseline.data, baselineIndex, current.data, currentIndex);
     if (delta > NOISE_DELTA) {
       noiseRun += 1;
       if (noiseRun > noise) {

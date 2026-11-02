@@ -278,6 +278,42 @@ describe('synthetic alignment cases', () => {
     expect(analyzeOffsetRuns(baseline, current).kind === 'mapped' && analyzeOffsetRuns(baseline, current).rows?.some((row) => row.kind === 'stable' && !row.abstain)).toBe(false);
   });
 
+  test('hotRuns treats transparent hidden-RGB pairs as equal and still counts opacity changes (#201)', () => {
+    const width = 32;
+    const height = 1;
+    const transparentBaseline = new PNG({ width, height });
+    const hiddenCurrent = new PNG({ width, height });
+    const opacityCurrent = new PNG({ width, height });
+    for (let index = 0; index < transparentBaseline.data.length; index += 4) {
+      transparentBaseline.data[index] = 220;
+      transparentBaseline.data[index + 1] = 220;
+      transparentBaseline.data[index + 2] = 220;
+      transparentBaseline.data[index + 3] = 0;
+      hiddenCurrent.data[index] = 255;
+      hiddenCurrent.data[index + 1] = 255;
+      hiddenCurrent.data[index + 2] = 255;
+      hiddenCurrent.data[index + 3] = 0;
+      opacityCurrent.data[index] = 220;
+      opacityCurrent.data[index + 1] = 220;
+      opacityCurrent.data[index + 2] = 220;
+      opacityCurrent.data[index + 3] = 255;
+    }
+
+    // Both alphas are 0, so the 220-to-255 hidden RGB delta must not create a
+    // noise or structured run.
+    expect(hotRuns(transparentBaseline, hiddenCurrent, 0, 0)).toEqual({
+      noise: 0,
+      structured: 0,
+      structuredHot: 0
+    });
+    // Alpha moving from 0 to 255 is a real opacity change, not a hidden-RGB pair.
+    expect(hotRuns(transparentBaseline, opacityCurrent, 0, 0)).toEqual({
+      noise: width,
+      structured: width,
+      structuredHot: width
+    });
+  });
+
   test('rejects a dissimilar page from the sampled offset search', () => {
     const width = 32;
     const height = 64;

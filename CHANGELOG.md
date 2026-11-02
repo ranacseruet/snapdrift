@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- `@snapdrift/compare-core`: a pixel that is fully transparent on both sides (alpha `0` on each side) is now visually equal regardless of its hidden RGB, in local comparison policy v1 and v2. This covers the strict comparators (`compareBuffers`, `compareWithIgnoreRegions`, `generateDiffImage`), v1 coordinate overlap, v2 exact row fingerprints and Myers verification, v2 offset-run paired rows and displacement evidence, and offset highlighting. One-sided transparent pixels still count as changed, and an opacity change between alpha `0` and nonzero alpha still counts. The change lowers `differentPixels` only for overlapping alpha-0 pairs whose hidden RGB differs; no config, schema, or policy version changed. Hosted Snap `provider: "snap"` diffs run server-side and may need a separate Snap Cloud comparator update. Closes #201.
+
 ## 0.18.0 - 2026-11-02
 
 Workspace releases this version:

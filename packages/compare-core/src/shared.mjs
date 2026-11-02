@@ -41,6 +41,42 @@ export function parseHighlightColor(color, fieldName = 'highlightColor') {
 }
 
 /**
+ * Max absolute RGBA channel difference between two decoded pixels. Fully
+ * transparent pixels on both sides are visually equal regardless of hidden RGB,
+ * so they report zero; otherwise alpha is part of the delta so an opacity change
+ * is never treated as a match.
+ *
+ * @param {Uint8Array} left
+ * @param {number} leftIndex
+ * @param {Uint8Array} right
+ * @param {number} rightIndex
+ * @returns {number}
+ */
+export function rgbaChannelDelta(left, leftIndex, right, rightIndex) {
+  if (left[leftIndex + 3] === 0 && right[rightIndex + 3] === 0) return 0;
+  return Math.max(
+    Math.abs(left[leftIndex] - right[rightIndex]),
+    Math.abs(left[leftIndex + 1] - right[rightIndex + 1]),
+    Math.abs(left[leftIndex + 2] - right[rightIndex + 2]),
+    Math.abs(left[leftIndex + 3] - right[rightIndex + 3])
+  );
+}
+
+/**
+ * Whether two decoded pixels are visually equal. Both-alpha-zero pixels are
+ * equal regardless of hidden RGB; otherwise every RGBA channel must match.
+ *
+ * @param {Uint8Array} left
+ * @param {number} leftIndex
+ * @param {Uint8Array} right
+ * @param {number} rightIndex
+ * @returns {boolean}
+ */
+export function rgbaPixelsEqual(left, leftIndex, right, rightIndex) {
+  return rgbaChannelDelta(left, leftIndex, right, rightIndex) === 0;
+}
+
+/**
  * @param {number} width
  * @param {number} height
  * @param {import('../types/index.d.ts').IgnoreRegion[]} regions

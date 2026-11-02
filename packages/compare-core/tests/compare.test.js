@@ -569,6 +569,73 @@ describe('@snapdrift/compare-core — compareImages', () => {
     expect(result.comparison.tolerance).toBeUndefined();
   });
 
+  test('v2 exact alignment matches fully transparent rows with differing hidden RGB (#201)', () => {
+    const baseline = rgbaPng(4, 2, [
+      [10, 20, 30, 255], [10, 20, 30, 255], [10, 20, 30, 255], [10, 20, 30, 255],
+      [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]
+    ]);
+    const current = rgbaPng(4, 2, [
+      [10, 20, 30, 255], [10, 20, 30, 255], [10, 20, 30, 255], [10, 20, 30, 255],
+      [255, 255, 255, 0], [255, 255, 255, 0], [255, 255, 255, 0], [255, 255, 255, 0]
+    ]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    expect(result.differentPixels).toBe(0);
+    expect(result.totalPixels).toBe(8);
+    // Normalized fingerprints make the hidden-RGB transparent row a Myers match,
+    // and visible verification keeps it matched instead of changed.
+    expect(result.comparison).toMatchObject({
+      policyVersion: 2,
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'exact',
+      rowMapping: [{ outputStart: 0, length: 2, kind: 'matched', baselineStart: 0, currentStart: 0 }]
+    });
+  });
+
+  test('v2 offset path treats transparent hidden-RGB backgrounds as equal (#201)', () => {
+    const width = 32;
+    const height = 6;
+    /** @param {[number, number, number]} hiddenRgb */
+    const glyphPair = (hiddenRgb) => {
+      const png = new PNG({ width, height });
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const index = (y * width + x) * 4;
+          const glyph = x >= 4 && x < 24 && y >= 2 && y < 4;
+          png.data[index] = glyph ? 220 : hiddenRgb[0];
+          png.data[index + 1] = glyph ? 220 : hiddenRgb[1];
+          png.data[index + 2] = glyph ? 220 : hiddenRgb[2];
+          png.data[index + 3] = glyph ? 255 : 0;
+        }
+      }
+      return png;
+    };
+    const baseline = glyphPair([0, 0, 0]);
+    const current = glyphPair([255, 255, 255]);
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 32 * 1024 * 1024
+    };
+
+    // Before #201 this synthetic pair reported 152 changed pixels: the opaque
+    // glyph rows matched, but every alpha-0 background pixel differed in hidden
+    // RGB. The offset renderer must now see the whole plan as matched.
+    const aligned = compareOffsetAligned(baseline, current, options);
+    expect(aligned.kind).toBe('aligned');
+    if (aligned.kind !== 'aligned') return;
+
+    expect(aligned.result.differentPixels).toBe(0);
+    expect(aligned.result.comparison).toMatchObject({
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'offset',
+      tolerance: 32,
+      rowMapping: [{ outputStart: 0, length: 6, kind: 'matched', baselineStart: 0, currentStart: 0 }]
+    });
+  });
+
   test('v2 metrics are identical when diff rendering is disabled', () => {
     const baseline = rowPng([10, 20, 30]);
     const current = rowPng([10, 200, 20, 30]);
@@ -677,6 +744,24 @@ describe('@snapdrift/compare-core — compareImages', () => {
     const diffPng = PNG.sync.read(result.diffImageBuffer);
     // (2,1) is outside both source images and must not dilute the union ratio.
     expect([...diffPng.data.slice((1 * 3 + 2) * 4, (1 * 3 + 2) * 4 + 4)]).toEqual([0, 0, 0, 0]);
+  });
+
+  test('v1 coordinate overlap treats a two-sided transparent pair as equal (#201)', () => {
+    const baseline = rgbaPng(2, 1, [[0, 0, 0, 0], [10, 20, 30, 255]]);
+    const current = rgbaPng(3, 1, [[255, 255, 255, 0], [10, 20, 30, 255], [5, 5, 5, 255]]);
+
+    const result = compareImages(baseline, current);
+    expect(result.totalPixels).toBe(3);
+    expect(result.differentPixels).toBe(1);
+    expect(result.mismatchRatio).toBe(1 / 3);
+
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+    // (0,0) overlaps with both alphas 0 and differing hidden RGB: equal, so the
+    // diff keeps the baseline transparent pixel rather than highlighting it.
+    expect([...diffPng.data.slice(0, 4)]).toEqual([0, 0, 0, 0]);
+    expect([...diffPng.data.slice(4, 8)]).toEqual([10, 20, 30, 255]);
+    // (2,0) exists only in current: a one-sided pixel still counts and is green.
+    expect([...diffPng.data.slice(8, 12)]).toEqual([0, 170, 0, 255]);
   });
 
   test('counts a transparent one-sided pixel as changed and highlights it', () => {
@@ -864,7 +949,10 @@ describe('@snapdrift/compare-core — compareImages', () => {
 describe('@snapdrift/compare-core — shared strict comparator parity', () => {
   // Captured from the pre-refactor implementation (main 8271935) before the
   // strict loop was moved into strict-compare.mjs. These pins prove the legacy
-  // exports kept their exact metrics, messages, and encoded diff bytes.
+  // exports kept their exact metrics, messages, and encoded diff bytes. The
+  // `equalChanged` pins were re-captured after issue #201 made a two-sided
+  // fully transparent pair equal regardless of hidden RGB; the masked and
+  // identical pins were unaffected.
   const equalBaseline = rgbaPng(3, 2, [
     [10, 20, 30, 255],
     [40, 50, 60, 255],
@@ -915,14 +1003,17 @@ describe('@snapdrift/compare-core — shared strict comparator parity', () => {
       compareBuffers: {
         width: 3,
         height: 2,
-        differentPixels: 3,
+        differentPixels: 2,
         totalPixels: 6,
-        mismatchRatio: 0.5,
-        pct: 0.5,
-        pixelsChanged: 3
+        mismatchRatio: 0.3333333333333333,
+        pct: 0.3333333333333333,
+        pixelsChanged: 2
       },
-      diffSha: 'd95f6b681246a82ae23c3362f8fedab057732f4d6ebe847e57c25ef5ef209f48',
-      customDiffSha: 'efa6f90b82a8ddad9ce20c7d3eb59da4aaa51e2d6b5d9338eef97bdc2cd7271a'
+      // Re-pinned for issue #201: the (0,0,0,0) / (255,255,255,0) pair is now
+      // visually equal, so the diff keeps the baseline transparent pixel instead
+      // of painting it orange.
+      diffSha: '7f37d8951bed10dc00e302cdfe31de98062d5999561a475c560f9802c5f420c8',
+      customDiffSha: 'a8bad8ad04349e3929e6df50f2bd8ad68c4ce0e11637cf80305f00dcc0fd7cd9'
     },
     masked: {
       compareWithIgnoreRegions: {
@@ -1012,7 +1103,7 @@ describe('@snapdrift/compare-core — shared strict comparator parity', () => {
 
     expect(strict).toEqual(coordinate);
     expect(coordinate.totalPixels).toBe(6);
-    expect(coordinate.differentPixels).toBe(3);
+    expect(coordinate.differentPixels).toBe(2);
   });
 
   test('compareWithIgnoreRegions metrics match compareImages with the same regions', () => {
@@ -1060,16 +1151,40 @@ describe('@snapdrift/compare-core — shared strict comparator parity', () => {
     expect(PNG.sync.read(coordinateDiff).data).toEqual(PNG.sync.read(identical).data);
   });
 
-  test('keeps hidden RGB counted as changed for fully transparent pixels (#201 unchanged)', () => {
+  test('treats two-sided fully transparent pixels as equal regardless of hidden RGB (#201)', () => {
     const hiddenBaseline = rgbaPng(1, 1, [[0, 0, 0, 0]]);
     const hiddenCurrent = rgbaPng(1, 1, [[255, 255, 255, 0]]);
 
-    expect(compareBuffers(hiddenBaseline, hiddenCurrent).differentPixels).toBe(1);
-    expect(compareWithIgnoreRegions(hiddenBaseline, hiddenCurrent, []).differentPixels).toBe(1);
-    expect(compareImages(hiddenBaseline, hiddenCurrent, { renderDiffImage: false }).differentPixels).toBe(1);
+    expect(compareBuffers(hiddenBaseline, hiddenCurrent).differentPixels).toBe(0);
+    expect(compareWithIgnoreRegions(hiddenBaseline, hiddenCurrent, []).differentPixels).toBe(0);
+    expect(compareImages(hiddenBaseline, hiddenCurrent, { renderDiffImage: false }).differentPixels).toBe(0);
 
+    // Unchanged pixels retain the baseline color, so the transparent pixel stays
+    // (0,0,0,0) rather than receiving the orange highlight.
     const diffPng = PNG.sync.read(generateDiffImage(hiddenBaseline, hiddenCurrent));
-    expect([...diffPng.data.slice(0, 4)]).toEqual([255, 140, 0, 255]);
+    expect([...diffPng.data.slice(0, 4)]).toEqual([0, 0, 0, 0]);
+    // compareImages re-renders the union canvas from the baseline pixels when the
+    // two encoded buffers are not byte-identical; the decoded result must still
+    // keep the transparent baseline pixel.
+    const coordinateDiffPng = PNG.sync.read(compareImages(hiddenBaseline, hiddenCurrent).diffImageBuffer);
+    expect(coordinateDiffPng.data).toEqual(PNG.sync.read(hiddenBaseline).data);
+  });
+
+  test('still counts a one-sided transparent pixel and an opacity change as changed (#201 boundary)', () => {
+    const transparent = rgbaPng(2, 1, [[0, 0, 0, 0], [10, 20, 30, 255]]);
+    const opaqueCurrent = rgbaPng(3, 1, [[255, 255, 255, 255], [10, 20, 30, 255], [0, 0, 0, 0]]);
+
+    // (2,0) exists only in current and is fully transparent: one-sided pixels
+    // still count, matching policy v1.
+    expect(compareImages(transparent, opaqueCurrent, { renderDiffImage: false }).differentPixels).toBe(2);
+    expect(compareImages(transparent, opaqueCurrent).diffImageBuffer).toBeDefined();
+
+    // (0,0) overlaps but alpha moves from 0 to 255, so it is not visually equal.
+    const hiddenBaseline = rgbaPng(1, 1, [[0, 0, 0, 0]]);
+    const opaque = rgbaPng(1, 1, [[0, 0, 0, 255]]);
+    expect(compareBuffers(hiddenBaseline, opaque).differentPixels).toBe(1);
+    expect(compareWithIgnoreRegions(hiddenBaseline, opaque, []).differentPixels).toBe(1);
+    expect(compareImages(hiddenBaseline, opaque, { renderDiffImage: false }).differentPixels).toBe(1);
   });
 
   test('keeps each legacy export’s validation order', () => {
