@@ -633,6 +633,94 @@ describe('synthetic alignment cases', () => {
     expect(mapping.map((segment) => segment.length)).toEqual([6]);
   });
 
+  test('a transparent background with differing hidden RGB supplies displacement evidence (#201)', () => {
+    const options = {
+      renderDiffImage: false,
+      changedColor: /** @type {const} */ ([255, 140, 0, 255]),
+      addedColor: /** @type {const} */ ([0, 170, 0, 255]),
+      removedColor: /** @type {const} */ ([255, 0, 0, 255]),
+      maxPixels: 32 * 1024 * 1024
+    };
+    const width = 32;
+    const height = 6;
+    /** @param {[number, number, number, number]} background */
+    const baselinePair = (background) => {
+      const png = new PNG({ width, height });
+      const rows = [
+        [10, 10, 10, 255],
+        [20, 20, 20, 255],
+        background,
+        background,
+        background,
+        [140, 140, 140, 255]
+      ];
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const index = (y * width + x) * 4;
+          const color = y === 3 && x >= 8 && x < 12
+            ? /** @type {[number, number, number, number]} */ ([220, 220, 220, 255])
+            : rows[y];
+          png.data[index] = color[0];
+          png.data[index + 1] = color[1];
+          png.data[index + 2] = color[2];
+          png.data[index + 3] = color[3];
+        }
+      }
+      return png;
+    };
+    /** @param {[number, number, number, number]} background */
+    const currentPair = (background) => {
+      const png = new PNG({ width, height });
+      const rows = [
+        [10, 10, 10, 255],
+        [20, 20, 20, 255],
+        background,
+        background,
+        background,
+        [140, 140, 140, 255]
+      ];
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const index = (y * width + x) * 4;
+          let color = rows[y];
+          if (x >= 8 && x < 12) {
+            color = y === 3
+              ? /** @type {[number, number, number, number]} */ ([200, 200, 200, 0])
+              : y === 4
+                ? /** @type {[number, number, number, number]} */ ([220, 220, 220, 255])
+                : rows[y];
+          }
+          png.data[index] = color[0];
+          png.data[index + 1] = color[1];
+          png.data[index + 2] = color[2];
+          png.data[index + 3] = color[3];
+        }
+      }
+      return png;
+    };
+
+    const baseline = baselinePair([0, 0, 0, 0]);
+    const current = currentPair([255, 255, 255, 0]);
+    const aligned = compareOffsetAligned(baseline, current, options);
+    expect(aligned.kind).toBe('aligned');
+    if (aligned.kind !== 'aligned') return;
+
+    // The glyph marker moved from row 3 to row 4 and changed from opaque to an
+    // alpha-0 glyph. Row 3's foreground evidence lives in row 2's transparent
+    // background, and row 4's background evidence lives in row 3's alpha-0
+    // glyph; both evidence pixels are fully transparent on both sides, so their
+    // differing hidden RGB no longer breaks the evidence masks. Before #201 this
+    // pair reported 96 changed pixels; now both displaced rows are suppressed
+    // and the pair reports no differences.
+    expect(aligned.result.differentPixels).toBe(0);
+    expect(aligned.result.comparison).toMatchObject({
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'offset',
+      tolerance: 32,
+      rowMapping: [{ outputStart: 0, length: 6, kind: 'matched', baselineStart: 0, currentStart: 0 }]
+    });
+  });
+
   test('a both-sided displacement run bordering unexplained content stays painted with that content', () => {
     const options = {
       renderDiffImage: false,
