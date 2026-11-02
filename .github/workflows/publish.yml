@@ -11,7 +11,7 @@ permissions:
 jobs:
   publish:
     name: Publish packages to npm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # `fetch-depth: 0` clones the full history so the stale-pin gate can evaluate whether the
       # dispatcher's pinned SHA is an ancestor of the newest commit touching actions/. A shallow
