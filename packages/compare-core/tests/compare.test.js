@@ -592,6 +592,29 @@ describe('@snapdrift/compare-core — compareImages', () => {
     });
   });
 
+  test('v2 exact alignment still counts a one-sided transparent row as changed (#201 boundary)', () => {
+    const opaqueRow = Array(4).fill(/** @type {[number, number, number, number]} */ ([10, 20, 30, 255]));
+    const transparentRow = Array(4).fill(/** @type {[number, number, number, number]} */ ([255, 255, 255, 0]));
+    const baseline = rgbaPng(4, 2, [...opaqueRow, ...opaqueRow]);
+    const current = rgbaPng(4, 3, [...opaqueRow, ...opaqueRow, ...transparentRow]);
+
+    const result = compareImages(baseline, current, { alignment: 'vertical' });
+    // The inserted row has no baseline partner: every one-sided pixel counts,
+    // including fully transparent ones. Two-sided equality does not apply here.
+    expect(result.differentPixels).toBe(4);
+    expect(result.totalPixels).toBe(12);
+    expect(result.comparison).toMatchObject({
+      policyVersion: 2,
+      mode: 'vertical-aligned',
+      alignmentStrategy: 'exact',
+      dimensionsChanged: true,
+      rowMapping: [
+        { outputStart: 0, length: 2, kind: 'matched', baselineStart: 0, currentStart: 0 },
+        { outputStart: 2, length: 1, kind: 'inserted', currentStart: 2 }
+      ]
+    });
+  });
+
   test('v2 offset path treats transparent hidden-RGB backgrounds as equal (#201)', () => {
     const width = 32;
     const height = 6;
