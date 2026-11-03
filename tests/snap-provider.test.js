@@ -2878,6 +2878,85 @@ describe('SnapProvider retry behavior', () => {
     await expect(provider.checkBaselineExists('abc123')).rejects.toThrow(/Snap API 401/);
     expect(callCount).toBe(1);
   });
+
+  it('retries on 429 rate limit and succeeds on second attempt', async () => {
+    let callCount = 0;
+    const mockFetch = async (_url, _opts) => {
+      callCount++;
+      if (callCount === 1) {
+        return errorResponse(429, { error: 'rate limited' });
+      }
+      return okResponse({ id: 'baseline_1' });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await provider.checkBaselineExists('abc123');
+    expect(callCount).toBe(2);
+  });
+
+  it('honors the Retry-After header when retrying a 429', async () => {
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ...errorResponse(429, { error: 'rate limited' }),
+            headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? '7' : null) }
+          };
+        }
+        return okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: (delay) => {
+        delays.push(delay);
+        return Promise.resolve();
+      }
+    });
+
+    await provider.checkBaselineExists('retry-after-429');
+    expect(callCount).toBe(2);
+    expect(delays).toEqual([7000]);
+  });
+
+  it('routes an exhausted 429 through the onUnavailable policy (warn-and-skip)', async () => {
+    const mockFetch = async () => errorResponse(429, { error: 'rate limited' });
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.checkBaselineExists('exhausted-429')).rejects.toThrow(SnapSkipError);
+  });
+
+  it('routes an exhausted 429 through the onUnavailable policy (fallback-local)', async () => {
+    const mockFetch = async () => errorResponse(429, { error: 'rate limited' });
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fallback-local' }, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await expect(provider.checkBaselineExists('exhausted-429-fallback')).rejects.toThrow(SnapFallbackError);
+  });
+
+  it('retries on 408 request timeout like a transient failure', async () => {
+    let callCount = 0;
+    const mockFetch = async (_url, _opts) => {
+      callCount++;
+      if (callCount === 1) {
+        return errorResponse(408, { error: 'request timeout' });
+      }
+      return okResponse({ id: 'baseline_1' });
+    };
+
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    await provider.checkBaselineExists('timeout-408');
+    expect(callCount).toBe(2);
+  });
 });
 
 describe('SnapProvider transport deadlines', () => {
