@@ -659,6 +659,7 @@ function summarizeIntervals(baseline, current, rows, hotRunsCache) {
  * @returns {boolean}
  */
 function offsetPreflightRejects(baseline, current) {
+  const planned = Math.ceil(baseline.height / PREFLIGHT_ROW_STRIDE);
   let sum = 0;
   let samples = 0;
   for (let y = 0; y < baseline.height; y += PREFLIGHT_ROW_STRIDE) {
@@ -677,11 +678,16 @@ function offsetPreflightRejects(baseline, current) {
     }
     sum += best;
     samples += 1;
-    // Running mean over the rows sampled so far (not the full planned count,
-    // which made the mid-scan mean lenient by the abstention ratio). The
-    // final check below uses the same denominator, so this can only exit
-    // early — never change the verdict.
-    if (samples > 0 && sum / samples > EVIDENCE_MEAN_COST_LIMIT) {
+    // Early exit only when the verdict is already determined: even if every
+    // remaining planned row cost 0, the mean over all planned rows would
+    // still exceed the limit. The final verdict divides by `samples`, which
+    // is at most `planned`, so its mean is never below this bound — this
+    // check therefore only triggers rejection the final check would reach
+    // anyway, just sooner. Dividing by the running `samples` here instead
+    // would reject content whose early rows differ but whose remaining rows
+    // align (e.g. one changed row before a 22px shift), forcing coordinate
+    // comparison of otherwise alignable content.
+    if (sum / planned > EVIDENCE_MEAN_COST_LIMIT) {
       return true;
     }
   }
