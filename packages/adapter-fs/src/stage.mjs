@@ -45,6 +45,12 @@ async function copyFileIfPresent(sourcePath, targetPath) {
 }
 
 /**
+ * Copy `.png` files from `sourceDir` into `targetDir`, preserving
+ * subdirectory structure. A previous version flattened the tree, so
+ * same-named PNGs from different subdirectories silently overwrote each
+ * other in the staged bundle. Symlinked files are resolved via stat so a
+ * symlinked screenshot is staged instead of silently dropped.
+ *
  * @param {string} sourceDir
  * @param {string} targetDir
  * @returns {Promise<void>}
@@ -58,14 +64,25 @@ async function copyPngFiles(sourceDir, targetDir) {
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
   for (const entry of entries) {
     const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
     if (entry.isDirectory()) {
-      await copyPngFiles(sourcePath, targetDir);
+      await copyPngFiles(sourcePath, targetPath);
+      continue;
+    }
+    // readdir's Dirent reports isFile() false for symlinks; stat through the
+    // link so a symlinked PNG is staged like a regular file.
+    if (entry.isSymbolicLink()) {
+      const stats = await fs.stat(sourcePath).catch(() => undefined);
+      if (!stats?.isFile() || !entry.name.endsWith('.png')) {
+        continue;
+      }
+      await fs.copyFile(sourcePath, targetPath);
       continue;
     }
     if (!entry.isFile() || !entry.name.endsWith('.png')) {
       continue;
     }
-    await fs.copyFile(sourcePath, path.join(targetDir, entry.name));
+    await fs.copyFile(sourcePath, targetPath);
   }
 }
 

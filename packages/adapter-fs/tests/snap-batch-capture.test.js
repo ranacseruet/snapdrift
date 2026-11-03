@@ -242,6 +242,104 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
     expect(pricingFile).toHaveLength(DEFAULT_TEST_PNG.length);
   });
 
+  test('fails fast when the batch reports a terminal failed status', async () => {
+    process.env.SNAP_API_KEY = 'test-token';
+    const config = {
+      baselineArtifactName: 'baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      capture: 'snap',
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let pollCount = 0;
+    const mockFetch = async (url, options = {}) => {
+      if (url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_dead', status: 'queued' })
+        };
+      }
+      if (url.endsWith('/v1/screenshots/batch_dead')) {
+        pollCount++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'failed', error: { error: 'render worker crashed', code: 'render_crash' } })
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    await expect(runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10, timeoutMs: 60000 }))
+      .rejects.toThrow(/batch_dead.*failed: render worker crashed/);
+    // Without the fast-fail this would spin until the timeout instead.
+    expect(pollCount).toBe(1);
+  });
+
+  test('bounds concurrent screenshot downloads', async () => {
+    process.env.SNAP_API_KEY = 'test-token';
+    const routes = ['a', 'b', 'c', 'd'].map((id) => ({ id: `route-${id}`, path: `/${id}`, viewport: 'desktop' }));
+    const config = {
+      baselineArtifactName: 'baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'results.json',
+      manifestFile: 'manifest.json',
+      screenshotsRoot: 'screenshots',
+      capture: 'snap',
+      routes,
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let active = 0;
+    let maxActive = 0;
+    const mockFetch = async (url, options = {}) => {
+      if (url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_dl', status: 'queued' })
+        };
+      }
+      if (url.endsWith('/v1/screenshots/batch_dl')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: routes.map((route) => ({ status: 'succeeded', imageUrl: `https://cdn.example.com/${route.id}.png`, durationMs: 10 }))
+          })
+        };
+      }
+      if (url.startsWith('https://cdn.example.com/')) {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        active -= 1;
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({
+      configPath,
+      fetchFn: mockFetch,
+      pollIntervalMs: 10,
+      downloadConcurrency: 2
+    });
+
+    expect(result.selectedRouteIds).toHaveLength(4);
+    expect(maxActive).toBe(2);
+  });
+
   test('throws when an item in batch fails', async () => {
     process.env.SNAP_API_KEY = 'test-token';
     const config = {

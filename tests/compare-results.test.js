@@ -945,6 +945,28 @@ describe('generateDriftReport', () => {
     expect(summary.errors[0].id).toBe(routeId);
   });
 
+  it('refuses to resolve screenshots outside the run directory', async () => {
+    // A manifest from a hostile/compromised artifact can point imagePath at
+    // arbitrary readable files; containment must refuse instead of exfiltrating.
+    const routeId = 'escape-artist';
+    const imagePath = '../../../outside/secret.png';
+
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)]
+    });
+
+    const { summary } = await generateDriftReport({
+      ...opts,
+      routeIds: [routeId]
+    });
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.errors).toHaveLength(1);
+    expect(summary.errors[0].message).toMatch(/outside the run directory/);
+  });
+
   it('resolves PNG via basename fallback when direct path does not exist', async () => {
     // File lives at screenshots/nested/r.png but manifest says imagePath: screenshots/r.png.
     // resolveImagePath should find it via the basename index.
