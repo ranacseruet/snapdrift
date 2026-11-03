@@ -54,11 +54,29 @@ function formatAlignmentNotes(changed) {
 }
 
 /**
+ * Percent-encode a diff-image path for use inside an angle-bracket CommonMark
+ * link destination, which — unlike backslash escaping — survives spaces,
+ * `&`, and parentheses verbatim. `%` is encoded first so existing percent
+ * sequences cannot be reinterpreted.
+ *
+ * @param {unknown} diffImagePath
+ * @returns {string}
+ */
+function markdownLinkDestination(diffImagePath) {
+  return String(diffImagePath ?? '')
+    .replace(/%/g, '%25')
+    .replace(/</g, '%3C')
+    .replace(/>/g, '%3E')
+    .replace(/&/g, '%26')
+    .replace(/\r?\n/g, ' ');
+}
+
+/**
  * @param {string | undefined} diffImagePath
  * @returns {string}
  */
 function formatDiffImage(diffImagePath) {
-  return diffImagePath ? `![Diff image](${diffImagePath})` : '—';
+  return diffImagePath ? `![Diff image](<${markdownLinkDestination(diffImagePath)}>)` : '—';
 }
 
 /**
@@ -129,9 +147,9 @@ export function makeMarkdown(summaryData) {
     }
     for (const item of summaryData.changed) {
       if (comparisonDetails) {
-        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} | ${formatDiffImage(item.diffImagePath)} |`);
+        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} | ${formatDiffImage(item.diffImagePath)} |`);
       } else {
-        lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} |`);
+        lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${formatPercentage(item.mismatchRatio)} | ${item.differentPixels}/${item.totalPixels} |`);
       }
     }
     if (comparisonDetails && semanticDiff) {
@@ -155,7 +173,7 @@ export function makeMarkdown(summaryData) {
     lines.push('| Route | Reason |');
     lines.push('|:------|:-------|');
     for (const item of summaryData.missing) {
-      lines.push(`| ${item.id} | ${item.reason} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.reason)} |`);
     }
   }
 
@@ -173,7 +191,7 @@ export function makeMarkdown(summaryData) {
     lines.push('| Route | Viewport | Baseline | Current |');
     lines.push('|:------|:---------|:---------|:--------|');
     for (const item of dimensionChanges) {
-      lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} |`);
     }
   } else {
     lines.push('');
@@ -192,10 +210,10 @@ export function makeMarkdown(summaryData) {
     lines.push('| Route | Viewport | Baseline | Current | Canvas | Diff image |');
     lines.push('|:------|:---------|:---------|:--------|:-------|:-----------|');
     for (const item of dimensionChanges) {
-      lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} | — | — |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${item.baselineWidth}×${item.baselineHeight} | ${item.currentWidth}×${item.currentHeight} | — | — |`);
     }
     for (const item of comparisonDimensionChanges) {
-      lines.push(`| ${item.id} | ${formatViewport(item.viewport)} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatDiffImage(item.diffImagePath)} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(formatViewport(item.viewport))} | ${formatDimensions(item.comparison?.baseline)} | ${formatDimensions(item.comparison?.current)} | ${formatDimensions(item.comparison?.canvas)} | ${formatDiffImage(item.diffImagePath)} |`);
     }
   }
 
@@ -209,7 +227,7 @@ export function makeMarkdown(summaryData) {
     lines.push('| Route | Error |');
     lines.push('|:------|:------|');
     for (const item of summaryData.errors) {
-      lines.push(`| ${item.id} | ${item.message} |`);
+      lines.push(`| ${escapeMarkdown(item.id)} | ${escapeMarkdown(item.message)} |`);
     }
   }
 

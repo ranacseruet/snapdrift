@@ -191,7 +191,7 @@ and comparison policy v1. The profile records:
 |:------|:--------------------|
 | `engine`, `engineVersion` | `{ "name": "snapdrift-local", "version": "<adapter-fs version>" }`; `engineVersion` equals `engine.version` |
 | `browser`, `browserRevision`, `playwrightVersion` | `chromium`, the running browser's `browser.version()` string, and the installed Playwright version |
-| `platform` | `name`, `architecture`, `release`, `version` from Node's OS APIs |
+| `platform` | `name`, `architecture`, `release`, `version` from Node's OS APIs. Compared strictly for `snapdrift-local` captures (rendering happens on the submitting machine); ignored for `snap-batch` captures, whose pixels are rendered cloud-side, so GitHub runner image refreshes do not invalidate stored baselines |
 | `locale`, `timezone` | `en-US`, `UTC` |
 | `settings.screenshot` | `fullPage: true`, `animations: "disabled"`, `caret: "hide"`, `scale: "device"`, `omitBackground: false`, `type: "png"` |
 | `settings.readiness` | `waitUntil: "load"`, `settleDelayMs: 300` |
@@ -461,7 +461,7 @@ that matches the product behavior. Do not resize or crop screenshots, or lower
 | Navigation timeout | 30000ms |
 | Settle delay | 300ms |
 | Screenshot animations | `disabled` (Playwright finishes/cancels CSS animations before capture) |
-| Capture concurrency | 5 routes per viewport (overridable via `SNAPDRIFT_CAPTURE_CONCURRENCY`)|
+| Capture concurrency | 5 routes in total across all viewport groups (overridable via `SNAPDRIFT_CAPTURE_CONCURRENCY`)|
 
 Local Playwright captures use a fresh browser context for every route attempt,
 including retries. Cookies and browser storage are not shared between routes,
@@ -735,7 +735,7 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 | `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-results.mjs` | Baseline artifact label to embed in the report |
 | `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
 | `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
-| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures per viewport group (positive integer, default `5`). Each local attempt uses a fresh browser context. Set to `1` to serialize each group without sharing storage. |
+| `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures across all viewport groups combined (positive integer, default `5`). Each local attempt uses a fresh browser context. Set to `1` to fully serialize captures without sharing storage. |
 
 ## PR comment markdown shape
 

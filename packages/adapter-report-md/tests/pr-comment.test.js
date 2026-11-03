@@ -29,6 +29,21 @@ describe('buildReportCommentBody', () => {
     expect(escapeMarkdown('<b>`failure`</b> | [details] & more')).toBe('&lt;b&gt;\\`failure\\`&lt;/b&gt; \\| \\[details\\] &amp; more');
   });
 
+  it('escapes emphasis, mentions, and autolinks; collapses newlines', () => {
+    expect(escapeMarkdown('_a_ *b* ~~c~~ #d !e')).toBe('\\_a\\_ \\*b\\* \\~\\~c\\~\\~ \\#d \\!e');
+    expect(escapeMarkdown('ping @org/team')).toBe('ping \\@org/team');
+    expect(escapeMarkdown('see https://evil.example')).toBe('see https\\://evil.example');
+    expect(escapeMarkdown('line one\nline two')).toBe('line one line two');
+  });
+
+  it('renders backtick-containing paths in a longer code-span fence', async () => {
+    const { formatCodeSpan } = await import('../src/pr-comment.mjs');
+    expect(formatCodeSpan('diffs/home-desktop.png')).toBe('`diffs/home-desktop.png`');
+    expect(formatCodeSpan('diffs/`weird`.png')).toBe('``diffs/`weird`.png``');
+    expect(formatCodeSpan('`leading')).toBe('`` `leading ``');
+    expect(formatCodeSpan('multi\nline')).toBe('`multi line`');
+  });
+
   it('uses a concise high-signal metrics table', () => {
     const body = buildReportCommentBody(cleanSummary);
     expect(body).toContain('| Signal | Count |');
@@ -195,7 +210,7 @@ describe('buildReportCommentBody', () => {
       }]
     });
     expect(body).not.toContain('[object Object]');
-    expect(body).toContain('| base64-converter-mobile | 390x844 | comparison_too_large |');
+    expect(body).toContain('| base64-converter-mobile | 390x844 | comparison\\_too\\_large |');
   });
 
   it('formats an object viewport as WxH in the drift signals table', () => {

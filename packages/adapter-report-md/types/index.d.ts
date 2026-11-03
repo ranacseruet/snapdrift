@@ -48,6 +48,8 @@ export const PR_COMMENT_MARKERS: string[];
 
 export function escapeMarkdown(value: unknown): string;
 
+export function formatCodeSpan(value: unknown): string;
+
 export function buildReportCommentBody(
   summary: VisualReportSummary,
   meta?: {

@@ -7,19 +7,63 @@ export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
 export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
 
 /**
- * Escape characters that could break markdown table cells or inject links.
+ * Escape characters that could break markdown table cells, inject links,
+ * trigger mentions/autolinks, or corrupt formatting.
+ *
+ * Backslashes are escaped first so the escapes inserted below render
+ * literally. Newlines are collapsed to spaces: a raw newline inside a table
+ * cell ends the row and garbles everything after it. `\://` renders as
+ * `://` but stops GFM autolink detection, so bare URLs in error messages
+ * stay inert text.
+ *
+ * Not for code spans: backslash escapes render literally inside them — use
+ * `formatCodeSpan` instead.
+ *
  * @param {unknown} value
  * @returns {string}
  */
 export function escapeMarkdown(value) {
   return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\r?\n/g, ' ')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\|/g, '\\|')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
-    .replace(/`/g, '\\`');
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/`/g, '\\`')
+    .replace(/\*/g, '\\*')
+    .replace(/_/g, '\\_')
+    .replace(/~/g, '\\~')
+    .replace(/#/g, '\\#')
+    .replace(/!/g, '\\!')
+    .replace(/@/g, '\\@')
+    .replace(/:\/\//g, '\\://');
+}
+
+/**
+ * Render a value as a CommonMark code span, for file paths and other
+ * literals shown in backticks. Backslash escapes are not processed inside
+ * code spans, so escaping there would show literal backslashes; instead a
+ * containing value with backticks is wrapped in a longer fence (padded with
+ * a space when the content itself starts or ends with a backtick).
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function formatCodeSpan(value) {
+  const text = String(value ?? '').replace(/\r?\n/g, ' ');
+  if (!text.includes('`')) {
+    return `\`${text}\``;
+  }
+  const runs = /** @type {RegExpMatchArray} */ (/** @type {unknown} */ (text.match(/`+/g)));
+  const longestRun = Math.max(...runs.map((run) => run.length));
+  const fence = '`'.repeat(longestRun + 1);
+  const padded = /^`|`$/.test(text) ? ` ${text} ` : text;
+  return `${fence}${padded}${fence}`;
 }
 
 /**
@@ -80,7 +124,7 @@ function formatDiffImage(diffImagePath, artifactUrl, runUrl) {
     : /^https?:\/\//.test(runUrl || '')
       ? runUrl
       : undefined;
-  const pathLabel = `\`${escapeMarkdown(diffImagePath)}\``;
+  const pathLabel = formatCodeSpan(diffImagePath);
   return linkUrl ? `[View report artifacts →](${linkUrl}) ${pathLabel}` : pathLabel;
 }
 

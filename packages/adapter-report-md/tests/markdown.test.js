@@ -139,9 +139,32 @@ describe('makeMarkdown', () => {
 
       expect(md).toContain('| Dimension shifts | 1 |');
       expect(md).toContain('| home-desktop | desktop | 1440×900 | 1440×920 | 1440×920 |');
-      expect(md).toContain('![Diff image](diffs/home-desktop.png)');
+      expect(md).toContain('![Diff image](<diffs/home-desktop.png>)');
       expect(md).toContain('Pixel comparison included');
       expect(md).not.toContain('Pixel comparison was skipped');
+    });
+
+    it('percent-encodes diff image destinations that would break the link', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'changes-detected',
+        changed: [{
+          id: 'about-us-desktop',
+          viewport: 'desktop',
+          mismatchRatio: 0.5,
+          differentPixels: 5,
+          totalPixels: 10,
+          comparison: {
+            dimensionsChanged: false,
+            totalPixels: 100,
+            baseline: { width: 1440, height: 900 },
+            current: { width: 1440, height: 900 },
+            canvas: { width: 1440, height: 900 }
+          },
+          diffImagePath: 'diffs/about us & v2.png'
+        }]
+      }));
+
+      expect(md).toContain('![Diff image](<diffs/about us %26 v2.png>)');
     });
 
     it('renders capture gaps when missing items exist', () => {
@@ -198,6 +221,66 @@ describe('makeMarkdown', () => {
     it('shows None for empty sections', () => {
       const md = makeMarkdown(makeSummary());
       expect(md).toContain('None');
+    });
+
+    it('escapes markdown-special characters in route ids, reasons, and error messages', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        changed: [{
+          id: 'route|with|pipes](https://evil.example) [x',
+          viewport: 'desktop',
+          mismatchRatio: 0.5,
+          differentPixels: 5,
+          totalPixels: 10
+        }],
+        missing: [{ id: 'missing|route', reason: 'missing [baseline](https://evil.example)' }],
+        errors: [{ id: 'error|route', message: 'Navigation failed: <script> | [link](https://evil.example)' }],
+        dimensionChanges: [{
+          id: 'dimension|route',
+          viewport: { width: 1440, height: 900 },
+          baselineWidth: 1440,
+          baselineHeight: 1266,
+          currentWidth: 1440,
+          currentHeight: 1092,
+          status: 'dimension-changed'
+        }]
+      }));
+
+      expect(md).not.toContain('(https://evil.example)');
+      expect(md).toContain('\\|');
+      expect(md).toContain('&lt;script&gt;');
+    });
+
+    it('escapes backslashes before other characters so pipes stay escaped', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        errors: [{ id: 'tricky\\', message: 'ends with backslash | pipe' }]
+      }));
+
+      expect(md).toContain('tricky\\\\ |');
+      expect(md).toContain('ends with backslash \\| pipe');
+    });
+
+    it('collapses newlines in error messages so table rows survive multi-line Playwright errors', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        errors: [{ id: 'home-desktop', message: 'page.goto: Timeout 30000ms exceeded.\nCall log:\n - navigating to "http://localhost:3000/", waiting until "load"' }]
+      }));
+
+      const errorRow = md.split('\n').find((line) => line.includes('home-desktop'));
+      expect(errorRow).toContain('| home-desktop | page.goto: Timeout 30000ms exceeded. Call log:  - navigating to');
+      expect(errorRow?.endsWith('|')).toBe(true);
+    });
+
+    it('neutralizes bare URLs and mentions in table cells', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        errors: [{ id: 'home-desktop', message: 'see https://evil.example and ping @org/team' }]
+      }));
+
+      expect(md).not.toContain('https://evil.example');
+      expect(md).toContain('https\\://evil.example');
+      expect(md).toContain('\\@org/team');
     });
   });
 

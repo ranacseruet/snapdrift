@@ -221,7 +221,16 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
 }
 
 /**
- * @param {import('playwright').Browser} browser
+ * Capture a group of routes that share a viewport.
+ *
+ * `limit` is the run-wide concurrency limiter created once in
+ * `runBaselineCapture` and shared across all viewport groups: per-group
+ * limiters would multiply the effective concurrency by the number of
+ * distinct viewports, since every group runs in parallel against one
+ * shared browser instance.
+ *
+ * @param {any} browser
+ * @param {<T>(fn: () => Promise<T>) => Promise<T>} limit
  * @param {Array<{ route: SnapdriftRouteConfig, originalIndex: number }>} entries
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
@@ -229,8 +238,7 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
  * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
  * @returns {Promise<void>}
  */
-async function captureViewportRoutes(browser, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
-  const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
+async function captureViewportRoutes(browser, limit, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
   await Promise.all(entries.map(({ route, originalIndex }) =>
     limit(async () => {
       // Log the fully resolved target URL, not just the route id. When a run
@@ -352,8 +360,14 @@ export async function runBaselineCapture(options = {}) {
     /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} */
     const captureResults = new Array(routes.length);
 
+    // One run-wide limiter shared by every viewport group: all groups run in
+    // parallel against one browser, so a per-group limit would scale effective
+    // concurrency with the number of configured viewports (e.g. 4 viewports ×
+    // SNAPDRIFT_CAPTURE_CONCURRENCY contexts) and risk OOM on small runners.
+    const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
+
     await Promise.all([...byViewport.values()].map((entries) =>
-      captureViewportRoutes(browser, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults)
+      captureViewportRoutes(browser, limit, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults)
     ));
 
     // Merge results in original route order.
