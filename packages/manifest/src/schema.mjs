@@ -66,7 +66,9 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     throw new Error('Manifest must be a non-null object.');
   }
 
-  const candidate = /** @type {Record<string, unknown>} */ (value);
+  // Shallow copy so defaulting schemaVersion does not mutate the caller's
+  // object (e.g. a parsed JSON blob reused or compared elsewhere).
+  const candidate = /** @type {Record<string, unknown>} */ ({ .../** @type {Record<string, unknown>} */ (value) });
 
   if (candidate.schemaVersion !== undefined && typeof candidate.schemaVersion !== 'number') {
     throw new Error('manifest.schemaVersion must be a number when present.');
@@ -76,7 +78,7 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     candidate.schemaVersion = CURRENT_SCHEMA_VERSION;
   }
 
-  if (typeof candidate.generatedAt !== 'string' || !candidate.generatedAt) {
+  if (typeof candidate.generatedAt !== 'string' || !candidate.generatedAt || Number.isNaN(Date.parse(candidate.generatedAt))) {
     throw new Error('manifest.generatedAt must be a non-empty ISO date string.');
   }
 
@@ -118,6 +120,17 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
       if (!isPreset && !isCustom) {
         throw new Error(`manifest.screenshots[${index}].viewport must be a preset string or an object with width and height.`);
       }
+      if (isCustom) {
+        const custom = /** @type {{ deviceScaleFactor?: unknown, isMobile?: unknown, hasTouch?: unknown }} */ (vp);
+        if (custom.deviceScaleFactor !== undefined && (typeof custom.deviceScaleFactor !== 'number' || !Number.isFinite(custom.deviceScaleFactor) || custom.deviceScaleFactor <= 0)) {
+          throw new Error(`manifest.screenshots[${index}].viewport.deviceScaleFactor must be a positive number when present.`);
+        }
+        for (const flag of ['isMobile', 'hasTouch']) {
+          if (custom[flag] !== undefined && typeof custom[flag] !== 'boolean') {
+            throw new Error(`manifest.screenshots[${index}].viewport.${flag} must be a boolean when present.`);
+          }
+        }
+      }
       normalizedViewportIdentity(vp);
     } else {
       throw new Error(`manifest.screenshots[${index}].viewport is required.`);
@@ -130,7 +143,7 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     }
   }
 
-  return /** @type {ScreenshotManifest} */ (value);
+  return /** @type {ScreenshotManifest} */ (candidate);
 }
 
 /**

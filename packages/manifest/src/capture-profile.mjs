@@ -133,7 +133,16 @@ export function checkCaptureProfileCompatibility(baseline, current) {
 
 export function normalizedViewportIdentity(viewport) {
   const descriptor = typeof viewport === 'string' ? VIEWPORT_PRESETS[viewport] : {
-    ...viewport, deviceScaleFactor: 1, isMobile: false, hasTouch: false
+    ...viewport,
+    // Preserve explicit device characteristics on custom viewports and only
+    // default what is absent. Forcing deviceScaleFactor to 1 made a custom
+    // 1440×900 DSF-3 capture test as "compatible" against the plain desktop
+    // preset even though its pixel dimensions differ 3× in each direction,
+    // so the comparison then ran on wildly different-sized images instead of
+    // reporting incompatible_capture.
+    deviceScaleFactor: viewport.deviceScaleFactor ?? 1,
+    isMobile: viewport.isMobile ?? false,
+    hasTouch: viewport.hasTouch ?? false
   };
   if (!descriptor || !Number.isInteger(descriptor.width) || descriptor.width <= 0 || !Number.isInteger(descriptor.height) || descriptor.height <= 0) {
     throw new Error('viewport must be desktop, mobile, or positive integer width and height.');

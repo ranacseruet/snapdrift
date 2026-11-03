@@ -104,7 +104,22 @@ export function isLocalBaseUrl(baseUrl) {
   if (normalized === '::1' || normalized === '0.0.0.0') {
     return true;
   }
-  return net.isIP(normalized) === 4 && normalized.startsWith('127.');
+  if (net.isIP(normalized) === 4 && normalized.startsWith('127.')) {
+    return true;
+  }
+  // IPv4-mapped IPv6 loopback (::ffff:127.x.y.z). The WHATWG URL parser
+  // canonicalizes the embedded IPv4 to hex groups ('::ffff:7f00:1'), so the
+  // dotted-quad check above misses it — and treating such a URL as remote
+  // would send a loopback address to Snap Cloud, where it resolves to the
+  // cloud runner's own loopback.
+  if (normalized.startsWith('::ffff:')) {
+    const groups = normalized.slice(7).split(':');
+    const high = Number.parseInt(groups[0] || '', 16);
+    if (Number.isFinite(high) && (high >> 8) === 127) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

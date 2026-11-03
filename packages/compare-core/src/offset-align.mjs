@@ -659,7 +659,6 @@ function summarizeIntervals(baseline, current, rows, hotRunsCache) {
  * @returns {boolean}
  */
 function offsetPreflightRejects(baseline, current) {
-  const planned = Math.ceil(baseline.height / PREFLIGHT_ROW_STRIDE);
   let sum = 0;
   let samples = 0;
   for (let y = 0; y < baseline.height; y += PREFLIGHT_ROW_STRIDE) {
@@ -678,7 +677,11 @@ function offsetPreflightRejects(baseline, current) {
     }
     sum += best;
     samples += 1;
-    if (sum / planned > EVIDENCE_MEAN_COST_LIMIT) {
+    // Running mean over the rows sampled so far (not the full planned count,
+    // which made the mid-scan mean lenient by the abstention ratio). The
+    // final check below uses the same denominator, so this can only exit
+    // early — never change the verdict.
+    if (samples > 0 && sum / samples > EVIDENCE_MEAN_COST_LIMIT) {
       return true;
     }
   }

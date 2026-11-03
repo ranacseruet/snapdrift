@@ -352,6 +352,40 @@ describe('capture compatibility', () => {
     expect(normalizedViewportIdentity('mobile')).not.toBe(normalizedViewportIdentity({ width: 390, height: 844 }));
   });
 
+  test('preserves deviceScaleFactor on custom viewports instead of erasing it', () => {
+    // A custom 1440×900 viewport at deviceScaleFactor 3 renders 4320×2700
+    // pixels; it must not test as identical to the desktop preset.
+    expect(normalizedViewportIdentity({ width: 1440, height: 900, deviceScaleFactor: 3 }))
+      .not.toBe(normalizedViewportIdentity('desktop'));
+    // Absent flags still default to the desktop-like identity.
+    expect(normalizedViewportIdentity({ width: 1440, height: 900 }))
+      .toBe(normalizedViewportIdentity('desktop'));
+    expect(normalizedViewportIdentity({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true }))
+      .toBe(normalizedViewportIdentity('mobile'));
+  });
+
+  test('rejects malformed device-characteristic flags on custom viewports', () => {
+    expect(() => validateManifest({
+      ...VALID_MANIFEST,
+      screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport: { width: 800, height: 600, deviceScaleFactor: 'high' } }]
+    })).toThrow(/deviceScaleFactor/);
+    expect(() => validateManifest({
+      ...VALID_MANIFEST,
+      screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport: { width: 800, height: 600, isMobile: 'yes' } }]
+    })).toThrow(/isMobile/);
+  });
+
+  test('does not mutate the manifest passed in when defaulting schemaVersion', () => {
+    const input = JSON.parse(JSON.stringify(VALID_MANIFEST));
+    delete input.schemaVersion;
+    validateManifest(input);
+    expect(input.schemaVersion).toBeUndefined();
+  });
+
+  test('rejects a generatedAt that is not an ISO-parseable date', () => {
+    expect(() => validateManifest({ ...VALID_MANIFEST, generatedAt: 'not a date' })).toThrow(/generatedAt/);
+  });
+
   test.each(['tablet', { width: 0, height: 900 }, { width: Infinity, height: 900 }, { width: 1440, height: 0 }, { width: 1.5, height: 2 }])('rejects malformed viewport %j', (viewport) => {
     expect(() => validateManifest({ ...VALID_MANIFEST, screenshots: [{ ...VALID_MANIFEST.screenshots[0], viewport }] })).toThrow(/viewport/);
   });
