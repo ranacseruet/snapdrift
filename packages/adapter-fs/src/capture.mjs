@@ -68,10 +68,17 @@ async function ensureDirectory(targetPath) {
  */
 export function assertNavigationOk(response, route, targetUrl) {
   if (response && response.status() >= 400) {
-    throw new Error(
+    const error = new Error(
       `Route "${route.id}" returned HTTP ${response.status()} for ${targetUrl} — ` +
       `refusing to capture an error page as a screenshot. Check the route path/baseUrl.`
     );
+    // 4xx (other than the transient 408/429) means the page answered with an
+    // error and a retry with identical inputs will get the same answer, so
+    // captureRouteWithRetry does not burn the retry budget on it.
+    if (response.status() < 500 && response.status() !== 408 && response.status() !== 429) {
+      /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (error)).deterministic = true;
+    }
+    throw error;
   }
 }
 
@@ -142,7 +149,7 @@ function viewportContextOptions(viewport) {
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
- * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
 async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
   const startedAt = Date.now();
@@ -195,7 +202,10 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
       viewport: route.viewport,
       status: 'failed',
       durationMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      // Internal flag: a deterministic failure (e.g. HTTP 404) skips the
+      // retry. Not copied into results.json by runBaselineCapture.
+      deterministic: /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (error))?.deterministic === true
     };
   } finally {
     await context?.close();
@@ -209,11 +219,16 @@ const CAPTURE_MAX_RETRIES = 1;
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
- * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
 async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
   let result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
   for (let attempt = 1; attempt <= CAPTURE_MAX_RETRIES && result.status !== 'passed'; attempt++) {
+    if (result.deterministic) {
+      // Same inputs will return the same HTTP error; retrying only doubles
+      // the capture time for permanently broken routes.
+      break;
+    }
     console.log(`[SnapDrift] Retrying route ${route.id} (attempt ${attempt + 1}/${CAPTURE_MAX_RETRIES + 1})...`);
     result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
   }
@@ -235,7 +250,7 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
  * @param {number} totalRoutes
- * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
+ * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>} out
  * @returns {Promise<void>}
  */
 async function captureViewportRoutes(browser, limit, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
@@ -314,11 +329,33 @@ export async function runBaselineCapture(options = {}) {
     screenshots: []
   };
 
-  const browser = await chromium.launch(launchSettings);
   const captureStartedAt = Date.now();
   let failures = 0;
+  let browser;
 
   try {
+    try {
+      browser = await chromium.launch(launchSettings);
+    } catch (error) {
+      // The most common CI capture failure is a missing browser binary or a
+      // launch sandbox error. Record it per route and still write the
+      // results/manifest in the finally below, so downstream reports show
+      // what actually broke instead of a confusing "unable to load baseline
+      // results" for a file that was never written.
+      failures = routes.length;
+      for (const route of routes) {
+        results.routes.push({
+          id: route.id,
+          path: route.path,
+          viewport: route.viewport,
+          status: 'failed',
+          durationMs: 0,
+          error: `Browser launch failed: ${error instanceof Error ? error.message : String(error)}`
+        });
+      }
+      throw error;
+    }
+
     manifest.captureProfile = validateCaptureProfile({
       schemaVersion: CAPTURE_PROFILE_SCHEMA_VERSION,
       engineVersion,
@@ -357,7 +394,7 @@ export async function runBaselineCapture(options = {}) {
     }
 
     // Pre-allocate results array; captureViewportRoutes fills slots by originalIndex.
-    /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} */
+    /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>} */
     const captureResults = new Array(routes.length);
 
     // One run-wide limiter shared by every viewport group: all groups run in
@@ -392,15 +429,26 @@ export async function runBaselineCapture(options = {}) {
     }
     console.log(`[SnapDrift] Captured ${routes.length - failures}/${routes.length} route(s) in ${((Date.now() - captureStartedAt) / 1000).toFixed(1)}s.`);
   } finally {
-    await browser.close();
+    // Write the artifacts before closing the browser, and never let a
+    // browser.close() rejection mask a write failure (or the original capture
+    // error): writes always run first, close always runs, close failures are
+    // logged rather than thrown.
     results.finishedAt = new Date().toISOString();
     results.passed = failures === 0;
     manifest.generatedAt = new Date().toISOString();
 
-    await Promise.all([
-      fs.writeFile(resultsPath, JSON.stringify(results, null, 2)),
-      fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
-    ]);
+    try {
+      await Promise.all([
+        fs.writeFile(resultsPath, JSON.stringify(results, null, 2)),
+        fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2))
+      ]);
+    } finally {
+      if (browser) {
+        await browser.close().catch((closeError) => {
+          console.error(`[SnapDrift] Browser close failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
+        });
+      }
+    }
   }
 
   if (failures > 0) {

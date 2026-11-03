@@ -1,5 +1,6 @@
 // @ts-check
 import { alignRows } from '../src/vertical-align.mjs';
+import { analyzeOffsetRuns } from '../src/offset-align.mjs';
 
 /**
  * Fill every pixel of each row with the same RGBA color. Rows with distinct
@@ -177,5 +178,56 @@ describe('@snapdrift/compare-core — row fingerprint alignment', () => {
     expect(alignRows(baseline, current)).toEqual(expected);
     // The byte fallback must normalize identically when no word view is available.
     expect(alignRows(baseline, misalignedCopy(current))).toEqual(expected);
+  });
+
+  // Regression guard for the preflight early-exit denominator: the mid-scan
+  // check divides by the full planned sample count, so one costly early row
+  // cannot reject a pair whose remaining sampled rows align. Dividing by the
+  // running sample count instead made the sampled mean jump to 1 after the
+  // first row and forced coordinate fallback for otherwise alignable content.
+  test('a costly first sampled row does not reject a pair whose remaining rows align at an offset', () => {
+    // Mirror of the module-private PREFLIGHT_ROW_STRIDE: 10 sampled rows.
+    const PREFLIGHT_STRIDE = 32;
+    const width = 32;
+    const height = PREFLIGHT_STRIDE * 10;
+    // Baseline: row 0 is a unique solid ink row that has no copy in the
+    // current image; rows 22..319 are distinct solid ink rows (values grow
+    // with y so no two rows pair within NOISE_DELTA).
+    const baselineData = new Uint8Array(width * height * 4);
+    const baselineValue = (y) => 90 + y;
+    for (let y = 0; y < height; y += 1) {
+      const value = y === 0 ? 80 : baselineValue(y);
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+        baselineData[index] = value;
+        baselineData[index + 1] = value;
+        baselineData[index + 2] = value;
+        baselineData[index + 3] = 255;
+      }
+    }
+    // Current: rows 0..43 are solid white (nothing matches baseline row 0's
+    // value or any baseline row's), rows 44..319 are baseline rows 22..297 —
+    // so every baseline row y >= 22 pairs exactly with current row y + 22.
+    const currentData = new Uint8Array(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      const sourceY = y - 22;
+      const value = sourceY >= 22 ? baselineValue(sourceY) : 255;
+      for (let x = 0; x < width; x += 1) {
+        const index = (y * width + x) * 4;
+        currentData[index] = value;
+        currentData[index + 1] = value;
+        currentData[index + 2] = value;
+        currentData[index + 3] = 255;
+      }
+    }
+
+    const baseline = { data: baselineData, width, height };
+    const current = { data: currentData, width, height };
+
+    // Sampled rows: y = 0 has best cost 1 (no copy anywhere in the window);
+    // y = 32..288 have best cost 0 at offset 22. Sampled mean = 1/10, under
+    // the evidence limit, so the preflight must not reject.
+    const result = analyzeOffsetRuns(baseline, current);
+    expect(result.kind).toBe('mapped');
   });
 });

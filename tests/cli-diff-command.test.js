@@ -147,6 +147,11 @@ describe('runDiffCommand — onUnavailable: fallback-local', () => {
   // A remote Snap capture leaves no PNGs on disk, so the local pixel engine has
   // nothing to compare until the routes are recaptured locally.
   it('recaptures locally before diffing when Snap goes down after a remote capture', async () => {
+    // The fallback diff needs a baseline on disk; without one the command
+    // reports baseline-unavailable instead of recapturing.
+    await fs.mkdir(path.join(workDir, 'baseline'), { recursive: true });
+    await fs.writeFile(path.join(workDir, 'baseline', 'results.json'), '{}');
+    await fs.writeFile(path.join(workDir, 'baseline', 'manifest.json'), '{}');
     let diffCalls = 0;
     const snapProvider = makeProvider({
       diffImpl: () => {
@@ -166,6 +171,28 @@ describe('runDiffCommand — onUnavailable: fallback-local', () => {
     expect(localProvider.diff).toHaveBeenCalledWith(
       expect.objectContaining({ currentResultsPath: '/tmp/run/results.json' })
     );
+  });
+
+  // A stale baselineDir without results.json must produce the documented
+  // baseline-unavailable outcome, not a raw ENOENT from the local diff engine.
+  it('reports baseline-unavailable when the baseline directory has no results', async () => {
+    const snapProvider = makeProvider({
+      diffImpl: () => {
+        throw new SnapFallbackError('Snap unreachable');
+      }
+    });
+    const localProvider = makeProvider();
+    loadSnapdriftConfigMock.mockResolvedValue({ config: CONFIG });
+    createProviderMock.mockReturnValue(localProvider).mockReturnValueOnce(snapProvider);
+
+    await expect(runDiffCommand(opts())).resolves.toBeUndefined();
+
+    expect(snapProvider.diff).toHaveBeenCalled();
+    // No recapture either: with no baseline on disk there is nothing to diff
+    // against, so burning a local capture would be wasted work.
+    expect(localProvider.capture).not.toHaveBeenCalled();
+    expect(localProvider.diff).not.toHaveBeenCalled();
+    expect(stdout.join('')).toMatch(/No baseline found at/);
   });
 });
 

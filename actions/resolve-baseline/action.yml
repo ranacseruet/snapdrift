@@ -84,8 +84,13 @@ runs:
           const { pathToFileURL } = require('url');
 
           const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
-          const modulePath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.GITHUB_ACTION_PATH, '..', '..', 'lib', 'snapdrift-config.mjs');
-          const resolverModulePath = path.resolve(process.env.GITHUB_WORKSPACE, process.env.GITHUB_ACTION_PATH, '..', '..', 'lib', 'resolve-baseline-artifact.mjs');
+          // Resolve against the action's own checkout, not GITHUB_WORKSPACE:
+          // this composite action may be consumed from a repo whose working
+          // directory does not contain the snapdrift checkout, and
+          // GITHUB_ACTION_PATH already points inside the action.
+          const actionRoot = path.resolve(process.env.GITHUB_ACTION_PATH, '..', '..');
+          const modulePath = path.resolve(actionRoot, 'lib', 'snapdrift-config.mjs');
+          const resolverModulePath = path.resolve(actionRoot, 'lib', 'resolve-baseline-artifact.mjs');
           const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
           const { resolveBaselineArtifact } = await import(pathToFileURL(resolverModulePath));
           let artifactName = process.env.INPUT_ARTIFACT_NAME || '';

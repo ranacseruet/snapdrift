@@ -85,6 +85,14 @@ async function buildFileIndex(rootDir) {
  */
 export async function resolveImagePath(runDir, relativeImagePath) {
   const directPath = path.resolve(runDir, relativeImagePath);
+  // Manifests can arrive from downloaded CI artifacts, so treat their image
+  // paths as untrusted: refuse to resolve outside the run directory rather
+  // than reading arbitrary files into a diff image.
+  const resolvedRunDir = path.resolve(runDir);
+  const containment = path.relative(resolvedRunDir, directPath);
+  if (containment.startsWith('..') || path.isAbsolute(containment)) {
+    throw new Error(`Refusing to read screenshot outside the run directory: ${relativeImagePath}`);
+  }
   if (await exists(directPath)) {
     return directPath;
   }

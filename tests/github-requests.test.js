@@ -141,4 +141,17 @@ describe('upsertPullRequestReportComment', () => {
     await expect(upsertPullRequestReportComment({ github, ...options })).rejects.toThrow('denied');
     expect(github.rest.issues.deleteComment).not.toHaveBeenCalled();
   });
+
+  it('sorts comments with unparseable timestamps to the end deterministically', async () => {
+    // An unparseable timestamp yields NaN, and a comparator returning NaN
+    // leaves ordering to the engine — previously the comment to update was
+    // then arbitrary. Non-finite entries must sort last, stable.
+    const github = commentsClient([
+      { id: 1, body: '<!-- report -->', updated_at: 'not-a-date' },
+      { id: 2, body: '<!-- report -->', updated_at: '2026-01-01' },
+      { id: 3, body: '<!-- report -->', updated_at: 'also-bad' }
+    ]);
+    await upsertPullRequestReportComment({ github, ...options });
+    expect(github.operations[0]).toEqual(['updateComment', { ...repository, comment_id: 2, body: options.body }]);
+  });
 });

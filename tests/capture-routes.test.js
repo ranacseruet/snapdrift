@@ -271,6 +271,76 @@ describe('runBaselineCapture', () => {
         expectContextsClosed(contexts, browser);
     });
 
+    it('does not retry deterministic HTTP failures', async () => {
+        const configPath = await writeConfig(tempDir, [
+            { id: 'gone', path: '/gone', viewport: 'desktop' }
+        ]);
+        let attempts = 0;
+        const { browser, contexts } = createHarness({
+            pageFactory: () => {
+                attempts += 1;
+                return createPage({
+                    goto: jest.fn(async () => {
+                        // Non-resolvable response with a 404 final status.
+                        return { status: () => 404 };
+                    })
+                });
+            }
+        });
+
+        await expect(runBaselineCapture({ configPath, routeIds: ['gone'] }))
+            .rejects.toThrow('SnapDrift capture failed for 1 route(s).');
+
+        expect(attempts).toBe(1);
+        expect(contexts).toHaveLength(1);
+        expectContextsClosed(contexts, browser);
+    });
+
+    it('retries transient 5xx HTTP responses', async () => {
+        const configPath = await writeConfig(tempDir, [
+            { id: 'wobble', path: '/wobble', viewport: 'desktop' }
+        ]);
+        let attempts = 0;
+        createHarness({
+            pageFactory: () => {
+                attempts += 1;
+                return createPage({
+                    goto: jest.fn(async () => ({ status: () => (attempts === 1 ? 503 : 200) }))
+                });
+            }
+        });
+
+        const result = await runBaselineCapture({ configPath, routeIds: ['wobble'] });
+        const results = JSON.parse(await fs.readFile(result.resultsPath, 'utf8'));
+
+        expect(attempts).toBe(2);
+        expect(results.routes[0].status).toBe('passed');
+    });
+
+    it('writes results and manifest with the launch failure recorded when chromium.launch rejects', async () => {
+        const configPath = await writeConfig(tempDir, [
+            { id: 'home-desktop', path: '/', viewport: 'desktop' },
+            { id: 'home-mobile', path: '/', viewport: 'mobile' }
+        ]);
+        launchMock.mockRejectedValue(new Error('Executable does not exist'));
+
+        await expect(runBaselineCapture({ configPath }))
+            .rejects.toThrow('Executable does not exist');
+
+        const results = JSON.parse(await fs.readFile(path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'results.json'), 'utf8'));
+        const manifest = JSON.parse(await fs.readFile(path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'manifest.json'), 'utf8'));
+
+        expect(results.passed).toBe(false);
+        expect(results.routes).toHaveLength(2);
+        expect(results.routes[0]).toEqual(expect.objectContaining({
+            id: 'home-desktop',
+            status: 'failed',
+            error: expect.stringContaining('Browser launch failed: Executable does not exist')
+        }));
+        expect(results.routes[1]).toEqual(expect.objectContaining({ id: 'home-mobile', status: 'failed' }));
+        expect(manifest.screenshots).toHaveLength(0);
+    });
+
     it('retries failed captures in a fresh context so storage from the failed attempt does not leak', async () => {
         const configPath = await writeConfig(tempDir, [
             { id: 'flaky', path: '/flaky', viewport: 'desktop' }

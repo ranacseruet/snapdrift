@@ -1,5 +1,6 @@
 import {
   validateSnapdriftConfig,
+  isLocalBaseUrl,
   selectConfiguredRoutes,
   selectRoutesForChangedFiles,
   resolveFromWorkingDirectory,
@@ -327,5 +328,47 @@ describe('@snapdrift/manifest — constants', () => {
       capture: 'snap',
       snap: { apiKeyEnv: 'SNAP_KEY' }
     }).snap.apiKeyEnv).toBe('SNAP_KEY');
+  });
+});
+
+describe('@snapdrift/manifest — isLocalBaseUrl', () => {
+  test.each([
+    'http://localhost:3000',
+    'http://app.localhost:4173',
+    'http://127.0.0.1:8080',
+    'http://127.200.1.2',
+    'http://0.0.0.0:5173',
+    'http://[::1]:3000'
+  ])('treats %s as local', (url) => {
+    expect(isLocalBaseUrl(url)).toBe(true);
+  });
+
+  // URL canonicalization traps: these spellings all denote 127.0.0.1, but
+  // hostname is rewritten so the plain "127." prefix check misses them.
+  test.each([
+    ['http://127.1:8080/', 'http://127.1:8080/'],
+    ['http://0177.0.0.1/', 'http://0177.0.0.1/']
+  ])('treats %s as local (canonicalizes to 127.0.0.1)', (url) => {
+    expect(isLocalBaseUrl(url)).toBe(true);
+  });
+
+  // IPv4-mapped IPv6 loopback: WHATWG URL canonicalizes the embedded IPv4 to
+  // hex groups, so the hostname is "[::ffff:7f00:1]" for both spellings.
+  test.each([
+    'http://[::ffff:127.0.0.1]:3000/',
+    'http://[::ffff:7f00:1]/'
+  ])('treats %s as local (IPv4-mapped IPv6 loopback)', (url) => {
+    expect(isLocalBaseUrl(url)).toBe(true);
+  });
+
+  test('does not treat remote or non-loopback addresses as local', () => {
+    expect(isLocalBaseUrl('https://example.com')).toBe(false);
+    expect(isLocalBaseUrl('https://snap.i2dev.com')).toBe(false);
+    expect(isLocalBaseUrl('http://192.168.1.10:3000')).toBe(false);
+    expect(isLocalBaseUrl('http://10.0.0.1')).toBe(false);
+    // ::ffff: mapping of a non-loopback address stays remote.
+    expect(isLocalBaseUrl('http://[::ffff:192.168.1.10]/')).toBe(false);
+    expect(isLocalBaseUrl(undefined)).toBe(false);
+    expect(isLocalBaseUrl('not a url')).toBe(false);
   });
 });

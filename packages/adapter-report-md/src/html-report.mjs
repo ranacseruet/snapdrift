@@ -10,7 +10,20 @@ import { getAlignmentNotes } from './alignment-notes.mjs';
  * @returns {string}
  */
 function formatDimensions(dimensions) {
-  return dimensions ? `${dimensions.width}&times;${dimensions.height}` : '&ndash;';
+  if (!dimensions) return '&ndash;';
+  return `${num(dimensions.width)}&times;${num(dimensions.height)}`;
+}
+
+/**
+ * Render a numeric field from the (possibly untrusted) summary JSON. A
+ * non-finite value or a string carrying markup is refused rather than
+ * interpolated into the HTML.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function num(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '&ndash;';
 }
 
 /**
@@ -141,7 +154,7 @@ export async function generateHtmlReport(summary, options = {}) {
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
         ${comparisonCells}
         <td>${formatPercentage(item.mismatchRatio)}</td>
-        <td>${item.differentPixels}/${item.totalPixels}</td>
+        <td>${num(item.differentPixels)}/${num(item.totalPixels)}</td>
         ${diffCell}
       </tr>`;
 
@@ -186,8 +199,8 @@ export async function generateHtmlReport(summary, options = {}) {
     const rows = dimensionChanges.map((item) => `<tr>
         <td>${escapeHtml(item.id)}</td>
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
-        <td>${item.baselineWidth}&times;${item.baselineHeight}</td>
-        <td>${item.currentWidth}&times;${item.currentHeight}</td>
+        <td>${num(item.baselineWidth)}&times;${num(item.baselineHeight)}</td>
+        <td>${num(item.currentWidth)}&times;${num(item.currentHeight)}</td>
       </tr>`).join('');
     dimensionHtml = `<table>
       <thead><tr><th>Route</th><th>Viewport</th><th>Baseline</th><th>Current</th></tr></thead>
@@ -197,8 +210,8 @@ export async function generateHtmlReport(summary, options = {}) {
     const legacyRows = dimensionChanges.map((item) => `<tr>
         <td>${escapeHtml(item.id)}</td>
         <td>${escapeHtml(formatViewport(item.viewport))}</td>
-        <td>${item.baselineWidth}&times;${item.baselineHeight}</td>
-        <td>${item.currentWidth}&times;${item.currentHeight}</td>
+        <td>${num(item.baselineWidth)}&times;${num(item.baselineHeight)}</td>
+        <td>${num(item.currentWidth)}&times;${num(item.currentHeight)}</td>
         <td>&ndash;</td>
         <td>&ndash;</td>
       </tr>`).join('');

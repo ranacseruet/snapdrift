@@ -4,9 +4,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
-import pngjs from 'pngjs';
 
-import { loadSnapdriftConfig } from './config.mjs';
+import { readPngDimensions } from '@snapdrift/compare-core';
+
+import { loadSnapdriftConfig, SNAPDRIFT_CAPTURE_CONCURRENCY } from './config.mjs';
+import { createConcurrencyLimiter } from './concurrency.mjs';
 import {
   selectConfiguredRoutes,
   splitCommaList,
@@ -18,7 +20,6 @@ import {
   isLocalBaseUrl
 } from '@snapdrift/manifest';
 
-const { PNG } = pngjs;
 const require = createRequire(import.meta.url);
 const engineVersion = require('../package.json').version;
 
@@ -86,7 +87,8 @@ async function fetchGetWithRetry(fetchImpl, url, headers = {}) {
  *   outDir?: string,
  *   fetchFn?: typeof fetch,
  *   pollIntervalMs?: number,
- *   timeoutMs?: number
+ *   timeoutMs?: number,
+ *   downloadConcurrency?: number
  * }} [options]
  * @returns {Promise<{
  *   resultsPath: string,
@@ -244,6 +246,13 @@ export async function runSnapBatchCapture(options) {
       batchResult = pollData;
       break;
     }
+    // A terminal failure is known as soon as the API reports it; keep polling
+    // and the job would spin until the full timeout instead of surfacing the
+    // capture error.
+    if (pollData.status === 'failed') {
+      const detail = pollData.error?.error || pollData.error?.code || pollData.error || 'capture failed';
+      throw new Error(`Snap Cloud batch screenshot job "${batchId}" failed: ${detail}.`);
+    }
 
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
@@ -269,14 +278,18 @@ export async function runSnapBatchCapture(options) {
     }
   }
 
-  // 5. Download PNGs in parallel and assemble manifest/results
+  // 5. Download PNGs under one bounded limiter and assemble manifest/results.
+  // A per-route full PNG decode just to read width/height would spike memory
+  // and CPU on tall full-page captures; the header-only read is enough.
   /** @type {import('@snapdrift/manifest').VisualScreenshotManifestEntry[]} */
   const manifestScreenshots = [];
   /** @type {import('@snapdrift/manifest').VisualBaselineRouteResult[]} */
   const resultRoutes = [];
 
+  const downloadLimit = createConcurrencyLimiter(Math.max(1, options?.downloadConcurrency ?? SNAPDRIFT_CAPTURE_CONCURRENCY));
+
   await Promise.all(
-    routes.map(async (route, index) => {
+    routes.map(async (route, index) => downloadLimit(async () => {
       const item = batchResult.items[index];
       const imageUrl = item.imageUrl;
       if (!imageUrl) {
@@ -289,7 +302,10 @@ export async function runSnapBatchCapture(options) {
       }
 
       const buffer = Buffer.from(await imgResponse.arrayBuffer());
-      const parsedPng = PNG.sync.read(buffer);
+      const dimensions = readPngDimensions(buffer);
+      if (!dimensions) {
+        throw new Error(`Screenshot for route "${route.id}" is not a valid PNG (missing signature or IHDR chunk, or invalid dimensions).`);
+      }
 
       const filename = `${sanitizeRouteId(route.id)}.png`;
       const relativeImagePath = `screenshots/${filename}`;
@@ -302,8 +318,8 @@ export async function runSnapBatchCapture(options) {
         path: route.path,
         viewport: route.viewport,
         imagePath: relativeImagePath,
-        width: parsedPng.width,
-        height: parsedPng.height
+        width: dimensions.width,
+        height: dimensions.height
       };
 
       resultRoutes[index] = {
@@ -313,10 +329,10 @@ export async function runSnapBatchCapture(options) {
         status: 'passed',
         durationMs: item.durationMs || 0,
         imagePath: relativeImagePath,
-        width: parsedPng.width,
-        height: parsedPng.height
+        width: dimensions.width,
+        height: dimensions.height
       };
-    })
+    }))
   );
 
   // 6. Write results.json and manifest.json

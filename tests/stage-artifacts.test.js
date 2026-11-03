@@ -49,8 +49,44 @@ describe('stage artifact bundles helper', () => {
         expect(await fs.readFile(path.join(result.bundleDir, 'results.json'), 'utf8')).toBe('{"passed":true}\n');
         expect(await fs.readFile(path.join(result.bundleDir, 'manifest.json'), 'utf8')).toBe('{"screenshots":[]}\n');
         expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'root-index-desktop.png'), 'utf8')).toBe('desktop-png');
-        expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'root-index-mobile.png'), 'utf8')).toBe('mobile-png');
+        // Subdirectory structure is preserved: flattening let same-named PNGs
+        // from different subdirectories silently overwrite each other.
+        expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'nested', 'root-index-mobile.png'), 'utf8')).toBe('mobile-png');
         await expect(fs.access(path.join(result.bundleDir, 'screenshots', 'readme.txt'))).rejects.toThrow();
+    });
+
+    it('does not let same-named PNGs from different subdirectories overwrite each other', async () => {
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
+
+        const screenshotsDir = path.join(tempDir, 'inputs', 'screenshots');
+        await writeFile(path.join(screenshotsDir, 'a', 'page.png'), 'from-a');
+        await writeFile(path.join(screenshotsDir, 'b', 'page.png'), 'from-b');
+
+        const result = await stageArtifacts({
+            artifactType: 'baseline',
+            screenshotsDir
+        });
+
+        expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'a', 'page.png'), 'utf8')).toBe('from-a');
+        expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'b', 'page.png'), 'utf8')).toBe('from-b');
+    });
+
+    it('stages symlinked PNG screenshots instead of dropping them', async () => {
+        const { stageArtifacts } = await import('../lib/stage-artifacts.mjs');
+
+        const screenshotsDir = path.join(tempDir, 'inputs', 'screenshots');
+        const realDir = path.join(tempDir, 'elsewhere');
+        await writeFile(path.join(realDir, 'linked.png'), 'linked-png');
+        await fs.mkdir(screenshotsDir, { recursive: true });
+        await fs.symlink(path.join(realDir, 'linked.png'), path.join(screenshotsDir, 'linked.png'));
+
+        const result = await stageArtifacts({
+            artifactType: 'baseline',
+            screenshotsDir
+        });
+
+        // Staged as a real file copy, not a dangling symlink into the bundle.
+        expect(await fs.readFile(path.join(result.bundleDir, 'screenshots', 'linked.png'), 'utf8')).toBe('linked-png');
     });
 
     it('stages a drift bundle, supports custom bundle dirs, and tolerates missing optional inputs', async () => {

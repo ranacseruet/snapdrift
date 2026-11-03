@@ -678,6 +678,15 @@ function offsetPreflightRejects(baseline, current) {
     }
     sum += best;
     samples += 1;
+    // Early exit only when the verdict is already determined: even if every
+    // remaining planned row cost 0, the mean over all planned rows would
+    // still exceed the limit. The final verdict divides by `samples`, which
+    // is at most `planned`, so its mean is never below this bound — this
+    // check therefore only triggers rejection the final check would reach
+    // anyway, just sooner. Dividing by the running `samples` here instead
+    // would reject content whose early rows differ but whose remaining rows
+    // align (e.g. one changed row before a 22px shift), forcing coordinate
+    // comparison of otherwise alignable content.
     if (sum / planned > EVIDENCE_MEAN_COST_LIMIT) {
       return true;
     }
