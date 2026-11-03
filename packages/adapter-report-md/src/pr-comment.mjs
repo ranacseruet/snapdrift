@@ -13,12 +13,15 @@ export const PR_COMMENT_MARKERS = [PR_COMMENT_MARKER];
  */
 export function escapeMarkdown(value) {
   return String(value ?? '')
+    .replace(/\\/g, '\\\\')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\|/g, '\\|')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
     .replace(/`/g, '\\`');
 }
 

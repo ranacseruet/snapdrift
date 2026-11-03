@@ -199,6 +199,44 @@ describe('makeMarkdown', () => {
       const md = makeMarkdown(makeSummary());
       expect(md).toContain('None');
     });
+
+    it('escapes markdown-special characters in route ids, reasons, and error messages', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        changed: [{
+          id: 'route|with|pipes](https://evil.example) [x',
+          viewport: 'desktop',
+          mismatchRatio: 0.5,
+          differentPixels: 5,
+          totalPixels: 10
+        }],
+        missing: [{ id: 'missing|route', reason: 'missing [baseline](https://evil.example)' }],
+        errors: [{ id: 'error|route', message: 'Navigation failed: <script> | [link](https://evil.example)' }],
+        dimensionChanges: [{
+          id: 'dimension|route',
+          viewport: { width: 1440, height: 900 },
+          baselineWidth: 1440,
+          baselineHeight: 1266,
+          currentWidth: 1440,
+          currentHeight: 1092,
+          status: 'dimension-changed'
+        }]
+      }));
+
+      expect(md).not.toContain('(https://evil.example)');
+      expect(md).toContain('\\|');
+      expect(md).toContain('&lt;script&gt;');
+    });
+
+    it('escapes backslashes before other characters so pipes stay escaped', () => {
+      const md = makeMarkdown(makeSummary({
+        status: 'incomplete',
+        errors: [{ id: 'tricky\\', message: 'ends with backslash | pipe' }]
+      }));
+
+      expect(md).toContain('tricky\\\\ |');
+      expect(md).toContain('ends with backslash \\| pipe');
+    });
   });
 
   describe('formatDriftFailureMessage', () => {
