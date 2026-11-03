@@ -75,6 +75,12 @@ runs:
           const { pathToFileURL } = require('url');
 
           const summaryPath = process.env.VISUAL_DIFF_SUMMARY_PATH;
+          if (!summaryPath) {
+            // existsSync(undefined) throws a TypeError; an unset summary-path
+            // input means there is no report to post, not a crash.
+            core.warning('SnapDrift summary-path input was not set; skipping PR comment.');
+            return;
+          }
           if (!fs.existsSync(summaryPath)) {
             core.warning(`SnapDrift summary not found at ${summaryPath}`);
             return;

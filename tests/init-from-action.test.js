@@ -103,6 +103,28 @@ describe('runInitFromAction', () => {
     }
   });
 
+  it('does not overwrite an existing MIGRATION_NOTES.md', async () => {
+    const workflowPath = path.join(tempDir, 'workflow.yml');
+    const yaml = await import('js-yaml');
+    await fs.writeFile(workflowPath, yaml.dump(makeSnapWorkflow()));
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      await fs.mkdir('.github', { recursive: true });
+      await fs.writeFile('.github/MIGRATION_NOTES.md', '# My hand-edited notes\n');
+
+      // The config does not exist yet, so init succeeds — but must keep the
+      // user's notes instead of silently clobbering them.
+      await expect(runInitFromAction(workflowPath)).resolves.toBeDefined();
+      const notes = await fs.readFile('.github/MIGRATION_NOTES.md', 'utf-8');
+      expect(notes).toBe('# My hand-edited notes\n');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it('throws when workflow file does not exist', async () => {
     await expect(runInitFromAction('/nonexistent/workflow.yml'))
       .rejects.toThrow(/Cannot read workflow file/);

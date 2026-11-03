@@ -235,5 +235,7 @@ runs:
       with:
         name: ${{ steps.config.outputs.artifact_name }}
         retention-days: ${{ inputs.artifact-retention-days }}
-        if-no-files-found: warn
+        # A baseline upload that contains no files would publish an artifact
+        # the resolver later "finds" but cannot use; fail instead of warn.
+        if-no-files-found: error
         path: ${{ steps.stage.outputs.bundle_dir }}

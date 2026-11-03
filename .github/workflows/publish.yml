@@ -29,7 +29,14 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for trusted publishing (OIDC)
-        run: npm install -g npm@^11.5.1
+        # Exact pin: the npm CLI gatekeeps trusted publishing, so an
+        # unpredictable minor bump could change auth behavior mid-release.
+        run: npm install -g npm@11.5.1
+
+      - name: Audit production dependencies
+        # Fail the release on known high/critical vulnerabilities in the
+        # dependency tree that actually ships (omit dev-only advisories).
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Install dependencies
         run: npm ci

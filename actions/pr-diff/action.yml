@@ -584,7 +584,10 @@ runs:
       with:
         name: ${{ steps.context.outputs.artifact_name }}
         retention-days: ${{ inputs.artifact-retention-days }}
-        if-no-files-found: warn
+        # A drift upload that contains no files means staging ran but produced
+        # nothing; downstream consumers would download an empty artifact and
+        # misread it as "no drift". Fail instead of warn.
+        if-no-files-found: error
         path: ${{ steps.stage.outputs.bundle_dir }}
 
     - if: always()
@@ -687,6 +690,13 @@ runs:
     # has nothing to evaluate — `warn-and-skip` means "do not fail my build".
     - if: steps.scope.outputs.should_run == 'true' && steps.capture.outputs.provider != 'skipped' && steps.compare.outputs.skipped != 'true' && (steps.baseline.outputs.found == 'true' || steps.capture.outputs.provider == 'snap')
       shell: bash
+      env:
+        # Consume the compare step's summary_path output rather than hardcoding
+        # the default drift directory: a repo-level workingDirectory or
+        # outDir override moves the summary, and the hardcoded path then read
+        # a stale file (or failed with ENOENT) while the real summary said
+        # something different.
+        SUMMARY_JSON_PATH: ${{ steps.compare.outputs.summary_path }}
       run: |
         node --input-type=module <<'EOF'
         import fs from 'node:fs/promises';
@@ -695,7 +705,7 @@ runs:
 
         const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/compare-results.mjs');
         const { shouldFailDriftCheck, formatDriftFailureMessage } = await import(pathToFileURL(modulePath));
-        const summaryModulePath = path.resolve('qa-artifacts/snapdrift/drift/current/summary.json');
+        const summaryModulePath = path.resolve(process.env.SUMMARY_JSON_PATH);
         const summary = JSON.parse(await fs.readFile(summaryModulePath, 'utf8'));
 
         if (shouldFailDriftCheck(summary)) {

@@ -1,6 +1,18 @@
 /** @jest-environment node */
 
-const { parseArgs, buildOpenCommand } = await import('../lib/cli.mjs');
+import { jest } from '@jest/globals';
+
+const spawnSyncMock = jest.fn();
+
+// Spread the real module so the rest of the import graph keeps its exports.
+const actualChildProcess = await import('node:child_process');
+
+jest.unstable_mockModule('node:child_process', () => ({
+  ...actualChildProcess,
+  spawnSync: spawnSyncMock
+}));
+
+const { parseArgs, buildOpenCommand, openFile } = await import('../lib/cli.mjs');
 
 // ---------------------------------------------------------------------------
 // parseArgs — strict flag handling (findings 1)
@@ -86,6 +98,37 @@ describe('buildOpenCommand — path passed as a single argv element', () => {
     const { args } = buildOpenCommand('/c/path to/report.html', 'win32');
     expect(args[0]).toBe('url.dll,FileProtocolHandler');
     expect(args[1]).toBe('/c/path to/report.html');
+  });
+
+  it('reports a non-zero opener exit status instead of passing silently', () => {
+    const errors = [];
+    const stderrWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk) => { errors.push(String(chunk)); return true; };
+    try {
+      spawnSyncMock.mockReturnValue({ status: 1, error: undefined });
+      openFile('/x/report.html');
+      expect(errors.join('')).toMatch(/exited with status 1/);
+    } finally {
+      process.stderr.write = stderrWrite;
+      spawnSyncMock.mockReset();
+    }
+  });
+
+  it('stays silent when the opener succeeds', () => {
+    const errors = [];
+    const stdoutWrite = process.stdout.write.bind(process.stdout);
+    const stderrWrite = process.stderr.write.bind(process.stderr);
+    process.stdout.write = (chunk) => { errors.push(String(chunk)); return true; };
+    process.stderr.write = (chunk) => { errors.push(String(chunk)); return true; };
+    try {
+      spawnSyncMock.mockReturnValue({ status: 0, error: undefined });
+      openFile('/x/report.html');
+      expect(errors).toEqual([]);
+    } finally {
+      process.stdout.write = stdoutWrite;
+      process.stderr.write = stderrWrite;
+      spawnSyncMock.mockReset();
+    }
   });
 });
 
