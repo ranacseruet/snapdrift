@@ -34,9 +34,19 @@ describe('resolveGitRef', () => {
     expect(resolveGitRef()).toEqual({ refBranch: 'feature/x', refSha: 'a'.repeat(40) });
   });
 
-  it('falls back to GITHUB_HEAD_REF for the branch', () => {
+  it('prefers GITHUB_HEAD_REF for the branch', () => {
     process.env.GITHUB_HEAD_REF = 'pr-branch';
     process.env.GITHUB_SHA = 'b'.repeat(40);
+
+    expect(resolveGitRef().refBranch).toBe('pr-branch');
+  });
+
+  // On pull_request events GITHUB_REF_NAME is "<pr>/merge"; the source branch
+  // in GITHUB_HEAD_REF is the correct attribution, matching #gitRunContext.
+  it('prefers GITHUB_HEAD_REF over GITHUB_REF_NAME when both are set', () => {
+    process.env.GITHUB_HEAD_REF = 'pr-branch';
+    process.env.GITHUB_REF_NAME = '123/merge';
+    process.env.GITHUB_SHA = 'c'.repeat(40);
 
     expect(resolveGitRef().refBranch).toBe('pr-branch');
   });
