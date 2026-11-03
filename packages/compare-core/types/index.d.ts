@@ -71,8 +71,9 @@ export interface ComparisonMetadata {
   /** Whether v2 aligned rows or fell back to coordinate comparison. */
   mode?: 'vertical-aligned' | 'coordinate-fallback';
   /**
-   * Strategy that produced an aligned result. `exact` matched byte-identical
-   * rows with no tolerance; `offset` mapped piecewise vertical-offset runs and
+   * Strategy that produced an aligned result. `exact` matched visually identical
+   * rows (fully transparent pairs may differ in hidden RGB) with no tolerance;
+   * `offset` mapped piecewise vertical-offset runs and
    * used a per-channel highlight tolerance for stable runs. Absent for
    * coordinate fallback.
    */

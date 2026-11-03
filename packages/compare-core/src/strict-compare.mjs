@@ -2,7 +2,7 @@
 
 import pngjs from 'pngjs';
 
-import { buildIgnoreMask } from './shared.mjs';
+import { buildIgnoreMask, rgbaPixelsEqual } from './shared.mjs';
 
 const { PNG } = pngjs;
 
@@ -16,9 +16,9 @@ const IGNORE_REGION_COLOR = /** @type {const} */ ([128, 128, 128, 128]);
  * Callers decode both PNGs and reject dimension mismatches in their own
  * contract order before calling this helper, so it assumes equal dimensions.
  * Pixels inside ignore regions are excluded from `totalPixels` and
- * `differentPixels`. Equality compares all four RGBA channels, including hidden
- * RGB on fully transparent pixels (issue #201 deliberately leaves that
- * semantics unchanged). Diff painting uses only `highlightColor` for changed
+ * `differentPixels`. Equality compares all four RGBA channels, except that two
+ * fully transparent pixels (alpha zero on both sides) are equal regardless of
+ * hidden RGB. Diff painting uses only `highlightColor` for changed
  * pixels, the neutral gray for ignored pixels, and the baseline color for
  * unchanged pixels; there are no added/removed colors for equal dimensions.
  *
@@ -73,11 +73,7 @@ export function compareStrictPixels(baselinePng, currentPng, options = {}) {
       }
 
       totalPixels += 1;
-      const changed =
-        baselinePng.data[i] !== currentPng.data[i] ||
-        baselinePng.data[i + 1] !== currentPng.data[i + 1] ||
-        baselinePng.data[i + 2] !== currentPng.data[i + 2] ||
-        baselinePng.data[i + 3] !== currentPng.data[i + 3];
+      const changed = !rgbaPixelsEqual(baselinePng.data, i, currentPng.data, i);
 
       if (changed) {
         differentPixels += 1;

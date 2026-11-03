@@ -2,6 +2,8 @@
 
 import { diffArrays } from 'diff';
 
+import { rgbaPixelsEqual } from './shared.mjs';
+
 /**
  * The alignment algorithm is deliberately bounded. A very large edit
  * distance is more likely to be a wholesale page replacement than a useful
@@ -47,6 +49,8 @@ export const COMPARISON_FALLBACK_REASONS = /** @type {const} */ (['width-mismatc
 // into one JS number instead of a Node crypto digest. SHA-1 hex strings over
 // every row are an avoidable cost in a metrics-only full-page comparison; this
 // word loop is cheaper (measured ~20% faster fingerprinting at 1440x8000).
+// Fully transparent pixels normalize to zero RGBA before hashing, so hidden RGB
+// never separates visually identical rows.
 // A single 32-bit value over ~16k rows has a few-percent birthday collision
 // chance (~1.6% at 16,384 rows over 2^32), which would make the Myers diff pair
 // distinct rows and then force a whole-comparison `verification-failed`
@@ -57,7 +61,7 @@ export const COMPARISON_FALLBACK_REASONS = /** @type {const} */ (['width-mismatc
 // but adding a 32-bit `low` would round once `high` exceeds 21 bits. So only
 // the low 21 bits of the first accumulator become the high half; the second
 // accumulator contributes all 32 bits. The resulting value is <= 2^53 - 1 and
-// exactly representable. `rowsEqual` still byte-verifies every Myers match, so
+// exactly representable. `rowsEqual` still visible-verifies every Myers match, so
 // even a rare collision cannot turn two different rows into a matched segment.
 const HIGH_MASK = 0x1fffff; // 21 bits: the safe-integer headroom over 2^32
 const HIGH_SCALE = 4294967296; // 2^32
@@ -74,7 +78,8 @@ const LITTLE_ENDIAN = new Uint32Array(new Uint8Array([1, 0, 0, 0]).buffer)[0] ==
  * Build one word view over the whole decoded image when its RGBA bytes start
  * on a 4-byte boundary. A view lets the fingerprint loop read one 32-bit word
  * per pixel instead of four byte loads, and building it once per image avoids
- * a view allocation per row. When the backing buffer's byte offset is
+ * a view allocation per row. The loop still checks each word's alpha byte to
+ * normalize fully transparent hidden RGB. When the backing buffer's byte offset is
  * misaligned or its declared rows exceed the buffer, every row falls back to
  * byte hashing.
  *
@@ -89,8 +94,20 @@ function imageWordView(png) {
 }
 
 /**
+ * Normalize one packed little-endian RGBA word before fingerprinting. The high
+ * byte is alpha; a fully transparent pixel hashes as zero RGBA so hidden RGB
+ * cannot separate visually identical rows. Opaque pixels keep their word.
+ *
+ * @param {number} word
+ * @returns {number}
+ */
+function visiblePixelWord(word) {
+  return (word >>> 24) === 0 ? 0 : word;
+}
+
+/**
  * Hash one decoded row into a combined 53-bit fingerprint (a JS safe integer).
- * Hashes make the Myers sequence diff cheap while `rowsEqual` byte-verifies
+ * Hashes make the Myers sequence diff cheap while `rowsEqual` visible-verifies
  * every match, so a collision cannot become a matched segment.
  *
  * @param {{ data: Uint8Array, width: number }} png
@@ -106,7 +123,7 @@ function rowFingerprint(png, y, words) {
   if (words) {
     const wordStart = y * png.width;
     for (let x = 0; x < png.width; x++) {
-      const word = words[wordStart + x];
+      const word = visiblePixelWord(words[wordStart + x]);
       // Math.imul wraps mod 2^32 regardless of the signed return; the unsigned
       // conversion is only needed on the second accumulator's final value.
       first = Math.imul(first ^ word, FIRST_PRIME);
@@ -117,11 +134,12 @@ function rowFingerprint(png, y, words) {
     // so a row hashed through this fallback equals the same row hashed via a view.
     for (let x = 0; x < png.width; x++) {
       const byteIndex = start + x * 4;
-      const word =
+      const word = visiblePixelWord(
         png.data[byteIndex] |
         (png.data[byteIndex + 1] << 8) |
         (png.data[byteIndex + 2] << 16) |
-        (png.data[byteIndex + 3] << 24);
+        (png.data[byteIndex + 3] << 24)
+      );
       first = Math.imul(first ^ word, FIRST_PRIME);
       second = Math.imul(second ^ word, SECOND_PRIME);
     }
@@ -130,6 +148,10 @@ function rowFingerprint(png, y, words) {
 }
 
 /**
+ * Verify a fingerprint-matched row pair with the visible equality rule. Byte
+ * equality returns immediately for the common opaque case; a differing pair is
+ * then checked per pixel, where both-alpha-zero pixels may differ in hidden RGB.
+ *
  * @param {{ data: Uint8Array, width: number }} baseline
  * @param {{ data: Uint8Array, width: number }} current
  * @param {number} baselineY
@@ -140,8 +162,18 @@ function rowsEqual(baseline, current, baselineY, currentY) {
   const stride = baseline.width * 4;
   const baselineStart = baselineY * stride;
   const currentStart = currentY * stride;
+  let bytesEqual = true;
   for (let offset = 0; offset < stride; offset++) {
     if (baseline.data[baselineStart + offset] !== current.data[currentStart + offset]) {
+      bytesEqual = false;
+      break;
+    }
+  }
+  if (bytesEqual) return true;
+  for (let x = 0; x < baseline.width; x++) {
+    const baselineIndex = baselineStart + x * 4;
+    const currentIndex = currentStart + x * 4;
+    if (!rgbaPixelsEqual(baseline.data, baselineIndex, current.data, currentIndex)) {
       return false;
     }
   }

@@ -24,6 +24,27 @@ function rowImage(width, rowValues) {
 }
 
 /**
+ * Fill each row with an explicit RGBA color.
+ *
+ * @param {number} width
+ * @param {[number, number, number, number][]} colors one entry per row
+ * @returns {{ data: Uint8Array, width: number, height: number }}
+ */
+function rgbaRowImage(width, colors) {
+  const data = new Uint8Array(width * colors.length * 4);
+  colors.forEach((color, y) => {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      data[index] = color[0];
+      data[index + 1] = color[1];
+      data[index + 2] = color[2];
+      data[index + 3] = color[3];
+    }
+  });
+  return { data, width, height: colors.length };
+}
+
+/**
  * Place the same bytes at a byte offset that is not 4-aligned, so the
  * fingerprint loop cannot build a Uint32Array word view and takes its byte
  * fallback. Fingerprints must still equal the word-view fingerprints of the
@@ -130,4 +151,31 @@ describe('@snapdrift/compare-core — row fingerprint alignment', () => {
     // The inserted row's bytes are unique on the opposite side, so it is not
     // ambiguous; an aligned result also proves no verification-failed fallback.
   }, 30_000);
+
+  test('matches fully transparent rows with differing hidden RGB (#201)', () => {
+    const width = 32;
+    const baseline = rgbaRowImage(width, [
+      [20, 80, 140, 255],
+      [0, 0, 0, 0],
+      [200, 220, 240, 255]
+    ]);
+    const current = rgbaRowImage(width, [
+      [20, 80, 140, 255],
+      [255, 255, 255, 0],
+      [200, 220, 240, 255]
+    ]);
+    const expected = {
+      kind: 'aligned',
+      height: 3,
+      segments: [
+        { outputStart: 0, length: 3, kind: 'matched', baselineStart: 0, currentStart: 0 }
+      ]
+    };
+
+    // Hidden RGB normalizes to zero RGBA under alpha 0, so the fingerprints and
+    // the per-pixel visible verification both see the middle row as matched.
+    expect(alignRows(baseline, current)).toEqual(expected);
+    // The byte fallback must normalize identically when no word view is available.
+    expect(alignRows(baseline, misalignedCopy(current))).toEqual(expected);
+  });
 });
