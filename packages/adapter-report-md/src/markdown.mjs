@@ -54,11 +54,29 @@ function formatAlignmentNotes(changed) {
 }
 
 /**
+ * Percent-encode a diff-image path for use inside an angle-bracket CommonMark
+ * link destination, which — unlike backslash escaping — survives spaces,
+ * `&`, and parentheses verbatim. `%` is encoded first so existing percent
+ * sequences cannot be reinterpreted.
+ *
+ * @param {unknown} diffImagePath
+ * @returns {string}
+ */
+function markdownLinkDestination(diffImagePath) {
+  return String(diffImagePath ?? '')
+    .replace(/%/g, '%25')
+    .replace(/</g, '%3C')
+    .replace(/>/g, '%3E')
+    .replace(/&/g, '%26')
+    .replace(/\r?\n/g, ' ');
+}
+
+/**
  * @param {string | undefined} diffImagePath
  * @returns {string}
  */
 function formatDiffImage(diffImagePath) {
-  return diffImagePath ? `![Diff image](${escapeMarkdown(diffImagePath)})` : '—';
+  return diffImagePath ? `![Diff image](<${markdownLinkDestination(diffImagePath)}>)` : '—';
 }
 
 /**

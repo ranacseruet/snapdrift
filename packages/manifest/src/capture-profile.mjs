@@ -100,15 +100,17 @@ export function checkCaptureProfileCompatibility(baseline, current) {
     return { status: 'incompatible', reason: `capture engine mismatch: baseline is "${baseline.engine.name}" but current is "${current.engine.name}"` };
   }
   if (baseline?.schemaVersion === CAPTURE_PROFILE_SCHEMA_VERSION && current?.schemaVersion === CAPTURE_PROFILE_SCHEMA_VERSION) {
-    // Cloud-rendered captures (browserRevision "cloud") do not render pixels
-    // on the machine that submits the request, so that machine's OS metadata
-    // (platform) says nothing about the rendered images. GitHub refreshes
-    // runner images in place, which would otherwise mark every stored
-    // snap-batch baseline incompatible on each image refresh and force a
-    // mass re-baselining unrelated to real visual drift. Local captures
+    // Snap-batch captures render pixels cloud-side, not on the machine that
+    // submits the request, so that machine's OS metadata (platform) says
+    // nothing about the rendered images. GitHub refreshes runner images in
+    // place, which would otherwise mark every stored snap-batch baseline
+    // incompatible on each image refresh and force a mass re-baselining
+    // unrelated to real visual drift. The exemption keys off the engine
+    // identity, not a self-reported revision string, so host-derived metadata
+    // cannot leak into the comparison for a local capture. Local captures
     // (snapdrift-local) render on the submitting machine, so platform stays
     // part of the strict comparison there.
-    const cloudRendered = baseline.browserRevision === 'cloud' && current.browserRevision === 'cloud';
+    const cloudRendered = baseline.engine?.name === 'snap-batch' && current.engine?.name === 'snap-batch';
     const comparable = (profile) => {
       if (!cloudRendered) return profile;
       const { platform, ...renderingProfile } = profile;

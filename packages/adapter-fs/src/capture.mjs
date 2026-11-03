@@ -221,15 +221,6 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
 }
 
 /**
- * @param {import('playwright').Browser} browser
- * @param {Array<{ route: SnapdriftRouteConfig, originalIndex: number }>} entries
- * @param {string} baseUrl
- * @param {string} screenshotsRoot
- * @param {number} totalRoutes
- * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
- * @returns {Promise<void>}
- */
-/**
  * Capture a group of routes that share a viewport.
  *
  * `limit` is the run-wide concurrency limiter created once in

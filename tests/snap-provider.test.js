@@ -2957,6 +2957,153 @@ describe('SnapProvider retry behavior', () => {
     await provider.checkBaselineExists('timeout-408');
     expect(callCount).toBe(2);
   });
+
+  it('fails with SnapApiError after exactly 3 attempts when 429 persists (default fail mode)', async () => {
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        return errorResponse(429, { error: 'rate limited' });
+      },
+      sleepFn: () => Promise.resolve()
+    });
+
+    const pending = provider.checkBaselineExists('persistent-429');
+    await expect(pending).rejects.toThrow(SnapApiError);
+    await expect(pending).rejects.toThrow(/Snap API 429/);
+    expect(callCount).toBe(3);
+  });
+
+  it('uses exponential backoff delays when no Retry-After is present on a 429', async () => {
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        return callCount < 3 ? errorResponse(429, { error: 'rate limited' }) : okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: (delay) => {
+        delays.push(delay);
+        return Promise.resolve();
+      }
+    });
+
+    await provider.checkBaselineExists('backoff-429');
+    expect(delays).toEqual([1000, 2000]);
+  });
+
+  it('fails with SnapApiError when a 408 never recovers (default fail mode)', async () => {
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        return errorResponse(408, { error: 'request timeout' });
+      },
+      sleepFn: () => Promise.resolve()
+    });
+
+    await expect(provider.checkBaselineExists('persistent-408')).rejects.toThrow(/Snap API 408/);
+    expect(callCount).toBe(3);
+  });
+
+  it('clamps a Retry-After above the cap to 30 seconds', async () => {
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ...errorResponse(429, { error: 'rate limited' }),
+            headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? '120' : null) }
+          };
+        }
+        return okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: (delay) => {
+        delays.push(delay);
+        return Promise.resolve();
+      }
+    });
+
+    await provider.checkBaselineExists('retry-after-clamp');
+    expect(delays).toEqual([30000]);
+  });
+
+  it('falls back to exponential backoff for a malformed Retry-After', async () => {
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ...errorResponse(429, { error: 'rate limited' }),
+            headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? 'soon' : null) }
+          };
+        }
+        return okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: (delay) => {
+        delays.push(delay);
+        return Promise.resolve();
+      }
+    });
+
+    await provider.checkBaselineExists('retry-after-malformed');
+    expect(delays).toEqual([1000]);
+  });
+
+  it('honors an HTTP-date Retry-After header', async () => {
+    let callCount = 0;
+    const delays = [];
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ...errorResponse(429, { error: 'rate limited' }),
+            headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? new Date(Date.now() + 5000).toUTCString() : null) }
+          };
+        }
+        return okResponse({ id: 'baseline_1' });
+      },
+      sleepFn: (delay) => {
+        delays.push(delay);
+        return Promise.resolve();
+      }
+    });
+
+    await provider.checkBaselineExists('retry-after-date');
+    expect(delays.length).toBe(1);
+    expect(delays[0]).toBeGreaterThanOrEqual(0);
+    expect(delays[0]).toBeLessThanOrEqual(30000);
+  });
+
+  it('does not retry or mask a quota-exhausted 429 (hard SnapApiError)', async () => {
+    let callCount = 0;
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: async () => {
+        callCount++;
+        return errorResponse(429, { error: 'quota_exceeded' });
+      },
+      sleepFn: () => Promise.resolve()
+    });
+
+    await expect(provider.checkBaselineExists('quota-429')).rejects.toThrow(/Snap API 429: quota_exceeded/);
+    expect(callCount).toBe(1);
+  });
+
+  it('does not route a quota-exhausted 429 through warn-and-skip', async () => {
+    const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, {
+      fetchFn: async () => errorResponse(429, { error: 'quota_exceeded' }),
+      sleepFn: () => Promise.resolve()
+    });
+
+    const pending = provider.checkBaselineExists('quota-429-skip');
+    await expect(pending).rejects.toThrow(SnapApiError);
+    await expect(pending).rejects.not.toThrow(SnapSkipError);
+  });
 });
 
 describe('SnapProvider transport deadlines', () => {
