@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.18.1 - 2026-11-03
+
+Workspace releases this version:
+
+- `@snapdrift/compare-core` 1.8.1 — a pixel that is fully transparent on both sides (alpha `0` on each side) is now visually equal regardless of its hidden RGB, in local comparison policy v1 and v2 (details under Fixes). This is the version the hosted Snap comparator must bump to for #224 parity.
+- `snapdrift` 0.18.1 — root floor for `@snapdrift/compare-core` moves to `^1.8.1`; the previous `^1.8.0` floor still resolves the unfixed 1.8.0 engine. The Marketplace dispatcher pin moves to `2ac911f`, the #227 merge commit on `main`, which includes both the newest commit touching `actions/` (`82e2578`, the #226 action hardening) and the #223 comparator fix, so wrapper-action diffs get the fixed engine too.
+- `@snapdrift/manifest` stays 1.8.0, `@snapdrift/adapter-fs` stays 1.8.0 (its `^1.8.0` compare-core range already resolves 1.8.1), and `@snapdrift/adapter-report-md` stays 1.4.0.
 
 ### Fixes
 
