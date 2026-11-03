@@ -590,6 +590,14 @@ describe('@snapdrift/compare-core — compareImages', () => {
       alignmentStrategy: 'exact',
       rowMapping: [{ outputStart: 0, length: 2, kind: 'matched', baselineStart: 0, currentStart: 0 }]
     });
+
+    // Matched rows render the current pixel, so the diff canvas keeps the
+    // current alpha-0 color without an orange highlight even though the pair's
+    // hidden RGB differs.
+    const diffPng = PNG.sync.read(result.diffImageBuffer);
+    expect([...diffPng.data.slice(16, 32)]).toEqual([
+      255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0
+    ]);
   });
 
   test('v2 exact alignment still counts a one-sided transparent row as changed (#201 boundary)', () => {
