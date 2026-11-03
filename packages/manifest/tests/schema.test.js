@@ -307,6 +307,46 @@ describe('capture compatibility', () => {
     });
   });
 
+  test('ignores runner platform drift between cloud-rendered snap-batch captures', () => {
+    const batchProfile = {
+      schemaVersion: 2,
+      engine: { name: 'snap-batch', version: '0.15.0' },
+      engineVersion: '0.15.0',
+      browser: 'chromium',
+      browserRevision: 'cloud',
+      playwrightVersion: 'cloud',
+      platform: { name: 'linux', architecture: 'x64', release: '6.8.0-1019-aws', version: 'Ubuntu 24.04' },
+      locale: 'en-US',
+      timezone: 'UTC',
+      settings: {
+        screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+        readiness: { waitUntil: 'load', settleDelayMs: 300 },
+        context: { isolation: 'cloud-batch', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' },
+        launch: { headless: true, args: [] }
+      }
+    };
+    // Simulates a GitHub runner image refresh between baseline and current.
+    const afterImageRefresh = {
+      ...batchProfile,
+      platform: { name: 'linux', architecture: 'x64', release: '6.14.0-1011-aws', version: 'Ubuntu 26.04' }
+    };
+    expect(checkCaptureProfileCompatibility(batchProfile, afterImageRefresh)).toEqual({ status: 'verified' });
+
+    // Rendering-relevant fields must still be compared for cloud captures.
+    const afterBrowserRoll = { ...batchProfile, engine: { name: 'snap-batch', version: '0.16.0' }, engineVersion: '0.16.0' };
+    expect(checkCaptureProfileCompatibility(batchProfile, afterBrowserRoll)).toEqual({
+      status: 'incompatible',
+      reason: expect.stringContaining('engine.version')
+    });
+
+    // Local captures render on the submitting machine, so platform stays strict.
+    const localWithDifferentPlatform = { ...LOCAL_PROFILE, platform: { ...LOCAL_PROFILE.platform, release: '6.9' } };
+    expect(checkCaptureProfileCompatibility(LOCAL_PROFILE, localWithDifferentPlatform)).toEqual({
+      status: 'incompatible',
+      reason: expect.stringContaining('platform.release')
+    });
+  });
+
   test('normalizes desktop but preserves mobile device characteristics', () => {
     expect(normalizedViewportIdentity('desktop')).toBe(normalizedViewportIdentity({ width: 1440, height: 900 }));
     expect(normalizedViewportIdentity('mobile')).not.toBe(normalizedViewportIdentity({ width: 390, height: 844 }));
