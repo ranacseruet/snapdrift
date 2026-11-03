@@ -76,7 +76,7 @@ export function assertNavigationOk(response, route, targetUrl) {
     // error and a retry with identical inputs will get the same answer, so
     // captureRouteWithRetry does not burn the retry budget on it.
     if (response.status() < 500 && response.status() !== 408 && response.status() !== 429) {
-      /** @type {Record<string, unknown>} */ (error).deterministic = true;
+      /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (error)).deterministic = true;
     }
     throw error;
   }
@@ -149,7 +149,7 @@ function viewportContextOptions(viewport) {
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
- * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
 async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
   const startedAt = Date.now();
@@ -205,7 +205,7 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
       error: error instanceof Error ? error.message : String(error),
       // Internal flag: a deterministic failure (e.g. HTTP 404) skips the
       // retry. Not copied into results.json by runBaselineCapture.
-      deterministic: /** @type {Record<string, unknown>} */ (error)?.deterministic === true
+      deterministic: /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (error))?.deterministic === true
     };
   } finally {
     await context?.close();
@@ -219,7 +219,7 @@ const CAPTURE_MAX_RETRIES = 1;
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
- * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>}
+ * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
 async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
   let result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
@@ -250,7 +250,7 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
  * @param {number} totalRoutes
- * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} out
+ * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>} out
  * @returns {Promise<void>}
  */
 async function captureViewportRoutes(browser, limit, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
@@ -394,7 +394,7 @@ export async function runBaselineCapture(options = {}) {
     }
 
     // Pre-allocate results array; captureViewportRoutes fills slots by originalIndex.
-    /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number] }>} */
+    /** @type {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>} */
     const captureResults = new Array(routes.length);
 
     // One run-wide limiter shared by every viewport group: all groups run in

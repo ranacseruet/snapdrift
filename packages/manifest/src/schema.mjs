@@ -143,7 +143,7 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     }
   }
 
-  return /** @type {ScreenshotManifest} */ (candidate);
+  return /** @type {ScreenshotManifest} */ (/** @type {unknown} */ (candidate));
 }
 
 /**
