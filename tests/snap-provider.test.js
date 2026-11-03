@@ -71,6 +71,110 @@ function overrideEnvironment(updates) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Transport test probe
+//
+// The transport tests below exercise #request (retry, Retry-After, backoff,
+// timeouts, deadlines, body cancellation) through a public method that makes
+// exactly ONE network request. `diff()` is that method: after reading its
+// metadata fixture it polls `GET /v1/visual/runs/:id`, and a terminal run
+// response ends the flow with no further requests — so call counts and delay
+// sequences observed against `checkBaselineExists` (removed with the unused
+// baseline-store API) carry over unchanged.
+// ---------------------------------------------------------------------------
+
+const TRANSPORT_DIFF_CONFIG = {
+  baselineArtifactName: 'test',
+  workingDirectory: '.',
+  baseUrl: 'https://example.com',
+  resultsFile: 'results.json',
+  manifestFile: 'manifest.json',
+  screenshotsRoot: 'screenshots',
+  routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+  diff: { threshold: 0.01, mode: 'report-only' }
+};
+
+/** Terminal run response that satisfies one transport-probe diff() call. */
+function transportTerminalRun() {
+  return okResponse({
+    id: 'run_tp',
+    status: 'pass',
+    captures: [
+      {
+        id: 'cap_tp',
+        routeId: 'home',
+        routePath: '/',
+        status: 'diffed',
+        currentObjectKey: 'k/current.png',
+        viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+      }
+    ]
+  });
+}
+
+/**
+ * Create the on-disk fixtures a transport-probe diff() call needs. Fake-timer
+ * tests must await this BEFORE creating the pending diff() promise, so the
+ * real-I/O setup does not interleave with timer advancement.
+ *
+ * @returns {Promise<{ configPath: string, resultsPath: string, cleanup: () => Promise<void> }>}
+ */
+async function transportFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-transport-'));
+  const resultsPath = path.join(dir, 'results.json');
+  await fs.writeFile(resultsPath, JSON.stringify(diffRunMetadata({ runId: 'run_tp' })));
+  const configPath = path.join(dir, 'config.json');
+  await fs.writeFile(configPath, JSON.stringify(TRANSPORT_DIFF_CONFIG));
+  return {
+    configPath,
+    resultsPath,
+    cleanup: () => fs.rm(dir, { recursive: true, force: true })
+  };
+}
+
+/**
+ * One real-I/O event-loop turn. Under fake timers, `Promise.resolve()` ticks
+ * do not let the real fs work inside diff() (metadata read, config load)
+ * complete before the first request starts; a tiny real fs await yields the
+ * event loop until it settles.
+ *
+ * @returns {Promise<void>}
+ */
+async function realIoTick() {
+  await fs.realpath(os.tmpdir());
+}
+
+/**
+ * Wait until `predicate` is true, yielding through real fs turns. Bounded so
+ * a broken flow fails fast instead of hanging the test.
+ *
+ * @param {() => boolean} predicate
+ * @returns {Promise<void>}
+ */
+async function waitFor(predicate) {
+  for (let i = 0; i < 500; i += 1) {
+    if (predicate()) return;
+    await realIoTick();
+  }
+  throw new Error('waitFor: condition was not met within the tick budget');
+}
+
+/**
+ * Drive one transport-level request through diff() against the given provider.
+ * For fake-timer tests use {@link transportFixture} instead.
+ *
+ * @param {SnapProvider} provider
+ * @returns {Promise<{ summary: object }>}
+ */
+async function transportProbe(provider) {
+  const fixture = await transportFixture();
+  try {
+    return await provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
+  } finally {
+    await fixture.cleanup();
+  }
+}
+
 function useHostedBaselineEnvironment() {
   return overrideEnvironment({
     GITHUB_ACTIONS: 'true',
@@ -2831,14 +2935,14 @@ describe('SnapProvider retry behavior', () => {
       if (callCount === 1) {
         return errorResponse(503, { error: 'service unavailable' });
       }
-      return okResponse({ id: 'run_1', status: 'pending' });
+      return transportTerminalRun();
     };
 
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await provider.checkBaselineExists('abc123');
+    await transportProbe(provider);
     expect(callCount).toBe(2);
   });
 
@@ -2854,12 +2958,12 @@ describe('SnapProvider retry behavior', () => {
             body: { cancel: bodyCancel }
           };
         }
-        return okResponse({ id: 'baseline_1' });
+        return transportTerminalRun();
       },
       sleepFn: () => Promise.resolve()
     });
 
-    await provider.checkBaselineExists('cancel-5xx-body');
+    await transportProbe(provider);
     expect(callCount).toBe(2);
     expect(bodyCancel).toHaveBeenCalledTimes(1);
   });
@@ -2875,7 +2979,7 @@ describe('SnapProvider retry behavior', () => {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await expect(provider.checkBaselineExists('abc123')).rejects.toThrow(/Snap API 401/);
+    await expect(transportProbe(provider)).rejects.toThrow(/Snap API 401/);
     expect(callCount).toBe(1);
   });
 
@@ -2886,14 +2990,14 @@ describe('SnapProvider retry behavior', () => {
       if (callCount === 1) {
         return errorResponse(429, { error: 'rate limited' });
       }
-      return okResponse({ id: 'baseline_1' });
+      return transportTerminalRun();
     };
 
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await provider.checkBaselineExists('abc123');
+    await transportProbe(provider);
     expect(callCount).toBe(2);
   });
 
@@ -2909,7 +3013,7 @@ describe('SnapProvider retry behavior', () => {
             headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? '7' : null) }
           };
         }
-        return okResponse({ id: 'baseline_1' });
+        return transportTerminalRun();
       },
       sleepFn: (delay) => {
         delays.push(delay);
@@ -2917,7 +3021,7 @@ describe('SnapProvider retry behavior', () => {
       }
     });
 
-    await provider.checkBaselineExists('retry-after-429');
+    await transportProbe(provider);
     expect(callCount).toBe(2);
     expect(delays).toEqual([7000]);
   });
@@ -2928,7 +3032,7 @@ describe('SnapProvider retry behavior', () => {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await expect(provider.checkBaselineExists('exhausted-429')).rejects.toThrow(SnapSkipError);
+    await expect(transportProbe(provider)).rejects.toThrow(SnapSkipError);
   });
 
   it('routes an exhausted 429 through the onUnavailable policy (fallback-local)', async () => {
@@ -2937,7 +3041,7 @@ describe('SnapProvider retry behavior', () => {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await expect(provider.checkBaselineExists('exhausted-429-fallback')).rejects.toThrow(SnapFallbackError);
+    await expect(transportProbe(provider)).rejects.toThrow(SnapFallbackError);
   });
 
   it('retries on 408 request timeout like a transient failure', async () => {
@@ -2947,14 +3051,14 @@ describe('SnapProvider retry behavior', () => {
       if (callCount === 1) {
         return errorResponse(408, { error: 'request timeout' });
       }
-      return okResponse({ id: 'baseline_1' });
+      return transportTerminalRun();
     };
 
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: mockFetch,
       sleepFn: () => Promise.resolve()
     });
-    await provider.checkBaselineExists('timeout-408');
+    await transportProbe(provider);
     expect(callCount).toBe(2);
   });
 
@@ -2968,7 +3072,7 @@ describe('SnapProvider retry behavior', () => {
       sleepFn: () => Promise.resolve()
     });
 
-    const pending = provider.checkBaselineExists('persistent-429');
+    const pending = transportProbe(provider);
     await expect(pending).rejects.toThrow(SnapApiError);
     await expect(pending).rejects.toThrow(/Snap API 429/);
     expect(callCount).toBe(3);
@@ -2980,7 +3084,7 @@ describe('SnapProvider retry behavior', () => {
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: async () => {
         callCount++;
-        return callCount < 3 ? errorResponse(429, { error: 'rate limited' }) : okResponse({ id: 'baseline_1' });
+        return callCount < 3 ? errorResponse(429, { error: 'rate limited' }) : transportTerminalRun();
       },
       sleepFn: (delay) => {
         delays.push(delay);
@@ -2988,7 +3092,7 @@ describe('SnapProvider retry behavior', () => {
       }
     });
 
-    await provider.checkBaselineExists('backoff-429');
+    await transportProbe(provider);
     expect(delays).toEqual([1000, 2000]);
   });
 
@@ -3002,7 +3106,7 @@ describe('SnapProvider retry behavior', () => {
       sleepFn: () => Promise.resolve()
     });
 
-    await expect(provider.checkBaselineExists('persistent-408')).rejects.toThrow(/Snap API 408/);
+    await expect(transportProbe(provider)).rejects.toThrow(/Snap API 408/);
     expect(callCount).toBe(3);
   });
 
@@ -3018,7 +3122,7 @@ describe('SnapProvider retry behavior', () => {
             headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? '120' : null) }
           };
         }
-        return okResponse({ id: 'baseline_1' });
+        return transportTerminalRun();
       },
       sleepFn: (delay) => {
         delays.push(delay);
@@ -3026,7 +3130,7 @@ describe('SnapProvider retry behavior', () => {
       }
     });
 
-    await provider.checkBaselineExists('retry-after-clamp');
+    await transportProbe(provider);
     expect(delays).toEqual([30000]);
   });
 
@@ -3042,7 +3146,7 @@ describe('SnapProvider retry behavior', () => {
             headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? 'soon' : null) }
           };
         }
-        return okResponse({ id: 'baseline_1' });
+        return transportTerminalRun();
       },
       sleepFn: (delay) => {
         delays.push(delay);
@@ -3050,7 +3154,7 @@ describe('SnapProvider retry behavior', () => {
       }
     });
 
-    await provider.checkBaselineExists('retry-after-malformed');
+    await transportProbe(provider);
     expect(delays).toEqual([1000]);
   });
 
@@ -3066,7 +3170,7 @@ describe('SnapProvider retry behavior', () => {
             headers: { get: (name) => (name.toLowerCase() === 'retry-after' ? new Date(Date.now() + 5000).toUTCString() : null) }
           };
         }
-        return okResponse({ id: 'baseline_1' });
+        return transportTerminalRun();
       },
       sleepFn: (delay) => {
         delays.push(delay);
@@ -3074,7 +3178,7 @@ describe('SnapProvider retry behavior', () => {
       }
     });
 
-    await provider.checkBaselineExists('retry-after-date');
+    await transportProbe(provider);
     expect(delays.length).toBe(1);
     expect(delays[0]).toBeGreaterThanOrEqual(0);
     expect(delays[0]).toBeLessThanOrEqual(30000);
@@ -3090,7 +3194,7 @@ describe('SnapProvider retry behavior', () => {
       sleepFn: () => Promise.resolve()
     });
 
-    await expect(provider.checkBaselineExists('quota-429')).rejects.toThrow(/Snap API 429: quota_exceeded/);
+    await expect(transportProbe(provider)).rejects.toThrow(/Snap API 429: quota_exceeded/);
     expect(callCount).toBe(1);
   });
 
@@ -3100,7 +3204,7 @@ describe('SnapProvider retry behavior', () => {
       sleepFn: () => Promise.resolve()
     });
 
-    const pending = provider.checkBaselineExists('quota-429-skip');
+    const pending = transportProbe(provider);
     await expect(pending).rejects.toThrow(SnapApiError);
     await expect(pending).rejects.not.toThrow(SnapSkipError);
   });
@@ -3126,12 +3230,16 @@ describe('SnapProvider transport deadlines', () => {
       nowFn: () => Date.now()
     });
 
-    const pending = provider.checkBaselineExists('stalled-headers');
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
     const rejection = expect(pending).rejects.toThrow(/timed out/);
-    await Promise.resolve();
+    // Real fs turns until the first request starts; microtask ticks alone do
+    // not settle diff()'s metadata/config reads under fake timers.
+    await waitFor(() => signals.length === 1);
     await jest.advanceTimersByTimeAsync(95_000);
 
     await rejection;
+    await fixture.cleanup();
     expect(signals).toHaveLength(3);
     expect(signals.every((signal) => signal instanceof AbortSignal && signal.aborted)).toBe(true);
   });
@@ -3154,9 +3262,10 @@ describe('SnapProvider transport deadlines', () => {
       nowFn: () => Date.now()
     });
 
-    const pending = provider.checkBaselineExists('late-response');
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
     const rejection = expect(pending).rejects.toThrow(/Snap API 500/);
-    await Promise.resolve();
+    await waitFor(() => callCount === 1);
     await jest.advanceTimersByTimeAsync(30_000);
     resolveFirstResponse({
       ok: true,
@@ -3166,6 +3275,7 @@ describe('SnapProvider transport deadlines', () => {
     });
     await Promise.resolve();
     await rejection;
+    await fixture.cleanup();
     expect(lateBodyCancel).toHaveBeenCalledTimes(1);
   });
 
@@ -3182,12 +3292,14 @@ describe('SnapProvider transport deadlines', () => {
       }
     );
 
-    const pending = provider.checkBaselineExists('stalled-json-body');
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
     const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
-    await Promise.resolve();
+    await waitFor(() => signals.length === 1);
     await jest.advanceTimersByTimeAsync(95_000);
 
     await rejection;
+    await fixture.cleanup();
     expect(signals).toHaveLength(3);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
@@ -3226,15 +3338,17 @@ describe('SnapProvider transport deadlines', () => {
       nowFn: () => Date.now()
     });
 
-    const pending = provider.checkBaselineExists('stalled-error-body');
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
     const rejection = expect(pending).rejects.toMatchObject({
       status: 401,
       message: expect.stringMatching(/diagnostic body timed out/)
     });
-    await Promise.resolve();
+    await waitFor(() => callCount === 1);
     await jest.advanceTimersByTimeAsync(95_000);
 
     await rejection;
+    await fixture.cleanup();
     expect(callCount).toBe(1);
   });
 
@@ -3414,7 +3528,7 @@ describe('SnapProvider transport deadlines', () => {
       }
     });
 
-    await expect(provider.checkBaselineExists('clipped-backoff')).rejects.toThrow(/operation deadline/);
+    await expect(transportProbe(provider)).rejects.toThrow(/operation deadline/);
     expect(callCount).toBe(1);
     expect(delays).toEqual([500]);
   });
@@ -3425,7 +3539,7 @@ describe('SnapProvider transport deadlines', () => {
     const provider = new SnapProvider(validSnapConfig, {
       fetchFn: async () => {
         callCount += 1;
-        return callCount === 1 ? errorResponse(503, { error: 'service unavailable' }) : okResponse({ id: 'baseline_1' });
+        return callCount === 1 ? errorResponse(503, { error: 'service unavailable' }) : transportTerminalRun();
       },
       sleepFn: async (delay, signal) => {
         sleepSignals.push(signal);
@@ -3446,12 +3560,15 @@ describe('SnapProvider transport deadlines', () => {
       nowFn: () => Date.now()
     });
 
-    const pending = provider.checkBaselineExists('async-retry-wait');
-    await Promise.resolve();
-    await Promise.resolve();
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
+    await waitFor(() => sleepSignals.length === 1);
     await jest.advanceTimersByTimeAsync(1_000);
 
-    await expect(pending).resolves.toEqual({ id: 'baseline_1' });
+    // Retry-then-succeed: the poll GET recovers on attempt 2 and diff()
+    // completes against the terminal run response.
+    await expect(pending).resolves.toMatchObject({ summary: expect.any(Object) });
+    await fixture.cleanup();
     expect(callCount).toBe(2);
     expect(sleepSignals[0].aborted).toBe(false);
   });
@@ -3481,15 +3598,15 @@ describe('SnapProvider transport deadlines', () => {
       }
     );
 
-    const pending = provider.checkBaselineExists('stalled-retry-wait');
+    const fixture = await transportFixture();
+    const pending = provider.diff({ configPath: fixture.configPath, currentResultsPath: fixture.resultsPath });
     const rejection = expect(pending).rejects.toBeInstanceOf(SnapSkipError);
-    for (let tick = 0; tick < 10 && sleepSignals.length === 0; tick += 1) {
-      await Promise.resolve();
-    }
+    await waitFor(() => sleepSignals.length === 1);
     expect(sleepSignals).toHaveLength(1);
     await jest.advanceTimersByTimeAsync(1_001);
 
     await rejection;
+    await fixture.cleanup();
     expect(callCount).toBe(1);
     expect(sleepSignals[0].aborted).toBe(true);
     expect(jest.getTimerCount()).toBe(0);
@@ -3505,13 +3622,16 @@ describe('SnapProvider transport deadlines', () => {
       nowFn: () => Date.now()
     });
 
-    const first = provider.checkBaselineExists('concurrent-one');
-    const second = provider.checkBaselineExists('concurrent-two');
+    const firstFixture = await transportFixture();
+    const secondFixture = await transportFixture();
+    const first = provider.diff({ configPath: firstFixture.configPath, currentResultsPath: firstFixture.resultsPath });
+    const second = provider.diff({ configPath: secondFixture.configPath, currentResultsPath: secondFixture.resultsPath });
     const firstRejection = expect(first).rejects.toThrow(/timed out/);
     const secondRejection = expect(second).rejects.toThrow(/timed out/);
-    await Promise.resolve();
+    await waitFor(() => signals.length === 2);
     await jest.advanceTimersByTimeAsync(95_000);
     await Promise.all([firstRejection, secondRejection]);
+    await Promise.all([firstFixture.cleanup(), secondFixture.cleanup()]);
 
     expect(signals).toHaveLength(6);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
@@ -3529,19 +3649,19 @@ describe('SnapProvider onUnavailable modes', () => {
   it('fail mode (default) throws on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fail' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123')).rejects.toThrow(/Snap API 500/);
+    await expect(transportProbe(provider)).rejects.toThrow(/Snap API 500/);
   });
 
   it('fallback-local mode throws SnapFallbackError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'fallback-local' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123')).rejects.toBeInstanceOf(SnapFallbackError);
+    await expect(transportProbe(provider)).rejects.toBeInstanceOf(SnapFallbackError);
   });
 
   it('warn-and-skip mode throws SnapSkipError on exhausted retries', async () => {
     const mockFetch = async () => errorResponse(500, { error: 'internal server error' });
     const provider = new SnapProvider({ ...validSnapConfig, onUnavailable: 'warn-and-skip' }, { fetchFn: mockFetch, sleepFn: () => Promise.resolve() });
-    await expect(provider.checkBaselineExists('abc123')).rejects.toBeInstanceOf(SnapSkipError);
+    await expect(transportProbe(provider)).rejects.toBeInstanceOf(SnapSkipError);
   });
 });
 
@@ -3609,35 +3729,6 @@ describe('project ID resolution', () => {
 // ---------------------------------------------------------------------------
 // SnapProvider — migration methods
 // ---------------------------------------------------------------------------
-
-describe('SnapProvider.checkBaselineExists()', () => {
-  beforeEach(() => {
-    process.env.SNAP_TEST_API_KEY = 'test-api-key-1234';
-  });
-  afterEach(() => {
-    delete process.env.SNAP_TEST_API_KEY;
-  });
-
-  it('returns baseline data when found', async () => {
-    const mockFetch = async () => okResponse({ id: 'baseline-1', headSha: 'abc123' });
-    const provider = new SnapProvider(validSnapConfig, {
-      fetchFn: mockFetch,
-      sleepFn: () => Promise.resolve()
-    });
-    const result = await provider.checkBaselineExists('abc123');
-    expect(result).toEqual({ id: 'baseline-1', headSha: 'abc123' });
-  });
-
-  it('returns null on 404', async () => {
-    const mockFetch = async () => errorResponse(404, { error: 'not found' });
-    const provider = new SnapProvider(validSnapConfig, {
-      fetchFn: mockFetch,
-      sleepFn: () => Promise.resolve()
-    });
-    const result = await provider.checkBaselineExists('nonexistent');
-    expect(result).toBeNull();
-  });
-});
 
 describe('SnapProvider.migrateBaselineFromLocal() — removed in 0.7.0', () => {
   beforeEach(() => {

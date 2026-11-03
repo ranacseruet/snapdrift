@@ -257,8 +257,6 @@ export type {
   ProviderDiffResult,
   ProviderPublishBaselineOptions,
   ProviderPublishBaselineResult,
-  ProviderFetchBaselineOptions,
-  ProviderBaselineData,
   ProviderCommentMeta,
   VisualProvider,
   SnapConfig
