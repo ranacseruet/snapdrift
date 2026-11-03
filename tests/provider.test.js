@@ -35,12 +35,14 @@ describe('providerSupports', () => {
     expect(providerSupports('snap', capability)).toBe(true);
   });
 
-  it('distinguishes hosted baseline storage without constructing providers', () => {
-    expect(providerSupports('local', 'fetchLatestBaseline')).toBe(false);
-    expect(providerSupports('snap', 'fetchLatestBaseline')).toBe(true);
-    expect(PROVIDER_CAPABILITIES.local.fetchLatestBaseline).toBe(false);
+  it('freezes the capability map and reports no removed capabilities', () => {
     expect(Object.isFrozen(PROVIDER_CAPABILITIES)).toBe(true);
+    expect(Object.isFrozen(PROVIDER_CAPABILITIES.local)).toBe(true);
     expect(Object.isFrozen(PROVIDER_CAPABILITIES.snap)).toBe(true);
+    // `fetchLatestBaseline` was removed from the provider interface with the
+    // unused baseline-store API; the capability query must not resurrect it.
+    expect(providerSupports('snap', 'fetchLatestBaseline')).toBe(false);
+    expect(Object.hasOwn(PROVIDER_CAPABILITIES.snap, 'fetchLatestBaseline')).toBe(false);
   });
 
   it.each([
@@ -104,19 +106,12 @@ describe('LocalProvider', () => {
     expect(captured).not.toHaveProperty('artifacts');
   });
 
-  it('exposes capture, diff, publishBaseline, fetchLatestBaseline, buildCommentBody methods', () => {
+  it('exposes capture, diff, publishBaseline, buildCommentBody methods', () => {
     const provider = new LocalProvider();
     expect(typeof provider.capture).toBe('function');
     expect(typeof provider.diff).toBe('function');
     expect(typeof provider.publishBaseline).toBe('function');
-    expect(typeof provider.fetchLatestBaseline).toBe('function');
     expect(typeof provider.buildCommentBody).toBe('function');
-  });
-
-  it('fetchLatestBaseline throws not-implemented error', async () => {
-    const provider = new LocalProvider();
-    await expect(provider.fetchLatestBaseline({ githubToken: 'fake' }))
-      .rejects.toThrow(/not yet implemented/);
   });
 
   it('publishBaseline delegates to stageArtifacts', async () => {

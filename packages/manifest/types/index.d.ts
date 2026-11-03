@@ -402,22 +402,6 @@ export interface ProviderPublishBaselineResult {
   bundleDir: string;
 }
 
-export interface ProviderFetchBaselineOptions {
-  githubToken: string;
-  repository?: string;
-  workflowId?: string;
-  branch?: string;
-}
-
-export interface ProviderBaselineData {
-  resultsPath: string;
-  manifestPath: string;
-  runDir: string;
-  screenshotsDir: string;
-  artifactName: string;
-  headSha: string;
-}
-
 export interface ProviderCommentMeta {
   artifactName?: string;
   artifactUrl?: string;
@@ -431,7 +415,6 @@ export interface VisualProvider {
   capture(options: ProviderCaptureOptions): Promise<ProviderCaptureResult>;
   diff(options: ProviderDiffOptions): Promise<ProviderDiffResult>;
   publishBaseline(options: ProviderPublishBaselineOptions): Promise<ProviderPublishBaselineResult>;
-  fetchLatestBaseline(options: ProviderFetchBaselineOptions): Promise<ProviderBaselineData | null>;
   buildCommentBody(summary: VisualReportSummary, meta?: ProviderCommentMeta): string;
 }
 

@@ -20,6 +20,11 @@
 - CI (`publish.yml`): new `npm audit --omit=dev --audit-level=high` step runs before install, and the npm upgrade for trusted publishing is pinned to the exact `11.5.1` version.
 - CLI/lib: `openFile` reports a non-zero opener exit status (previously silent). `upsertPullRequestReportComment` sorts unparseable comment timestamps to the end deterministically instead of letting `NaN` pick an arbitrary comment to update. `init --from-snap-action` no longer overwrites an existing `MIGRATION_NOTES.md`.
 
+### Removals
+
+- **`SnapProvider.fetchLatestBaseline()` and `SnapProvider.checkBaselineExists()` are removed**, along with the `fetchLatestBaseline` member of the `VisualProvider` interface (both `@snapdrift/manifest` types and the root re-export), the `LocalProvider.fetchLatestBaseline` not-implemented stub, and the `fetchLatestBaseline` capability from `PROVIDER_CAPABILITIES`/`providerSupports`. None had a production caller: baseline resolution goes through the `actions/resolve-baseline` artifact download, and the by-SHA lookup belonged to migration workflows retired with `migrate-baselines`. `#resolveLatestBaselineId` (the internal `baselines/latest` GET used by `capture()`/`diff()`) is unchanged. The `snapdrift baseline` command and both wrapper actions are unaffected. Add-back is a small, isolated change if a hosted baseline-store consumer appears.
+- **`lib/resolve-baseline-paths.mjs` is removed**, including its `./lib/resolve-baseline-paths.mjs` exports-map entry and test. It was superseded by the path computation inside `actions/resolve-baseline` itself and had no importer.
+
 ## 0.18.0 - 2026-11-02
 
 Workspace releases this version:

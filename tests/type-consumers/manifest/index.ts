@@ -3,7 +3,7 @@ import type {
   VisualRegressionConfig, VisualBaselineResults, VisualScreenshotManifest,
   VisualDiffSummary, VisualDriftSkippedSummary, VisualProvider, SnapConfig,
   ProviderCaptureOptions, ProviderDiffOptions, ProviderPublishBaselineOptions,
-  ProviderFetchBaselineOptions, ProviderBaselineData, ProviderCommentMeta,
+  ProviderCommentMeta,
   ComparisonPolicy, ComparisonMetadata, CaptureProfile, LocalCaptureProfile, CaptureCompatibility
 } from '@snapdrift/manifest';
 
@@ -68,12 +68,10 @@ declare const summary: VisualDiffSummary;
 const captureOptions: ProviderCaptureOptions = { purpose: 'diff', routeIds: ['home'] };
 const diffOptions: ProviderDiffOptions = { routeIds: ['home'] };
 const publishOptions: ProviderPublishBaselineOptions = { resultsPath: 'results.json' };
-const fetchOptions: ProviderFetchBaselineOptions = { githubToken: 'fixture' };
 const meta: ProviderCommentMeta = { maxChangedRows: 5 };
 provider.capture(captureOptions).then(result => result.selectedRouteIds[0].toUpperCase());
 provider.diff(diffOptions).then(result => result.summary.threshold.toFixed());
 provider.publishBaseline(publishOptions).then(result => result.bundleDir.toUpperCase());
-provider.fetchLatestBaseline(fetchOptions).then((baseline: ProviderBaselineData | null) => baseline?.headSha.toUpperCase());
 provider.buildCommentBody(summary, meta).toUpperCase();
 provider.buildCommentBody(skipped).toUpperCase();
 // @ts-expect-error invalid viewport preset
