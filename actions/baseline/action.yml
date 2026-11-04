@@ -90,7 +90,17 @@ runs:
       if: (steps.config.outputs.provider != 'snap' && (steps.config.outputs.capture_engine != 'snap' || steps.config.outputs.is_local_base_url == 'true')) || steps.config.outputs.on_unavailable == 'fallback-local' || steps.config.outputs.snap_local_capture == 'true'
       shell: bash
       run: |
-        "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps --only-shell chromium
+        # --with-deps apt-installs the browser's OS libraries, which needs
+        # passwordless sudo (GitHub-hosted runners have it; hardened
+        # self-hosted runners do not). Without sudo, install the browser
+        # alone and rely on the OS libraries being provisioned already —
+        # if they are not, the capture below fails with the missing library
+        # named, which is the honest failure.
+        if sudo -n true 2>/dev/null; then
+          "$ACTION_ROOT/node_modules/.bin/playwright" install --with-deps --only-shell chromium
+        else
+          "$ACTION_ROOT/node_modules/.bin/playwright" install --only-shell chromium
+        fi
 
     - id: capture
       shell: bash
