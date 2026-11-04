@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.2 - 2026-11-04
+
+Releases this version:
+
+- `snapdrift` 0.18.2 — the `baseline` and `pr-diff` actions' "Install Playwright Chromium" step keeps `playwright install --with-deps` when passwordless sudo is available (GitHub-hosted runners: behavior byte-for-byte unchanged) and falls back to a sudo-less `playwright install --only-shell chromium` when it is not, relying on the browser's OS libraries being provisioned at runner setup time (#229). Found on a hardened self-hosted runner (a homefield VM, whose `runner` user deliberately has no broad sudo) the moment a repository routed its push events there: `--with-deps` failed with "sudo: a password is required" before the browser ever installed. No workspace packages change (`@snapdrift/compare-core` stays 1.8.1, `@snapdrift/manifest` 1.8.0, `@snapdrift/adapter-fs` 1.8.0, `@snapdrift/adapter-report-md` 1.4.0); the Marketplace dispatcher pin moves to `af7a618`, the #229 merge commit.
+
+### Fixed
+
+- `baseline`/`pr-diff`: the Playwright Chromium install no longer requires passwordless sudo. On GitHub-hosted runners nothing changes (`--with-deps` still apt-installs the OS libraries); on self-hosted runners without passwordless sudo the browser installs alone and the capture fails naming any still-missing library — the honest failure, instead of a sudo prompt (#229).
+
 ## 0.18.1 - 2026-11-03
 
 Workspace releases this version:
