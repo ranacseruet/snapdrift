@@ -27,11 +27,13 @@ SnapDrift reads runtime behavior from `.github/snapdrift.json` by default.
 | `viewport` | `string` or `object` | Preset name (`"desktop"`, `"mobile"`) or a custom object `{ "width": number, "height": number }` |
 | `changePaths` | `string[]` | Optional prefixes used for changed-file scoping |
 | `navigationTimeout` | `number` | Optional per-route navigation timeout in ms (overrides the 30 000 ms global default) |
+| `fullPage` | `boolean` | Optional per-route full-page capture flag (default: `true`). Set `false` for viewport-only capture. |
 
 ### Optional fields
 
 | Field | Type | Description |
 |:------|:-----|:------------|
+| `screenshot.fullPage` | `boolean` | Default full-page capture flag across all routes (default: `true`). Set `false` for viewport-only capture across the suite. (Alias: root `fullPage`) |
 | `capture` | `string` | Capture engine for `provider: "local"`: `"playwright"` (default) or `"snap"` (Snap Cloud batch screenshot API) |
 | `selection.sharedPrefixes` | `string[]` | Prefixes that force the full route set |
 | `selection.sharedExact` | `string[]` | Exact files that force the full route set |
@@ -193,7 +195,7 @@ and comparison policy v1. The profile records:
 | `browser`, `browserRevision`, `playwrightVersion` | `chromium`, the running browser's `browser.version()` string, and the installed Playwright version |
 | `platform` | `name`, `architecture`, `release`, `version` from Node's OS APIs. Compared strictly for `snapdrift-local` captures (rendering happens on the submitting machine); ignored for `snap-batch` captures, whose pixels are rendered cloud-side, so GitHub runner image refreshes do not invalidate stored baselines |
 | `locale`, `timezone` | `en-US`, `UTC` |
-| `settings.screenshot` | `fullPage: true`, `animations: "disabled"`, `caret: "hide"`, `scale: "device"`, `omitBackground: false`, `type: "png"` |
+| `settings.screenshot` | `fullPage` (`true` or `false`), `animations: "disabled"`, `caret: "hide"`, `scale: "device"`, `omitBackground: false`, `type: "png"` |
 | `settings.readiness` | `waitUntil: "load"`, `settleDelayMs: 300` |
 | `settings.context` | `isolation: "fresh-context-per-attempt"`, `colorScheme: "light"`, `reducedMotion: "no-preference"`, `forcedColors: "none"`, `javaScriptEnabled: true`, `serviceWorkers: "allow"` |
 | `settings.launch` | `headless: true`, `args: ["--disable-gpu"]` |

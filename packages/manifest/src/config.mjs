@@ -191,6 +191,10 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
       if (route.navigationTimeout !== undefined && (!Number.isInteger(route.navigationTimeout) || /** @type {number} */ (route.navigationTimeout) <= 0)) {
         errors.push(`${routeLabel}.navigationTimeout must be a positive integer when provided.`);
       }
+
+      if (route.fullPage !== undefined && typeof route.fullPage !== 'boolean') {
+        errors.push(`${routeLabel}.fullPage must be a boolean when provided.`);
+      }
     }
 
     try {
@@ -252,6 +256,20 @@ export function validateSnapdriftConfig(value, sourceLabel = 'inline config') {
         errors.push('selection.sharedExact must be an array of non-empty strings when provided.');
       }
     }
+  }
+
+  if (candidate.screenshot !== undefined) {
+    if (!isRecord(candidate.screenshot)) {
+      errors.push('screenshot must be an object when provided.');
+    } else {
+      if (candidate.screenshot.fullPage !== undefined && typeof candidate.screenshot.fullPage !== 'boolean') {
+        errors.push('screenshot.fullPage must be a boolean when provided.');
+      }
+    }
+  }
+
+  if (candidate.fullPage !== undefined && typeof candidate.fullPage !== 'boolean') {
+    errors.push('fullPage must be a boolean when provided.');
   }
 
   if (candidate.provider !== undefined) {

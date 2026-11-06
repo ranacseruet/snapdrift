@@ -11,7 +11,9 @@ const snap: SnapConfig = { projectId: 'test', onUnavailable: 'fail', apiKeyEnv: 
 const config: VisualRegressionConfig = {
   baselineArtifactName: 'baseline', workingDirectory: '.', baseUrl: 'https://example.com',
   resultsFile: 'results.json', manifestFile: 'manifest.json', screenshotsRoot: 'screenshots',
-  routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+  routes: [{ id: 'home', path: '/', viewport: 'desktop', fullPage: false }],
+  screenshot: { fullPage: true },
+  fullPage: false,
   diff: { threshold: 0.01, mode: 'strict', comparisonPolicy: { version: 1, threshold: 0.01 } }, provider: 'snap', snap
 };
 const policy: ComparisonPolicy = config.diff.comparisonPolicy!;

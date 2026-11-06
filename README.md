@@ -117,7 +117,7 @@ before pixels. Incompatible captures produce incomplete errors, not product drif
 ## Current constraints
 
 - Ubuntu runners only (local CLI works on any OS Node 22+ supports)
-- Full-page capture only
+- Full-page capture by default (viewport-only capture can be configured per route or globally via `fullPage: false`)
 - Viewport presets: `desktop` (1440×900) and `mobile` (390×844), or custom `{ "width": number, "height": number }`
 - Full-page comparisons are bounded to a 32 Mi-pixel union canvas; see the [screenshot size budget](docs/contracts.md#screenshot-size-budget) for viewport, device-scale, and remediation guidance
 - One global `diff.threshold`
