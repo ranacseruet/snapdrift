@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.0 - 2026-11-06
+
+Releases this version:
+
+- `@snapdrift/manifest` 1.9.0 — adds support for `fullPage?: boolean` configuration in routes, `screenshot.fullPage?: boolean`, and `fullPage?: boolean` root alias in `VisualRegressionConfig`. Validates `fullPage` boolean on manifest screenshot entries (#231, #232).
+- `@snapdrift/adapter-fs` 1.9.0 — supports configurable `fullPage` in Playwright local capture and Snap Cloud batch capture, allowing viewport-only screenshot capture (`fullPage: false`). Records effective `fullPage` per route in `manifest.screenshots` and `results.routes`, and keeps capture profile generation independent of route scoping. `drift-report.mjs` detects route-level `fullPage` capture mode discrepancies and flags `incompatible_capture` before pixel diffing (#231, #232).
+- `snapdrift` 0.19.0 — root floor for `@snapdrift/manifest` and `@snapdrift/adapter-fs` moves to `^1.9.0`. The Marketplace dispatcher pin moves to `6db96b7fa1543bb0ab48ec48468c5bce9795fd17`, the #232 merge commit.
+
+### Added
+
+- Support for viewport-only screenshot capture via `fullPage: false` at route level or globally in `snapdrift.config.js` (`fullPage` or `screenshot.fullPage`).
+- Route-level capture mode compatibility verification in drift report (`incompatible_capture` if capture mode differs between baseline, current, or configured route).
+
 ## 0.18.2 - 2026-11-04
 
 Releases this version:
