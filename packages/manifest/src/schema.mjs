@@ -141,6 +141,9 @@ export function validateManifest(value, sourceLabel = 'screenshot manifest') {
     if (typeof e.height !== 'number' || !Number.isFinite(e.height) || e.height <= 0) {
       throw new Error(`manifest.screenshots[${index}].height must be a positive number.`);
     }
+    if (e.fullPage !== undefined && typeof e.fullPage !== 'boolean') {
+      throw new Error(`manifest.screenshots[${index}].fullPage must be a boolean when present.`);
+    }
   }
 
   return /** @type {ScreenshotManifest} */ (/** @type {unknown} */ (candidate));

@@ -220,7 +220,8 @@ other than omitted, 1, or 2) throw before a comparison summary is generated;
   There is no version tolerance: adapter, Playwright, browser, or OS updates can
   require a baseline refresh. The reason identifies the first differing field.
 - For each selected configured route id present in both manifests, both entries
-  must have the exact configured `path` and the same normalized viewport as the
+  must have the exact configured `path`, effective `fullPage` capture mode matching each
+  other and the configured route, and the same normalized viewport as the
   config: width, height, device scale factor, mobile, and touch. Paths are not
   URL-normalized; `baseUrl` and timestamps are not compared. Custom viewports use
   scale 1, mobile false, touch false: 1440×900 equals `desktop`, but 390×844 does

@@ -35,8 +35,9 @@ api.sanitizeRouteId('home/page').toUpperCase();
 api.assertUniqueRouteIdFilenames(['home', 'about']);
 const manifest: VisualScreenshotManifest = api.validateManifest({
   generatedAt: new Date().toISOString(), baseUrl: 'https://example.com',
-  screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'home.png', width: 1, height: 1 }]
+  screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'home.png', width: 1, height: 1, fullPage: false }]
 });
+manifest.screenshots[0].fullPage?.valueOf();
 const legacyProfile: CaptureProfile = { engineVersion: 'v0' };
 declare const localProfile: LocalCaptureProfile;
 const genericProfile: CaptureProfile = localProfile;

@@ -414,6 +414,36 @@ describe('generateDriftReport', () => {
     expect(summary.changedScreenshots).toBe(0);
   });
 
+  it.each(['baseline', 'current'])('checks %s route effective fullPage against configured route fullPage before comparing PNGs', async (side) => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop', fullPage: false }],
+      baselineEntries: [{ ...entry, fullPage: side === 'baseline' ? true : false }],
+      currentEntries: [{ ...entry, fullPage: side === 'current' ? true : false }]
+    });
+    const { summary } = await generateDriftReport(opts);
+    expect(summary.errors).toEqual([expect.objectContaining({
+      code: 'incompatible_capture',
+      message: expect.stringMatching(/route screenshot capture mode.*Refresh the baseline/)
+    })]);
+    expect(summary.changedScreenshots).toBe(0);
+  });
+
+  it('flags incompatible_capture when baseline and current entry fullPage settings differ', async () => {
+    const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+      baselineEntries: [{ ...entry, fullPage: true }],
+      currentEntries: [{ ...entry, fullPage: false }]
+    });
+    const { summary } = await generateDriftReport(opts);
+    expect(summary.errors).toEqual([expect.objectContaining({
+      code: 'incompatible_capture',
+      message: expect.stringContaining('route screenshot capture mode differs: baseline is fullPage: true but current is fullPage: false')
+    })]);
+    expect(summary.changedScreenshots).toBe(0);
+  });
+
   it.each(['settings', 'browser', 'foreign'])('bypasses missing PNGs for incompatible %s profiles', async (change) => {
     const entry = makeManifestEntry('home', 'desktop', 'absent.png', 10, 10);
     const opts = await setupFixtures(tempDir, {

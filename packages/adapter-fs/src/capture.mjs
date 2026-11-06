@@ -189,13 +189,15 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot, defaultFul
       imagePath,
       width,
       height,
+      fullPage,
       manifestEntry: {
         id: route.id,
         path: route.path,
         viewport: route.viewport,
         imagePath,
         width,
-        height
+        height,
+        fullPage
       }
     };
   } catch (error) {
@@ -361,7 +363,7 @@ export async function runBaselineCapture(options = {}) {
       throw error;
     }
 
-    const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? (routes.length > 0 && routes.every((r) => r.fullPage === false) ? false : true);
+    const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? true;
 
     manifest.captureProfile = validateCaptureProfile({
       schemaVersion: CAPTURE_PROFILE_SCHEMA_VERSION,
@@ -425,6 +427,7 @@ export async function runBaselineCapture(options = {}) {
         imagePath: capture.imagePath,
         width: capture.width,
         height: capture.height,
+        fullPage: capture.fullPage,
         error: capture.error
       });
       if (capture.manifestEntry) {

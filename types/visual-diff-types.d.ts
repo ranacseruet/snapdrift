@@ -122,6 +122,7 @@ export interface VisualBaselineRouteResult {
   width?: number;
   height?: number;
   error?: string;
+  fullPage?: boolean;
 }
 
 export interface VisualScreenshotManifestEntry {
@@ -131,6 +132,7 @@ export interface VisualScreenshotManifestEntry {
   imagePath: string;
   width: number;
   height: number;
+  fullPage?: boolean;
 }
 
 export interface VisualScreenshotManifest {

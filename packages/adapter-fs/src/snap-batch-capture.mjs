@@ -145,7 +145,7 @@ export async function runSnapBatchCapture(options) {
     throw new Error('global fetch is not available; provide a fetchFn option.');
   }
 
-  const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? (routes.length > 0 && routes.every((r) => r.fullPage === false) ? false : true);
+  const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? true;
 
   // 1. Build batch items
   // Note: Snap Cloud batch screenshot API contract guarantees items are returned in the exact order submitted.
@@ -318,13 +318,16 @@ export async function runSnapBatchCapture(options) {
 
       await fs.writeFile(absoluteImagePath, buffer);
 
+      const effectiveFullPage = route.fullPage ?? defaultFullPage;
+
       manifestScreenshots[index] = {
         id: route.id,
         path: route.path,
         viewport: route.viewport,
         imagePath: relativeImagePath,
         width: dimensions.width,
-        height: dimensions.height
+        height: dimensions.height,
+        fullPage: effectiveFullPage
       };
 
       resultRoutes[index] = {
@@ -335,7 +338,8 @@ export async function runSnapBatchCapture(options) {
         durationMs: item.durationMs || 0,
         imagePath: relativeImagePath,
         width: dimensions.width,
-        height: dimensions.height
+        height: dimensions.height,
+        fullPage: effectiveFullPage
       };
     }))
   );
