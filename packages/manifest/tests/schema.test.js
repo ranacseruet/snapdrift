@@ -15,6 +15,29 @@ describe('@snapdrift/manifest — validateManifest', () => {
     expect(result.screenshots).toHaveLength(2);
   });
 
+  test('accepts screenshot entry with boolean fullPage', () => {
+    const withFullPage = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], fullPage: false },
+        { ...VALID_MANIFEST.screenshots[1], fullPage: true }
+      ]
+    };
+    const result = validateManifest(withFullPage);
+    expect(result.screenshots[0].fullPage).toBe(false);
+    expect(result.screenshots[1].fullPage).toBe(true);
+  });
+
+  test('rejects screenshot entry with non-boolean fullPage', () => {
+    const withBadFullPage = {
+      ...VALID_MANIFEST,
+      screenshots: [
+        { ...VALID_MANIFEST.screenshots[0], fullPage: 'false' }
+      ]
+    };
+    expect(() => validateManifest(withBadFullPage)).toThrow('manifest.screenshots[0].fullPage must be a boolean when present.');
+  });
+
   test('accepts manifest with schemaVersion', () => {
     const withVersion = { ...VALID_MANIFEST, schemaVersion: 1 };
     const result = validateManifest(withVersion);

@@ -11,7 +11,9 @@ const snap: SnapConfig = { projectId: 'test', onUnavailable: 'fail', apiKeyEnv: 
 const config: VisualRegressionConfig = {
   baselineArtifactName: 'baseline', workingDirectory: '.', baseUrl: 'https://example.com',
   resultsFile: 'results.json', manifestFile: 'manifest.json', screenshotsRoot: 'screenshots',
-  routes: [{ id: 'home', path: '/', viewport: 'desktop' }],
+  routes: [{ id: 'home', path: '/', viewport: 'desktop', fullPage: false }],
+  screenshot: { fullPage: true },
+  fullPage: false,
   diff: { threshold: 0.01, mode: 'strict', comparisonPolicy: { version: 1, threshold: 0.01 } }, provider: 'snap', snap
 };
 const policy: ComparisonPolicy = config.diff.comparisonPolicy!;
@@ -33,8 +35,9 @@ api.sanitizeRouteId('home/page').toUpperCase();
 api.assertUniqueRouteIdFilenames(['home', 'about']);
 const manifest: VisualScreenshotManifest = api.validateManifest({
   generatedAt: new Date().toISOString(), baseUrl: 'https://example.com',
-  screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'home.png', width: 1, height: 1 }]
+  screenshots: [{ id: 'home', path: '/', viewport: 'desktop', imagePath: 'home.png', width: 1, height: 1, fullPage: false }]
 });
+manifest.screenshots[0].fullPage?.valueOf();
 const legacyProfile: CaptureProfile = { engineVersion: 'v0' };
 declare const localProfile: LocalCaptureProfile;
 const genericProfile: CaptureProfile = localProfile;

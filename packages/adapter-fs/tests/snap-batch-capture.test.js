@@ -217,7 +217,8 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
       viewport: 'desktop',
       imagePath: 'screenshots/home.png',
       width: 10,
-      height: 10
+      height: 10,
+      fullPage: true
     });
     expect(manifest.screenshots[1]).toEqual({
       id: 'mobile-pricing',
@@ -225,7 +226,8 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
       viewport: 'mobile',
       imagePath: 'screenshots/mobile-pricing.png',
       width: 10,
-      height: 10
+      height: 10,
+      fullPage: true
     });
 
     // Verify results.json
@@ -742,6 +744,138 @@ describe('@snapdrift/adapter-fs — runSnapBatchCapture', () => {
     const result = await runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10 });
     expect(pollAttempts).toBe(2);
     expect(result.selectedRouteIds).toEqual(['home']);
+  });
+
+  test('forwards root and per-route fullPage flags in batch screenshot request payload', async () => {
+    process.env.SNAP_API_KEY = 'snap-test-token';
+    const configPath = path.join(tempDir, 'snapdrift-fullpage.json');
+    const config = {
+      baselineArtifactName: 'snapdrift-baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'qa-artifacts/snapdrift/current/results.json',
+      manifestFile: 'qa-artifacts/snapdrift/current/manifest.json',
+      screenshotsRoot: 'qa-artifacts/snapdrift/current',
+      screenshot: { fullPage: false },
+      routes: [
+        { id: 'inherited-viewport', path: '/home', viewport: 'desktop' },
+        { id: 'explicit-full', path: '/pricing', viewport: 'desktop', fullPage: true },
+        { id: 'explicit-viewport', path: '/tool', viewport: 'mobile', fullPage: false }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let submittedPayload = null;
+
+    const mockFetch = async (url, options = {}) => {
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        submittedPayload = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_fullpage', status: 'queued' })
+        };
+      }
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots/batch_fullpage')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: [
+              { status: 'succeeded', imageUrl: 'https://cdn.example.com/item1.png' },
+              { status: 'succeeded', imageUrl: 'https://cdn.example.com/item2.png' },
+              { status: 'succeeded', imageUrl: 'https://cdn.example.com/item3.png' }
+            ]
+          })
+        };
+      }
+      if (typeof url === 'string' && url.startsWith('https://cdn.example.com/item')) {
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({ configPath, fetchFn: mockFetch, pollIntervalMs: 10 });
+    expect(submittedPayload).not.toBeNull();
+    expect(submittedPayload.fullPage).toBe(false);
+    expect(submittedPayload.items).toHaveLength(3);
+    // Inherited route has no explicit fullPage on item (inherits false from batch top-level)
+    expect(submittedPayload.items[0].fullPage).toBeUndefined();
+    // Explicit routes forward their fullPage value
+    expect(submittedPayload.items[1].fullPage).toBe(true);
+    expect(submittedPayload.items[2].fullPage).toBe(false);
+
+    const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
+    expect(manifest.captureProfile.settings.screenshot.fullPage).toBe(false);
+    expect(manifest.screenshots[0].fullPage).toBe(false);
+    expect(manifest.screenshots[1].fullPage).toBe(true);
+    expect(manifest.screenshots[2].fullPage).toBe(false);
+  });
+
+  test('keeps capture profile fullPage independent of route scoping in Snap Cloud batch capture', async () => {
+    process.env.SNAP_API_KEY = 'snap-test-token';
+    const config = {
+      baselineArtifactName: 'snapdrift-baseline',
+      workingDirectory: tempDir,
+      baseUrl: 'https://preview.example.com',
+      resultsFile: 'qa-artifacts/snapdrift/current/results.json',
+      manifestFile: 'qa-artifacts/snapdrift/current/manifest.json',
+      screenshotsRoot: 'qa-artifacts/snapdrift/current',
+      routes: [
+        { id: 'default-full', path: '/home', viewport: 'desktop' },
+        { id: 'explicit-viewport', path: '/tool', viewport: 'mobile', fullPage: false }
+      ],
+      diff: { threshold: 0.01, mode: 'report-only' }
+    };
+    await fs.writeFile(configPath, JSON.stringify(config));
+
+    let submittedPayload = null;
+
+    const mockFetch = async (url, options = {}) => {
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots') && options.method === 'POST') {
+        submittedPayload = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ batchId: 'batch_scope_test', status: 'queued' })
+        };
+      }
+      if (typeof url === 'string' && url.endsWith('/v1/screenshots/batch_scope_test')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            items: [
+              { status: 'succeeded', imageUrl: 'https://cdn.example.com/item1.png' }
+            ]
+          })
+        };
+      }
+      if (typeof url === 'string' && url.startsWith('https://cdn.example.com/item')) {
+        return { ok: true, status: 200, arrayBuffer: async () => DEFAULT_TEST_PNG };
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    const result = await runSnapBatchCapture({
+      configPath,
+      routeIds: ['explicit-viewport'],
+      fetchFn: mockFetch,
+      pollIntervalMs: 10
+    });
+
+    expect(submittedPayload.fullPage).toBe(true);
+    expect(submittedPayload.items).toHaveLength(1);
+    expect(submittedPayload.items[0].fullPage).toBe(false);
+
+    const manifest = JSON.parse(await fs.readFile(result.manifestPath, 'utf8'));
+    expect(manifest.captureProfile.settings.screenshot.fullPage).toBe(true);
+    expect(manifest.screenshots).toHaveLength(1);
+    expect(manifest.screenshots[0].id).toBe('explicit-viewport');
+    expect(manifest.screenshots[0].fullPage).toBe(false);
   });
 });
 

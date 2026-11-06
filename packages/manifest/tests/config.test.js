@@ -181,6 +181,67 @@ describe('@snapdrift/manifest — validateSnapdriftConfig', () => {
     };
     expect(() => validateSnapdriftConfig(copy)).toThrow('must match diff.threshold');
   });
+
+  test('accepts boolean fullPage on routes', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      routes: [
+        { id: 'home', path: '/', viewport: 'desktop', fullPage: false },
+        { id: 'about', path: '/about', viewport: 'mobile', fullPage: true }
+      ]
+    };
+    const validated = validateSnapdriftConfig(copy);
+    expect(validated.routes[0].fullPage).toBe(false);
+    expect(validated.routes[1].fullPage).toBe(true);
+  });
+
+  test('rejects non-boolean fullPage on routes', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      routes: [{ id: 'home', path: '/', viewport: 'desktop', fullPage: 'false' }]
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('routes[0].fullPage must be a boolean');
+  });
+
+  test('accepts valid screenshot.fullPage configuration at root', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      screenshot: { fullPage: false }
+    };
+    expect(validateSnapdriftConfig(copy).screenshot).toEqual({ fullPage: false });
+  });
+
+  test('accepts root fullPage alias', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      fullPage: false
+    };
+    expect(validateSnapdriftConfig(copy).fullPage).toBe(false);
+  });
+
+  test('rejects non-object screenshot configuration', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      screenshot: 'invalid'
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('screenshot must be an object');
+  });
+
+  test('rejects non-boolean screenshot.fullPage', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      screenshot: { fullPage: 'false' }
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('screenshot.fullPage must be a boolean');
+  });
+
+  test('rejects non-boolean root fullPage', () => {
+    const copy = {
+      ...VALID_CONFIG,
+      fullPage: 0
+    };
+    expect(() => validateSnapdriftConfig(copy)).toThrow('fullPage must be a boolean');
+  });
 });
 
 describe('@snapdrift/manifest — selectConfiguredRoutes', () => {

@@ -31,6 +31,17 @@ import { makeMarkdown, formatDriftFailureMessage } from '@snapdrift/adapter-repo
 /** @typedef {import('../../manifest/types/index').VisualScreenshotManifestEntry} ScreenshotManifestEntry */
 
 /**
+ * @param {import('@snapdrift/manifest').ManifestCaptureProfile | undefined} profile
+ * @returns {boolean | undefined}
+ */
+function resolveProfileFullPage(profile) {
+  if (profile && 'settings' in profile && profile.settings && typeof profile.settings === 'object') {
+    return /** @type {import('@snapdrift/manifest').LocalCaptureProfile} */ (profile).settings.screenshot?.fullPage;
+  }
+  return undefined;
+}
+
+/**
  * @param {{
  *   configPath?: string,
  *   baselineResultsPath?: string,
@@ -182,6 +193,21 @@ export async function generateDriftReport(options = {}) {
       if (normalizedViewportIdentity(entry.viewport) !== normalizedViewportIdentity(routeConfig.viewport)) {
         incompatibility = `${location} normalized viewport differs from configured viewport`;
         break;
+      }
+    }
+    if (!incompatibility) {
+      const configuredFullPage = routeConfig.fullPage ?? config.screenshot?.fullPage ?? config.fullPage ?? true;
+      const baselineProfileFullPage = resolveProfileFullPage(validatedBaselineManifest.captureProfile);
+      const currentProfileFullPage = resolveProfileFullPage(validatedCurrentManifest.captureProfile);
+      const baselineEffectiveFullPage = baselineEntry.fullPage ?? baselineProfileFullPage ?? true;
+      const currentEffectiveFullPage = currentEntry.fullPage ?? currentProfileFullPage ?? true;
+
+      if (baselineEffectiveFullPage !== currentEffectiveFullPage) {
+        incompatibility = `route screenshot capture mode differs: baseline is fullPage: ${baselineEffectiveFullPage} but current is fullPage: ${currentEffectiveFullPage}`;
+      } else if (baselineEffectiveFullPage !== configuredFullPage) {
+        incompatibility = `baseline route screenshot capture mode (fullPage: ${baselineEffectiveFullPage}) differs from configured capture mode (fullPage: ${configuredFullPage})`;
+      } else if (currentEffectiveFullPage !== configuredFullPage) {
+        incompatibility = `current route screenshot capture mode (fullPage: ${currentEffectiveFullPage}) differs from configured capture mode (fullPage: ${configuredFullPage})`;
       }
     }
     if (incompatibility) {

@@ -83,6 +83,11 @@ export interface VisualRegressionRouteConfig {
   viewport: VisualViewport;
   changePaths?: string[];
   navigationTimeout?: number;
+  fullPage?: boolean;
+}
+
+export interface VisualRegressionScreenshotConfig {
+  fullPage?: boolean;
 }
 
 export interface VisualRegressionConfig {
@@ -100,6 +105,8 @@ export interface VisualRegressionConfig {
     comparisonPolicy?: ComparisonPolicy;
   };
   selection?: VisualRegressionSelectionConfig;
+  screenshot?: VisualRegressionScreenshotConfig;
+  fullPage?: boolean;
   provider?: 'local' | 'snap';
   capture?: 'playwright' | 'snap';
   snap?: SnapConfig;
@@ -115,6 +122,7 @@ export interface VisualBaselineRouteResult {
   width?: number;
   height?: number;
   error?: string;
+  fullPage?: boolean;
 }
 
 export interface VisualScreenshotManifestEntry {
@@ -124,6 +132,7 @@ export interface VisualScreenshotManifestEntry {
   imagePath: string;
   width: number;
   height: number;
+  fullPage?: boolean;
 }
 
 export interface VisualScreenshotManifest {

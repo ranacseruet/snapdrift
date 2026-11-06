@@ -145,6 +145,8 @@ export async function runSnapBatchCapture(options) {
     throw new Error('global fetch is not available; provide a fetchFn option.');
   }
 
+  const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? true;
+
   // 1. Build batch items
   // Note: Snap Cloud batch screenshot API contract guarantees items are returned in the exact order submitted.
   const items = routes.map((route) => {
@@ -161,13 +163,16 @@ export async function runSnapBatchCapture(options) {
       width = route.viewport.width;
       height = route.viewport.height;
     }
-    /** @type {{ url: string, viewport: { width: number, height: number }, navTimeoutMs?: number }} */
+    /** @type {{ url: string, viewport: { width: number, height: number }, navTimeoutMs?: number, fullPage?: boolean }} */
     const item = {
       url: targetUrl,
       viewport: { width, height }
     };
     if (typeof route.navigationTimeout === 'number' && route.navigationTimeout > 0) {
       item.navTimeoutMs = route.navigationTimeout;
+    }
+    if (typeof route.fullPage === 'boolean') {
+      item.fullPage = route.fullPage;
     }
     return item;
   });
@@ -183,7 +188,7 @@ export async function runSnapBatchCapture(options) {
       },
       body: JSON.stringify({
         format: 'png',
-        fullPage: true,
+        fullPage: defaultFullPage,
         items
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -313,13 +318,16 @@ export async function runSnapBatchCapture(options) {
 
       await fs.writeFile(absoluteImagePath, buffer);
 
+      const effectiveFullPage = route.fullPage ?? defaultFullPage;
+
       manifestScreenshots[index] = {
         id: route.id,
         path: route.path,
         viewport: route.viewport,
         imagePath: relativeImagePath,
         width: dimensions.width,
-        height: dimensions.height
+        height: dimensions.height,
+        fullPage: effectiveFullPage
       };
 
       resultRoutes[index] = {
@@ -330,7 +338,8 @@ export async function runSnapBatchCapture(options) {
         durationMs: item.durationMs || 0,
         imagePath: relativeImagePath,
         width: dimensions.width,
-        height: dimensions.height
+        height: dimensions.height,
+        fullPage: effectiveFullPage
       };
     }))
   );
@@ -352,7 +361,7 @@ export async function runSnapBatchCapture(options) {
       locale: 'en-US',
       timezone: 'UTC',
       settings: {
-        screenshot: { fullPage: true, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
+        screenshot: { fullPage: defaultFullPage, animations: 'disabled', caret: 'hide', scale: 'device', omitBackground: false, type: 'png' },
         readiness: { waitUntil: 'load', settleDelayMs: 300 },
         context: { isolation: 'cloud-batch', colorScheme: 'light', reducedMotion: 'no-preference', forcedColors: 'none', javaScriptEnabled: true, serviceWorkers: 'allow' },
         launch: { headless: true, args: [] }

@@ -681,4 +681,100 @@ describe('runBaselineCapture', () => {
         expectContextsClosed(contexts, browser);
         expect(browser.close).toHaveBeenCalledTimes(1);
     });
+
+    it('respects route-level fullPage: false for viewport-only capture', async () => {
+        const routes = [
+            { id: 'full-page-route', path: '/full', viewport: 'desktop', fullPage: true },
+            { id: 'viewport-only-route', path: '/viewport', viewport: 'desktop', fullPage: false }
+        ];
+        const configPath = await writeConfig(tempDir, routes);
+        const screenshotCalls = [];
+        const desktopPage = createPage({
+            screenshot: jest.fn(async (options) => {
+                screenshotCalls.push(options);
+                const pngBuffer = createPngBuffer(10, 10);
+                await fs.mkdir(path.dirname(options.path), { recursive: true });
+                await fs.writeFile(options.path, pngBuffer);
+                return pngBuffer;
+            })
+        });
+        const { browser, contexts } = createHarness({ desktopPage });
+
+        await runBaselineCapture({ configPath });
+
+        expect(desktopPage.screenshot).toHaveBeenCalledTimes(2);
+        const fullCall = screenshotCalls.find((c) => c.path.includes('full-page-route'));
+        const viewportCall = screenshotCalls.find((c) => c.path.includes('viewport-only-route'));
+        expect(fullCall.fullPage).toBe(true);
+        expect(viewportCall.fullPage).toBe(false);
+
+        const manifestPath = path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'manifest.json');
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+        expect(manifest.captureProfile.settings.screenshot.fullPage).toBe(true);
+        expect(manifest.screenshots.find((s) => s.id === 'full-page-route').fullPage).toBe(true);
+        expect(manifest.screenshots.find((s) => s.id === 'viewport-only-route').fullPage).toBe(false);
+        expectContextsClosed(contexts, browser);
+    });
+
+    it('keeps capture profile fullPage independent of route scoping when only viewport-only route is selected', async () => {
+        const routes = [
+            { id: 'full-page-route', path: '/full', viewport: 'desktop', fullPage: true },
+            { id: 'viewport-only-route', path: '/viewport', viewport: 'desktop', fullPage: false }
+        ];
+        const configPath = await writeConfig(tempDir, routes);
+        const desktopPage = createPage({
+            screenshot: jest.fn(async (options) => {
+                const pngBuffer = createPngBuffer(10, 10);
+                await fs.mkdir(path.dirname(options.path), { recursive: true });
+                await fs.writeFile(options.path, pngBuffer);
+                return pngBuffer;
+            })
+        });
+        const { browser, contexts } = createHarness({ desktopPage });
+
+        await runBaselineCapture({ configPath, routeIds: ['viewport-only-route'] });
+
+        const manifestPath = path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'manifest.json');
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+
+        expect(manifest.captureProfile.settings.screenshot.fullPage).toBe(true);
+        expect(manifest.screenshots).toHaveLength(1);
+        expect(manifest.screenshots[0].id).toBe('viewport-only-route');
+        expect(manifest.screenshots[0].fullPage).toBe(false);
+        expectContextsClosed(contexts, browser);
+    });
+
+    it('respects root-level screenshot.fullPage: false and records it in capture profile', async () => {
+        const configObj = makeConfig(tempDir, [
+            { id: 'inherited-viewport', path: '/inherited', viewport: 'desktop' },
+            { id: 'explicit-full', path: '/explicit', viewport: 'desktop', fullPage: true }
+        ]);
+        configObj.screenshot = { fullPage: false };
+        const configPath = path.join(tempDir, 'snapdrift.json');
+        await fs.writeFile(configPath, JSON.stringify(configObj, null, 2));
+
+        const screenshotCalls = [];
+        const desktopPage = createPage({
+            screenshot: jest.fn(async (options) => {
+                screenshotCalls.push(options);
+                const pngBuffer = createPngBuffer(10, 10);
+                await fs.mkdir(path.dirname(options.path), { recursive: true });
+                await fs.writeFile(options.path, pngBuffer);
+                return pngBuffer;
+            })
+        });
+        const { browser, contexts } = createHarness({ desktopPage });
+
+        await runBaselineCapture({ configPath });
+
+        const manifestPath = path.join(tempDir, 'qa-artifacts', 'snapdrift', 'baseline', 'current', 'manifest.json');
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+
+        expect(manifest.captureProfile.settings.screenshot.fullPage).toBe(false);
+        const inheritedCall = screenshotCalls.find((c) => c.path.includes('inherited-viewport'));
+        const explicitCall = screenshotCalls.find((c) => c.path.includes('explicit-full'));
+        expect(inheritedCall.fullPage).toBe(false);
+        expect(explicitCall.fullPage).toBe(true);
+        expectContextsClosed(contexts, browser);
+    });
 });

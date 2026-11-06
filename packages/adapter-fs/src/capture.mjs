@@ -149,9 +149,10 @@ function viewportContextOptions(viewport) {
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
+ * @param {boolean} [defaultFullPage]
  * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
-async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
+async function captureRoute(browser, route, baseUrl, screenshotsRoot, defaultFullPage = true) {
   const startedAt = Date.now();
   let context;
 
@@ -171,9 +172,11 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
     const imagePath = path.join('screenshots', `${sanitizeRouteId(route.id)}.png`);
     const absoluteImagePath = path.join(screenshotsRoot, imagePath);
     await ensureParentDirectory(absoluteImagePath);
+    const fullPage = route.fullPage ?? defaultFullPage;
     const screenshotBuffer = await page.screenshot({
       path: absoluteImagePath,
-      ...screenshotSettings
+      ...screenshotSettings,
+      fullPage
     });
     const { width, height } = requirePngDimensions(screenshotBuffer);
 
@@ -186,13 +189,15 @@ async function captureRoute(browser, route, baseUrl, screenshotsRoot) {
       imagePath,
       width,
       height,
+      fullPage,
       manifestEntry: {
         id: route.id,
         path: route.path,
         viewport: route.viewport,
         imagePath,
         width,
-        height
+        height,
+        fullPage
       }
     };
   } catch (error) {
@@ -219,10 +224,11 @@ const CAPTURE_MAX_RETRIES = 1;
  * @param {SnapdriftRouteConfig} route
  * @param {string} baseUrl
  * @param {string} screenshotsRoot
+ * @param {boolean} [defaultFullPage]
  * @returns {Promise<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>}
  */
-async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
-  let result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
+async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot, defaultFullPage = true) {
+  let result = await captureRoute(browser, route, baseUrl, screenshotsRoot, defaultFullPage);
   for (let attempt = 1; attempt <= CAPTURE_MAX_RETRIES && result.status !== 'passed'; attempt++) {
     if (result.deterministic) {
       // Same inputs will return the same HTTP error; retrying only doubles
@@ -230,7 +236,7 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
       break;
     }
     console.log(`[SnapDrift] Retrying route ${route.id} (attempt ${attempt + 1}/${CAPTURE_MAX_RETRIES + 1})...`);
-    result = await captureRoute(browser, route, baseUrl, screenshotsRoot);
+    result = await captureRoute(browser, route, baseUrl, screenshotsRoot, defaultFullPage);
   }
   return result;
 }
@@ -251,9 +257,10 @@ async function captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot) {
  * @param {string} screenshotsRoot
  * @param {number} totalRoutes
  * @param {Array<BaselineRouteResult & { manifestEntry?: ScreenshotManifest['screenshots'][number], deterministic?: boolean }>} out
+ * @param {boolean} [defaultFullPage]
  * @returns {Promise<void>}
  */
-async function captureViewportRoutes(browser, limit, entries, baseUrl, screenshotsRoot, totalRoutes, out) {
+async function captureViewportRoutes(browser, limit, entries, baseUrl, screenshotsRoot, totalRoutes, out, defaultFullPage = true) {
   await Promise.all(entries.map(({ route, originalIndex }) =>
     limit(async () => {
       // Log the fully resolved target URL, not just the route id. When a run
@@ -267,7 +274,7 @@ async function captureViewportRoutes(browser, limit, entries, baseUrl, screensho
         targetUrl = new URL(route.path, baseUrl).toString();
       } catch { /* keep the raw path for the log line */ }
       console.log(`[SnapDrift] Capturing route ${originalIndex + 1}/${totalRoutes}: ${route.id} (${viewportLabel(route.viewport)}) -> ${targetUrl}`);
-      out[originalIndex] = await captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot);
+      out[originalIndex] = await captureRouteWithRetry(browser, route, baseUrl, screenshotsRoot, defaultFullPage);
     })
   ));
 }
@@ -356,6 +363,8 @@ export async function runBaselineCapture(options = {}) {
       throw error;
     }
 
+    const defaultFullPage = config.screenshot?.fullPage ?? config.fullPage ?? true;
+
     manifest.captureProfile = validateCaptureProfile({
       schemaVersion: CAPTURE_PROFILE_SCHEMA_VERSION,
       engineVersion,
@@ -367,7 +376,7 @@ export async function runBaselineCapture(options = {}) {
       locale: contextSettings.locale,
       timezone: contextSettings.timezoneId,
       settings: {
-        screenshot: { ...screenshotSettings },
+        screenshot: { ...screenshotSettings, fullPage: defaultFullPage },
         readiness: { waitUntil: 'load', settleDelayMs: SNAPDRIFT_SETTLE_DELAY_MS },
         context: {
           isolation: 'fresh-context-per-attempt',
@@ -404,7 +413,7 @@ export async function runBaselineCapture(options = {}) {
     const limit = createConcurrencyLimiter(SNAPDRIFT_CAPTURE_CONCURRENCY);
 
     await Promise.all([...byViewport.values()].map((entries) =>
-      captureViewportRoutes(browser, limit, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults)
+      captureViewportRoutes(browser, limit, entries, config.baseUrl, screenshotsRoot, routes.length, captureResults, defaultFullPage)
     ));
 
     // Merge results in original route order.
@@ -418,6 +427,7 @@ export async function runBaselineCapture(options = {}) {
         imagePath: capture.imagePath,
         width: capture.width,
         height: capture.height,
+        fullPage: capture.fullPage,
         error: capture.error
       });
       if (capture.manifestEntry) {
