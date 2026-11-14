@@ -2707,9 +2707,73 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
     await fs.writeFile(resultsPath, JSON.stringify(twoRouteBaselineRunMetadata()));
 
     try {
-      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(/complete baseline publication requires "new"/);
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(/complete baseline publication requires one of "new" or "pass"/);
       expect(pollCount).toBe(31);
       expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the baseline-publish operation and remedy when Snap returns a malformed run response', async () => {
+    const mockFetch = async (url) => {
+      if (url.includes('/visual/runs/')) return okResponse('not-a-run-object');
+      return okResponse({});
+    };
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-malformed-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(baselineRunMetadata()));
+
+    try {
+      // The diff() path uses hostedDiffError for the same shape; publish must
+      // name its own operation ("complete Snap baseline") so the remedy
+      // (recapture) is discoverable, not a bare "malformed run response".
+      await expect(provider.publishBaseline({ resultsPath })).rejects.toThrow(
+        /Cannot publish a complete Snap baseline: Snap returned a malformed run response/
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes a baseline from a run that settles to terminal "pass" (intentional comparison)', async () => {
+    const requests = [];
+    const mockFetch = async (url, opts) => {
+      requests.push({ url, method: opts?.method });
+      if (url.includes('/visual/runs/')) {
+        return okResponse({
+          id: 'run_pub',
+          status: 'pass',
+          captures: [
+            {
+              routeId: 'home',
+              routePath: '/',
+              status: 'new',
+              currentObjectKey: 'k/home/current.png',
+              viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
+            }
+          ]
+        });
+      }
+      return okResponse({ id: 'bsl_new_1' });
+    };
+    const provider = new SnapProvider(validSnapConfig, {
+      fetchFn: mockFetch,
+      sleepFn: () => Promise.resolve()
+    });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapdrift-snap-pub-pass-'));
+    const resultsPath = path.join(dir, 'results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(baselineRunMetadata()));
+
+    try {
+      // A pass-status run carried an intentional comparison and its captures
+      // all settled — the data is valid ground truth, so publication succeeds.
+      await expect(provider.publishBaseline({ resultsPath })).resolves.toBeDefined();
+      expect(requests.some((request) => request.method === 'POST' && /\/baselines$/.test(request.url))).toBe(true);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -2728,7 +2792,7 @@ describe('SnapProvider.publishBaseline() run-poll path', () => {
           viewportDescriptorJson: DESKTOP_DESCRIPTOR_JSON
         }
       ],
-      expectedError: /complete baseline publication requires "new"/
+      expectedError: /complete baseline publication requires one of "new" or "pass"/
     },
     {
       name: 'a failed capture',
