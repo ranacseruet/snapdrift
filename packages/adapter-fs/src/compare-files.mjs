@@ -94,6 +94,7 @@ export async function resolveImagePath(runDir, relativeImagePath) {
     throw new Error(`Refusing to read screenshot outside the run directory: ${relativeImagePath}`);
   }
   if (await exists(directPath)) {
+    await assertRealPathContained(resolvedRunDir, directPath);
     return directPath;
   }
 
@@ -102,6 +103,7 @@ export async function resolveImagePath(runDir, relativeImagePath) {
   const matches = fileIndex.get(basename) || [];
 
   if (matches.length === 1) {
+    await assertRealPathContained(resolvedRunDir, matches[0]);
     return matches[0];
   }
 
@@ -109,11 +111,38 @@ export async function resolveImagePath(runDir, relativeImagePath) {
     const normalizedRelativePath = relativeImagePath.replace(/\\/g, '/');
     const suffixMatches = matches.filter((candidate) => candidate.replace(/\\/g, '/').endsWith(normalizedRelativePath));
     if (suffixMatches.length === 1) {
+      await assertRealPathContained(resolvedRunDir, suffixMatches[0]);
       return suffixMatches[0];
     }
   }
 
   throw new Error(`Unable to locate screenshot ${relativeImagePath} under ${runDir}.`);
+}
+
+/**
+ * String-level containment does not see through symlinks: a path inside the
+ * run directory can be a link to an arbitrary readable file. Re-check
+ * containment against the candidate's real path and the run directory's own
+ * real path (the run dir itself can be reached through a symlink, e.g.
+ * macOS /tmp → /private/tmp). A candidate that cannot be resolved is left to
+ * the caller's existence handling.
+ *
+ * @param {string} resolvedRunDir
+ * @param {string} candidatePath
+ * @returns {Promise<void>}
+ */
+async function assertRealPathContained(resolvedRunDir, candidatePath) {
+  let realCandidate;
+  try {
+    realCandidate = await fs.realpath(candidatePath);
+  } catch {
+    return;
+  }
+  const realRunDir = await fs.realpath(resolvedRunDir);
+  const realContainment = path.relative(realRunDir, realCandidate);
+  if (realContainment.startsWith('..') || path.isAbsolute(realContainment)) {
+    throw new Error(`Refusing to read screenshot outside the run directory: ${candidatePath}`);
+  }
 }
 
 /**
