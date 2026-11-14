@@ -997,6 +997,71 @@ describe('generateDriftReport', () => {
     expect(summary.errors[0].message).toMatch(/outside the run directory/);
   });
 
+  it('refuses to resolve a symlinked screenshot that points outside the run directory', async () => {
+    // String containment passes for a path inside the run directory, but the
+    // file at that path can be a symlink to an arbitrary readable file — a
+    // hostile baseline artifact can smuggle one in. Resolution must see
+    // through the link and refuse.
+    const routeId = 'symlink-escape';
+    const imagePath = 'screenshots/r.png';
+    const secretPath = path.join(tempDir, 'secret.png');
+    await fs.writeFile(secretPath, 'not a screenshot');
+
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+      baselinePngs: [{ relPath: imagePath, width: 10, height: 10, r: 100, g: 100, b: 100 }],
+      currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 100, g: 100, b: 100 }]
+    });
+
+    // Swap the baseline screenshot for a symlink to the file outside the run dir.
+    const baselineScreenshot = path.join(opts.baselineRunDir, imagePath);
+    await fs.rm(baselineScreenshot);
+    await fs.symlink(secretPath, baselineScreenshot);
+
+    const { summary } = await generateDriftReport({
+      ...opts,
+      routeIds: [routeId]
+    });
+
+    expect(summary.status).toBe('incomplete');
+    expect(summary.errors).toHaveLength(1);
+    expect(summary.errors[0].id).toBe(routeId);
+    expect(summary.errors[0].message).toMatch(/outside the run directory/);
+  });
+
+  it('resolves a screenshot through a symlink that stays inside the run directory', async () => {
+    // The fix must not break legitimate layouts: a link pointing at a sibling
+    // inside the run directory resolves (and compares) normally.
+    const routeId = 'symlink-inside';
+    const imagePath = 'screenshots/r.png';
+
+    const opts = await setupFixtures(tempDir, {
+      routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+      baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+      currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+      currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 100, g: 100, b: 100 }]
+    });
+
+    // Baseline declares the screenshot at screenshots/r.png, but the file
+    // lives at alt/real.png with a symlink at the declared path.
+    await fs.mkdir(path.join(opts.baselineRunDir, 'screenshots'), { recursive: true });
+    await writePng(path.join(opts.baselineRunDir, 'alt', 'real.png'), 10, 10, 100, 100, 100);
+    await fs.symlink(
+      path.join(opts.baselineRunDir, 'alt', 'real.png'),
+      path.join(opts.baselineRunDir, imagePath)
+    );
+
+    const { summary } = await generateDriftReport({
+      ...opts,
+      routeIds: [routeId]
+    });
+
+    expect(summary.status).toBe('clean');
+    expect(summary.errors).toHaveLength(0);
+  });
+
   it('resolves PNG via basename fallback when direct path does not exist', async () => {
     // File lives at screenshots/nested/r.png but manifest says imagePath: screenshots/r.png.
     // resolveImagePath should find it via the basename index.
