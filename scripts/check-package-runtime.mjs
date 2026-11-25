@@ -173,7 +173,7 @@ try {
 
   assert.equal(
     adapterFs.manifest.dependencies?.['@snapdrift/adapter-report-md'],
-    '^1.4.0',
+    '^1.5.0',
     'adapter-fs must directly declare @snapdrift/adapter-report-md'
   );
 
