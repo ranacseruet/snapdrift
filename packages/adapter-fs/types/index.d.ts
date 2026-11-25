@@ -62,6 +62,8 @@ export interface GenerateDriftReportOptions {
   routeIds?: Iterable<string>;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
+  baselineTargetSha?: string;
+  baselineDistance?: number | string;
 }
 
 export function generateDriftReport(

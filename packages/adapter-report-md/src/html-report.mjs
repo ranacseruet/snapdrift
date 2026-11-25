@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, formatPercentage, formatViewport } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, describeBaselineBinding, formatPercentage, formatViewport } from './constants.mjs';
 import { getAlignmentNotes } from './alignment-notes.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
@@ -247,7 +247,13 @@ export async function generateHtmlReport(summary, options = {}) {
   // --- Meta bar ---
   const metaParts = [];
   if (summary.baselineArtifactName) metaParts.push(`Baseline: <code>${escapeHtml(summary.baselineArtifactName)}</code>`);
-  if (summary.baselineSourceSha) metaParts.push(`SHA: <code>${escapeHtml(summary.baselineSourceSha)}</code>`);
+  if (summary.baselineSourceSha) {
+    const binding = describeBaselineBinding(summary);
+    const bindingNote = binding
+      ? ` (${escapeHtml(binding.label)}${binding.matchesTarget ? '' : ` <code>${escapeHtml(binding.targetSha)}</code>`})`
+      : '';
+    metaParts.push(`SHA: <code>${escapeHtml(summary.baselineSourceSha)}</code>${bindingNote}`);
+  }
   metaParts.push(`Diff mode: <code>${escapeHtml(summary.diffMode)}</code>`);
   metaParts.push(`Threshold: <code>${formatPercentage(summary.threshold)}</code>`);
 

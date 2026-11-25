@@ -213,6 +213,22 @@ describe('makeMarkdown', () => {
       expect(md).toContain('sha `abc1234def`');
     });
 
+    it('renders the baseline binding next to the sha', () => {
+      const behind = makeMarkdown(makeSummary({
+        baselineSourceSha: 'abc1234def',
+        baselineTargetSha: 'def5678abc',
+        baselineDistance: 3
+      }));
+      expect(behind).toContain('sha `abc1234def` (3 commits behind target `def5678`)');
+
+      const exact = makeMarkdown(makeSummary({
+        baselineSourceSha: 'abc1234def',
+        baselineTargetSha: 'abc1234def',
+        baselineDistance: 0
+      }));
+      expect(exact).toContain('sha `abc1234def` (matches target)');
+    });
+
     it('includes footer with SnapDrift link', () => {
       const md = makeMarkdown(makeSummary());
       expect(md).toContain('Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a>');

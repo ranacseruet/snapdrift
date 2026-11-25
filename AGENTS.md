@@ -43,11 +43,11 @@ Tests require `--experimental-vm-modules` because the project uses ESM (`"type":
    - `cli.mjs` — CLI entry point: `parseArgs` + command dispatch for `capture`, `baseline`, `diff`, `migrate-baselines`, `init`. `baseline` is the only CLI path that publishes a baseline to Snap (capture + `publishBaseline`)
    - `provider.mjs` — `createProvider(name, config)` factory + `LocalProvider` implementation; `PROVIDER_CAPABILITIES` + `providerSupports(name, capability)` capability query; re-exports `SnapProvider` and the four Snap error classes from `snap-provider.mjs`
    - `outage-policy.mjs` — single implementation of `snap.onUnavailable` (`captureWithPolicy`, `diffWithPolicy`, `publishBaselineWithPolicy`), used by `cli.mjs`, `actions/baseline` and `actions/pr-diff`. Returns the *effective* provider after a `fallback-local` switch, describes capture artifacts explicitly (`describeCaptureArtifacts`: `localScreenshots` + `artifactsRoot`), and recaptures locally when a remote Snap capture has no PNGs to pixel-compare
-   - `github-requests.mjs` — dependency-injected GitHub request helpers shared by github-script action steps: `fetchPullRequestFiles`, `resolveScopeDecision`, `resolvePullRequestScope` (scope parity between `actions/scope` and `actions/pr-diff`), and `upsertPullRequestReportComment` (marker-based comment upsert shared by `actions/comment` and the `actions/pr-diff` report step)
+   - `github-requests.mjs` — dependency-injected GitHub request helpers shared by github-script action steps: `fetchPullRequestFiles`, `resolveScopeDecision`, `resolvePullRequestScope` (scope parity between `actions/scope` and `actions/pr-diff`), `resolveBaselineTargetSha` (base commit the checked-out PR tree is built on, used to bind the baseline), and `upsertPullRequestReportComment` (marker-based comment upsert shared by `actions/comment` and the `actions/pr-diff` report step)
    - `snap-provider.mjs` — `SnapProvider` (hosted `VisualProvider` with `capture`/`diff`/`publishBaseline` (requires a Snap run id; no legacy bundle path)/`buildCommentBody`) + migration method (`exportBaselines`; `checkBaselineExists` and `fetchLatestBaseline` removed — no production callers, baseline resolution goes through `actions/resolve-baseline` artifact download) + `SnapApiError` / `SnapUnavailableError` / `SnapFallbackError` / `SnapSkipError` / `isLocalBaseUrl`
    - `migrate-baselines.mjs` — `migrate-baselines` command handlers (`runMigrateToSnap`, `runMigrateToLocal`)
    - `init-from-action.mjs` — `init --from-snap-action` codemod: translates Snap action workflow YAML to `snapdrift.json`
-   - `resolve-baseline-artifact.mjs` — shared GitHub workflow/artifact lookup and response validation used by both baseline resolver actions
+   - `resolve-baseline-artifact.mjs` — shared GitHub workflow/artifact lookup and response validation used by both baseline resolver actions; with `targetSha` it binds the baseline to that commit (exact match, else newest ancestor via `compareCommits`, never a descendant or diverged commit)
 
 3. **`actions/`** — GitHub composite actions. Two primary wrapper actions orchestrate the full pipeline:
    - `actions/baseline` — Reads config → installs deps → captures routes → publishes (via `provider.publishBaseline`) → stages bundle → uploads artifact
@@ -104,15 +104,16 @@ Tests in `tests/` and `packages/*/tests/` use Jest with `"transform": {}` (no tr
 |-----------|---------------|
 | `tests/snapdrift-smoke.test.js` | Config validation, enforcement modes, viewport/readiness contracts, lib exports, artifact bundle structure |
 | `tests/capture-routes.test.js` | Baseline capture behavior, manifest shape, retry, error surfaces |
-| `tests/compare-results.test.js` | Pixel diff logic, dimension mismatch, missing screenshots, file index cache, route scoping |
+| `tests/compare-results.test.js` | Pixel diff logic, dimension mismatch, missing screenshots, file index cache, route scoping, baseline source/target/distance summary metadata |
 | `tests/stage-artifacts.test.js` | Baseline and diff bundle staging |
 | `tests/drift-summary.test.js` | Skipped-summary generation for scope and missing-baseline cases |
 | `tests/pr-comment.test.js` | PR comment body construction (local and snap link variants) |
 | `tests/provider.test.js` | `createProvider` factory and `LocalProvider` |
 | `tests/snap-provider.test.js` | `SnapProvider` capture/diff/publish paths, local-capture hybrid, retry, error classification |
 | `tests/scope-action.test.js` | Executable `scope` and `pr-diff` changed-file selection, rename paths, truncation, malformed responses, and scope fallbacks |
-| `tests/snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract, provider wiring |
-| `tests/github-requests.test.js` | Shared GitHub request helpers: changed-file validation, scope decisions, truncation, comment upsert ordering |
+| `tests/snapdrift-actions-contract.test.js` | Action YAML structure, wrapper action inputs/outputs, viewport preset contract, provider wiring, baseline target-sha wiring |
+| `tests/github-requests.test.js` | Shared GitHub request helpers: changed-file validation, scope decisions, truncation, comment upsert ordering, baseline target-sha detection (merge-ref, PR-head, unrecognized checkout) |
+| `tests/baseline-resolution.test.js` | Executable `resolve-baseline` and `pr-diff` baseline steps: lookup error/missing classification, artifact filtering, target-commit binding (exact, ancestor, descendant/diverged rejection, compare cap/cache), `pr-diff` target detection and cross-repo/unrecognized-checkout fallbacks |
 | `tests/comment-action.test.js` | Executable `comment` and `pr-diff` report adapters: body parity, truncation limits, config-fallback warning, missing-summary fallback body |
 | `tests/snapdrift-config.test.js` | `snapdrift-config` shim exports |
 | `tests/report.test.js` | HTML report image embedding |

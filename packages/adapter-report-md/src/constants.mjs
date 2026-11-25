@@ -29,6 +29,28 @@ export function formatViewport(viewport) {
 export const DIFF_IMAGE_LEGEND = 'Diff image colors: orange = changed · green = added or inserted · red = removed or deleted';
 
 /**
+ * Describe how the baseline source commit relates to the commit the baseline
+ * was bound to, for the "sha" meta item of the reports. `label` is plain text
+ * ("matches target", "2 commits behind target" or "target"); when
+ * `matchesTarget` is false the caller appends the short target sha in its own
+ * markup. Returns undefined when the baseline was not bound (no target) or
+ * has no source commit to relate.
+ *
+ * @param {{ baselineSourceSha?: string, baselineTargetSha?: string, baselineDistance?: number }} summary
+ * @returns {{ label: string, targetSha: string, matchesTarget: boolean } | undefined}
+ */
+export function describeBaselineBinding(summary) {
+  const { baselineSourceSha: source, baselineTargetSha: target, baselineDistance: distance } = summary;
+  if (!source || !target) return undefined;
+  const targetSha = target.slice(0, 7);
+  if (distance === 0 || (distance === undefined && source === target)) {
+    return { label: 'matches target', targetSha, matchesTarget: true };
+  }
+  const label = distance === undefined ? 'target' : `${distance} commit${distance === 1 ? '' : 's'} behind target`;
+  return { label, targetSha, matchesTarget: false };
+}
+
+/**
  * Format an internal 0–1 ratio for human-facing reports.
  * @param {number} ratio
  * @returns {string}

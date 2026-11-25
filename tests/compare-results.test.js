@@ -1185,6 +1185,69 @@ describe('generateDriftReport', () => {
     expect(summary.baselineSourceSha).toBe('abc1234');
   });
 
+  describe('baseline binding metadata', () => {
+    const routeId = 'root-index-desktop';
+    const imagePath = 'screenshots/r.png';
+
+    async function setup() {
+      return setupFixtures(tempDir, {
+        routes: [{ id: routeId, path: '/', viewport: 'desktop' }],
+        baselineEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+        currentEntries: [makeManifestEntry(routeId, 'desktop', imagePath, 10, 10)],
+        baselinePngs: [{ relPath: imagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }],
+        currentPngs: [{ relPath: imagePath, width: 10, height: 10, r: 50, g: 50, b: 50 }]
+      });
+    }
+
+    afterEach(() => {
+      delete process.env.SNAPDRIFT_BASELINE_TARGET_SHA;
+      delete process.env.SNAPDRIFT_BASELINE_DISTANCE;
+    });
+
+    it('includes baselineTargetSha and baselineDistance in the summary', async () => {
+      const { summary } = await generateDriftReport({
+        ...(await setup()),
+        routeIds: [routeId],
+        baselineSourceSha: 'abc1234',
+        baselineTargetSha: 'def5678',
+        baselineDistance: 2
+      });
+      expect(summary).toMatchObject({ baselineSourceSha: 'abc1234', baselineTargetSha: 'def5678', baselineDistance: 2 });
+    });
+
+    it('accepts the distance as a decimal string, as passed from action env', async () => {
+      const { summary } = await generateDriftReport({
+        ...(await setup()),
+        routeIds: [routeId],
+        baselineTargetSha: 'def5678',
+        baselineDistance: '0'
+      });
+      expect(summary.baselineDistance).toBe(0);
+    });
+
+    it.each([-1, 1.5, NaN, 'abc', '-2', '', '1.5', null])('ignores invalid distance %p', async (baselineDistance) => {
+      const { summary } = await generateDriftReport({
+        ...(await setup()),
+        routeIds: [routeId],
+        baselineDistance
+      });
+      expect(summary.baselineDistance).toBeUndefined();
+    });
+
+    it('falls back to the SNAPDRIFT_BASELINE_TARGET_SHA and SNAPDRIFT_BASELINE_DISTANCE environment variables', async () => {
+      process.env.SNAPDRIFT_BASELINE_TARGET_SHA = 'def5678';
+      process.env.SNAPDRIFT_BASELINE_DISTANCE = '4';
+      const { summary } = await generateDriftReport({ ...(await setup()), routeIds: [routeId] });
+      expect(summary).toMatchObject({ baselineTargetSha: 'def5678', baselineDistance: 4 });
+    });
+
+    it('omits the fields when nothing is provided', async () => {
+      const { summary } = await generateDriftReport({ ...(await setup()), routeIds: [routeId] });
+      expect(summary.baselineTargetSha).toBeUndefined();
+      expect(summary.baselineDistance).toBeUndefined();
+    });
+  });
+
   it('throws when a manifest JSON file cannot be loaded', async () => {
     const routeId = 'root-index-desktop';
     const configPath = path.join(tempDir, 'snapdrift.json');

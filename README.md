@@ -14,7 +14,7 @@ SnapDrift is ready to integrate from public GitHub releases. Workflow examples b
 ## What SnapDrift handles
 
 - Baseline capture on `main`
-- Pull request drift detection against the latest successful baseline
+- Pull request drift detection against the baseline published from the commit the PR is built on (or its closest ancestor)
 - Route scoping from changed files
 - PR report upserts (with optional Snap dashboard link)
 - Drift enforcement through `diff.mode`

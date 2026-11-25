@@ -55,6 +55,14 @@ inputs:
     description: Optional baseline source SHA for the summary.
     required: false
     default: ''
+  baseline-target-sha:
+    description: Optional commit the baseline was bound to, shown next to the baseline source SHA.
+    required: false
+    default: ''
+  baseline-distance:
+    description: Optional number of commits between the baseline source and the target commit.
+    required: false
+    default: ''
   enforce-outcome:
     description: Whether to fail according to diff.mode after writing the summary.
     required: false
@@ -121,6 +129,8 @@ runs:
         MARKDOWN_PATH: ${{ inputs.markdown-path }}
         BASELINE_ARTIFACT_NAME: ${{ inputs.baseline-artifact-name }}
         BASELINE_SOURCE_SHA: ${{ inputs.baseline-source-sha }}
+        BASELINE_TARGET_SHA: ${{ inputs.baseline-target-sha }}
+        BASELINE_DISTANCE: ${{ inputs.baseline-distance }}
         ENFORCE_OUTCOME: ${{ inputs.enforce-outcome }}
       run: |
         node --input-type=module <<'EOF'
@@ -153,6 +163,8 @@ runs:
           routeIds: splitCommaList(process.env.ROUTE_IDS),
           baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
+          baselineTargetSha: process.env.BASELINE_TARGET_SHA || undefined,
+          baselineDistance: process.env.BASELINE_DISTANCE || undefined,
           enforceOutcome: process.env.ENFORCE_OUTCOME === 'true'
         });
 

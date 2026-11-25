@@ -41,6 +41,10 @@ inputs:
     description: Branch that publishes the baseline.
     required: false
     default: main
+  baseline-target-sha:
+    description: Optional commit SHA to bind the baseline to. The newest baseline published from this commit or its closest ancestor is used. When empty, the target is detected from the checked-out commit (the base tip for a pull request merge-ref checkout, the merge base for a PR-head checkout).
+    required: false
+    default: ''
   artifact-retention-days:
     description: Retention period for the uploaded diff artifact.
     required: false
@@ -74,6 +78,12 @@ outputs:
   baseline-resolution-status:
     description: 'Baseline lookup status: found, missing, or error.'
     value: ${{ steps.finalize.outputs.baseline_resolution_status }}
+  baseline-target-sha:
+    description: Commit the baseline was bound to, or empty when the baseline was resolved unbound.
+    value: ${{ steps.finalize.outputs.baseline_target_sha }}
+  baseline-distance:
+    description: Commits between the baseline source commit and the target commit, or empty when unbound.
+    value: ${{ steps.finalize.outputs.baseline_distance }}
   status:
     description: Final SnapDrift status.
     value: ${{ steps.finalize.outputs.status }}
@@ -163,18 +173,62 @@ runs:
         INPUT_REPOSITORY: ${{ inputs.baseline-repository }}
         INPUT_WORKFLOW_ID: ${{ inputs.baseline-workflow-id }}
         INPUT_BRANCH: ${{ inputs.baseline-branch }}
+        INPUT_TARGET_SHA: ${{ inputs.baseline-target-sha }}
+        INPUT_PR_NUMBER: ${{ steps.context.outputs.pr_number }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
           const path = require('path');
           const { pathToFileURL } = require('url');
+          const { execFileSync } = require('child_process');
 
-          const repository = process.env.INPUT_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
+          const prRepository = `${context.repo.owner}/${context.repo.repo}`;
+          const repository = process.env.INPUT_REPOSITORY || prRepository;
           const modulePath = path.resolve(process.env.ACTION_ROOT, 'lib/snapdrift-config.mjs');
           const resolverModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/resolve-baseline-artifact.mjs');
+          const requestsModulePath = path.resolve(process.env.ACTION_ROOT, 'lib/github-requests.mjs');
           const { loadSnapdriftConfig } = await import(pathToFileURL(modulePath));
           const { resolveBaselineArtifact } = await import(pathToFileURL(resolverModulePath));
+          const { resolveBaselineTargetSha } = await import(pathToFileURL(requestsModulePath));
           let artifactName = '';
+
+          // Bind the baseline to the commit the captured tree is built on so a
+          // PR is never compared against a baseline from a newer main commit.
+          // A checkout that cannot be tied to the PR base resolves unbound
+          // (newest baseline) with a warning; a GitHub API failure while
+          // detecting the target is a lookup error, never a silent unbind.
+          const detectTargetSha = async () => {
+            const explicitTargetSha = (process.env.INPUT_TARGET_SHA || '').trim();
+            if (explicitTargetSha) return explicitTargetSha;
+            const pullNumber = Number(process.env.INPUT_PR_NUMBER || '');
+            if (!Number.isInteger(pullNumber) || pullNumber <= 0) return '';
+            if (repository.toLowerCase() !== prRepository.toLowerCase()) {
+              core.warning(`The baseline repository ${repository} differs from ${prRepository}, so the PR's base commit does not exist there; resolving the newest baseline instead of binding to the PR base. Set baseline-target-sha to bind explicitly.`);
+              return '';
+            }
+            let checkedOutSha;
+            try {
+              checkedOutSha = execFileSync('git', ['-C', process.env.GITHUB_WORKSPACE, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+            } catch (error) {
+              core.warning(`Unable to read the checked-out commit (${error instanceof Error ? error.message : String(error)}); assuming ${context.sha}.`);
+              checkedOutSha = context.sha;
+            }
+            let detected;
+            try {
+              detected = await resolveBaselineTargetSha({
+                github,
+                ...context.repo,
+                pullNumber,
+                checkedOutSha
+              });
+            } catch (error) {
+              throw new Error(`Unable to determine the PR base commit to bind the baseline to: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            if (!detected.targetSha) {
+              core.warning(`The checked-out commit ${checkedOutSha} is neither the PR head nor the PR merge ref, so the baseline cannot be bound to the PR base; resolving the newest baseline instead. Set baseline-target-sha to bind explicitly.`);
+            }
+            return detected.targetSha || '';
+          };
 
           const setLookupError = (error) => {
             const detail = error instanceof Error ? error.message : String(error);
@@ -189,18 +243,22 @@ runs:
           try {
             const { config } = await loadSnapdriftConfig(process.env.REPO_CONFIG_PATH || undefined);
             artifactName = config.baselineArtifactName;
+            const targetSha = await detectTargetSha();
             const result = await resolveBaselineArtifact({
               github,
               repository,
               workflowId: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
               branch: process.env.INPUT_BRANCH || 'main',
-              artifactName
+              artifactName,
+              targetSha
             });
             core.setOutput('found', String(result.found));
             core.setOutput('resolution_status', result.resolutionStatus);
             core.setOutput('artifact_name', result.artifactName);
             core.setOutput('head_sha', result.headSha || '');
             core.setOutput('run_id', result.runId || '');
+            core.setOutput('target_sha', result.targetSha || '');
+            core.setOutput('distance', result.distance === undefined ? '' : String(result.distance));
             core.setOutput('message', result.message);
           } catch (error) {
             setLookupError(error);
@@ -371,6 +429,8 @@ runs:
         BASELINE_RUN_DIR: ${{ steps.baseline_paths.outputs.run_dir }}
         BASELINE_ARTIFACT_NAME: ${{ steps.baseline.outputs.artifact_name }}
         BASELINE_SOURCE_SHA: ${{ steps.baseline.outputs.head_sha }}
+        BASELINE_TARGET_SHA: ${{ steps.baseline.outputs.target_sha }}
+        BASELINE_DISTANCE: ${{ steps.baseline.outputs.distance }}
         CURRENT_RESULTS_PATH: ${{ steps.capture.outputs.results_file }}
         CURRENT_MANIFEST_PATH: ${{ steps.capture.outputs.manifest_file }}
         CURRENT_SCREENSHOTS_ROOT: ${{ steps.capture.outputs.screenshots_root }}
@@ -418,6 +478,8 @@ runs:
           routeIds,
           baselineArtifactName: process.env.BASELINE_ARTIFACT_NAME || undefined,
           baselineSourceSha: process.env.BASELINE_SOURCE_SHA || undefined,
+          baselineTargetSha: process.env.BASELINE_TARGET_SHA || undefined,
+          baselineDistance: process.env.BASELINE_DISTANCE || undefined,
           currentResultsPath: process.env.CURRENT_RESULTS_PATH || undefined,
           currentManifestPath: process.env.CURRENT_MANIFEST_PATH || undefined,
           currentRunDir: process.env.CURRENT_SCREENSHOTS_ROOT || undefined,
@@ -732,6 +794,8 @@ runs:
         SELECTED_ROUTE_IDS: ${{ steps.scope.outputs.selected_route_ids }}
         BASELINE_FOUND: ${{ steps.baseline.outputs.found || 'false' }}
         BASELINE_RESOLUTION_STATUS: ${{ steps.baseline.outputs.resolution_status || '' }}
+        BASELINE_TARGET_SHA: ${{ steps.baseline.outputs.target_sha || '' }}
+        BASELINE_DISTANCE: ${{ steps.baseline.outputs.distance || '' }}
         STATUS: ${{ steps.compare.outputs.status || steps.capture.outputs.status || steps.skipped_baseline.outputs.status || steps.skipped_scope.outputs.status || '' }}
         SUMMARY_PATH: ${{ steps.compare.outputs.summary_path || steps.capture.outputs.summary_path || steps.skipped_baseline.outputs.summary_path || steps.skipped_scope.outputs.summary_path || '' }}
         MARKDOWN_PATH: ${{ steps.compare.outputs.markdown_path || steps.capture.outputs.markdown_path || steps.skipped_baseline.outputs.markdown_path || steps.skipped_scope.outputs.markdown_path || '' }}
@@ -743,6 +807,8 @@ runs:
           echo "selected_route_ids=${SELECTED_ROUTE_IDS:-}"
           echo "baseline_found=${BASELINE_FOUND:-false}"
           echo "baseline_resolution_status=${BASELINE_RESOLUTION_STATUS:-}"
+          echo "baseline_target_sha=${BASELINE_TARGET_SHA:-}"
+          echo "baseline_distance=${BASELINE_DISTANCE:-}"
           echo "status=${STATUS:-}"
           echo "summary_path=${SUMMARY_PATH:-}"
           echo "markdown_path=${MARKDOWN_PATH:-}"

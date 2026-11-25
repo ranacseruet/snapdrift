@@ -307,6 +307,31 @@ describe('buildReportCommentBody', () => {
     expect(body).toContain('<div align="right"><sub>Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a></sub></div>');
   });
 
+  it.each([
+    ['2 commits behind the target', { baselineDistance: 2 }, 'sha `abc1234` (2 commits behind target `def5678`)'],
+    ['1 commit behind the target', { baselineDistance: 1 }, 'sha `abc1234` (1 commit behind target `def5678`)'],
+    ['an unknown distance', {}, 'sha `abc1234` (target `def5678`)'],
+    ['a baseline at the target', { baselineDistance: 0 }, 'sha `abc1234` (matches target)']
+  ])('shows the baseline binding for %s', (_label, extra, expected) => {
+    const body = buildReportCommentBody({
+      ...cleanSummary,
+      baselineSourceSha: 'abc1234deadbeef',
+      baselineTargetSha: 'def5678cafef00d',
+      ...extra
+    });
+    expect(body).toContain(expected);
+  });
+
+  it('shows matches-target when source and target are the same commit and no distance is known', () => {
+    const body = buildReportCommentBody({ ...cleanSummary, baselineSourceSha: 'abc1234def', baselineTargetSha: 'abc1234def' });
+    expect(body).toContain('sha `abc1234` (matches target)');
+  });
+
+  it('omits the binding note when there is no target or no source sha', () => {
+    expect(buildReportCommentBody({ ...cleanSummary, baselineSourceSha: 'abc1234def' })).toMatch(/sha `abc1234`(?! \()/);
+    expect(buildReportCommentBody({ ...cleanSummary, baselineTargetSha: 'def5678', baselineDistance: 3 })).not.toContain('target');
+  });
+
   it('keeps the powered-by footer when no metadata is available', () => {
     const body = buildReportCommentBody(cleanSummary);
     expect(body).not.toContain('<sub>SnapDrift ·');
