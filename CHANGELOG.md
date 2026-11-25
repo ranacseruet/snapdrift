@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.20.0 - 2026-11-25
+
+Releases this version:
+
+- `@snapdrift/manifest` 1.10.0 — `VisualDiffSummary` types gain `baselineTargetSha` and `baselineDistance` (#252, #256).
+- `@snapdrift/adapter-report-md` 1.5.0 — the PR comment, markdown summary and HTML report show how the baseline relates to the commit it was bound to: `sha abc1234 (2 commits behind target def5678)` or `(matches target)` (#256). The `@snapdrift/manifest` floor moves to `^1.10.0`.
+- `@snapdrift/adapter-fs` 1.10.0 — `generateDriftReport` records `baselineTargetSha` / `baselineDistance` (options or `SNAPDRIFT_BASELINE_TARGET_SHA` / `SNAPDRIFT_BASELINE_DISTANCE`) (#256). `resolveImagePath` now checks containment on the real path, so a symlinked screenshot inside a downloaded baseline can no longer read a file outside the run directory (#248, #253). Floors move to `@snapdrift/manifest` `^1.10.0` and `@snapdrift/adapter-report-md` `^1.5.0`.
+- `snapdrift` 0.20.0 — root floors move to `@snapdrift/manifest` `^1.10.0`, `@snapdrift/adapter-report-md` `^1.5.0` and `@snapdrift/adapter-fs` `^1.10.0`. The Marketplace dispatcher pin moves to `aaa1afa07eeb9eb47fbc1e277176496a39ce67db`, the #256 merge commit. `@snapdrift/compare-core` stays 1.8.1.
+
+### Changed
+
+- **`pr-diff` binds the baseline to the commit the PR is built on** (#252, #256). Before, the baseline was the newest successful baseline on `baseline-branch`, which could come from a `main` commit the PR's tree does not contain. The target is now the commit the checked-out tree is built on:
+  - for the `pull_request` default merge-ref checkout, the base tip (the merge commit's first parent);
+  - for a PR-head checkout, the merge base;
+  - or an explicit `baseline-target-sha`.
+
+  A baseline published at that commit wins. Otherwise the newest baseline from an **ancestor** is used, found via `repos.compareCommits` (at most 100 comparisons). Baselines from descendant or diverged commits are never used. Cross-repo `baseline-repository` lookups and unrecognized checkouts warn and stay unbound. A GitHub API failure while detecting the target is a lookup error (`resolution-status: error`). PRs whose newest `main` baseline is newer than their base now compare against that older, ancestor baseline.
+- With `provider: "snap"`, hosted diffs still use Snap's latest accepted baseline, which the server selects; tracked in #255.
+
+### Added
+
+- `pr-diff` and root action: `baseline-target-sha` input; `baseline-target-sha` and `baseline-distance` outputs.
+- `resolve-baseline`: `target-sha` input; `target-sha` and `distance` outputs. Empty keeps the previous behavior.
+- `compare`: `baseline-target-sha` and `baseline-distance` inputs, mirroring `baseline-source-sha`.
+- Summary fields `baselineTargetSha` and `baselineDistance`.
+
+### Fixed
+
+- `resolveImagePath` contains symlinked screenshot paths: the real path of the candidate and of the run directory must stay inside the run directory (#248, #253).
+- Snap `publishBaseline`: a malformed run response now names the operation ("Cannot publish a complete Snap baseline: …"), and baseline runs that settle `pass` are accepted alongside `new` (#247, #254).
+
 ## 0.19.0 - 2026-11-06
 
 Releases this version:
