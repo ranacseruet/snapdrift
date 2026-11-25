@@ -167,6 +167,43 @@ describe('SnapDrift action contracts', () => {
         expect(skippedBaseline.if).toContain("steps.baseline.outputs.resolution_status == 'missing'");
     });
 
+    it('binds the PR baseline to the checked-out base commit', async () => {
+        const prDiff = await readAction('actions/pr-diff/action.yml');
+        const resolveBaseline = await readAction('actions/resolve-baseline/action.yml');
+        const compareAction = await readAction('actions/compare/action.yml');
+        const baselineStep = prDiff.runs.steps.find((step) => step.id === 'baseline');
+        const resolveStep = resolveBaseline.runs.steps.find((step) => step.id === 'resolve');
+        const compare = prDiff.runs.steps.find((step) => step.id === 'compare');
+        const finalize = prDiff.runs.steps.find((step) => step.id === 'finalize');
+
+        expect(prDiff.inputs['baseline-target-sha'].default).toBe('');
+        expect(baselineStep.env.INPUT_TARGET_SHA).toBe('${{ inputs.baseline-target-sha }}');
+        expect(baselineStep.env.INPUT_PR_NUMBER).toBe('${{ steps.context.outputs.pr_number }}');
+        expect(baselineStep.with.script).toContain('resolveBaselineTargetSha');
+        expect(baselineStep.with.script).toContain('targetSha');
+        expect(baselineStep.with.script).toContain("core.setOutput('target_sha'");
+        expect(baselineStep.with.script).toContain("core.setOutput('distance'");
+        expect(compare.env.BASELINE_TARGET_SHA).toBe('${{ steps.baseline.outputs.target_sha }}');
+        expect(compare.env.BASELINE_DISTANCE).toBe('${{ steps.baseline.outputs.distance }}');
+        expect(compare.run).toContain('baselineTargetSha: process.env.BASELINE_TARGET_SHA');
+        expect(compare.run).toContain('baselineDistance: process.env.BASELINE_DISTANCE');
+        expect(finalize.env.BASELINE_TARGET_SHA).toContain('steps.baseline.outputs.target_sha');
+        expect(prDiff.outputs['baseline-target-sha'].value).toContain('baseline_target_sha');
+        expect(prDiff.outputs['baseline-distance'].value).toContain('baseline_distance');
+
+        expect(resolveBaseline.inputs['target-sha'].default).toBe('');
+        expect(resolveStep.env.INPUT_TARGET_SHA).toBe('${{ inputs.target-sha }}');
+        expect(resolveStep.with.script).toContain('targetSha: process.env.INPUT_TARGET_SHA');
+        expect(resolveBaseline.outputs['target-sha'].value).toContain('target_sha');
+        expect(resolveBaseline.outputs['distance'].value).toContain('distance');
+
+        expect(compareAction.inputs['baseline-target-sha'].default).toBe('');
+        expect(compareAction.inputs['baseline-distance'].default).toBe('');
+        const compareStep = compareAction.runs.steps.find((step) => step.run?.includes('baselineSourceSha'));
+        expect(compareStep.run).toContain('baselineTargetSha: process.env.BASELINE_TARGET_SHA');
+        expect(compareStep.run).toContain('baselineDistance: process.env.BASELINE_DISTANCE');
+    });
+
     it('installs Playwright for Snap local-capture hybrid runs', async () => {
         const baseline = await readAction('actions/baseline/action.yml');
         const prDiff = await readAction('actions/pr-diff/action.yml');

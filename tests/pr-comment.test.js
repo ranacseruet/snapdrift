@@ -268,6 +268,13 @@ describe('buildReportCommentBody', () => {
         expect(body).toContain('<div align="right"><sub>Powered by <a href="https://github.com/ranacseruet/snapdrift">SnapDrift</a></sub></div>');
     });
 
+    it('shows how far the baseline is behind its target commit', () => {
+        const body = buildReportCommentBody(
+            { ...cleanSummary, baselineSourceSha: 'abc1234def', baselineTargetSha: 'def5678abc', baselineDistance: 2 }
+        );
+        expect(body).toContain('sha `abc1234` (2 commits behind target `def5678`)');
+    });
+
     it('keeps the powered-by footer when no metadata is available', () => {
         const body = buildReportCommentBody(cleanSummary);
         expect(body).not.toContain('<sub>SnapDrift ·');

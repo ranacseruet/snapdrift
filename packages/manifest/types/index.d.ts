@@ -293,6 +293,8 @@ export interface VisualDiffSummary {
   selectedRoutes?: string[];
   baselineArtifactName?: string;
   baselineSourceSha?: string;
+  baselineTargetSha?: string;
+  baselineDistance?: number;
   baselineAvailable?: boolean;
   baselineManifestPath: string;
   currentManifestPath: string;
@@ -390,6 +392,8 @@ export interface ProviderDiffOptions {
   currentRunDir?: string;
   baselineArtifactName?: string;
   baselineSourceSha?: string;
+  baselineTargetSha?: string;
+  baselineDistance?: number | string;
   /** Explicit comparison contract selected by the provider; v1 is deprecated for compatibility. */
   comparisonPolicy?: ComparisonPolicy;
 }

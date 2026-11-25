@@ -233,6 +233,8 @@ export interface VisualDiffSummary {
   selectedRoutes?: string[];
   baselineArtifactName?: string;
   baselineSourceSha?: string;
+  baselineTargetSha?: string;
+  baselineDistance?: number;
   baselineAvailable?: boolean;
   baselineManifestPath: string;
   currentManifestPath: string;

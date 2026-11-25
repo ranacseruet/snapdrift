@@ -146,6 +146,35 @@ The standalone `actions/resolve-baseline` action fails its step for `error`; cus
 should branch on `resolution-status` rather than treating `found: false` as proof that no baseline
 exists.
 
+#### Binding the baseline to the PR base commit
+
+Without a target, both actions use the newest successful push run on the baseline branch that has a
+non-expired baseline artifact, which can be newer than the commit the pull request was built on.
+`actions/pr-diff` instead binds the baseline to the commit the captured tree is built on:
+
+- a checkout of the PR merge ref (`refs/pull/N/merge`, the `pull_request` default) is built on
+  the base tip, the merge commit's first parent;
+- a checkout of the PR head is built on the merge base of the PR head and its base branch;
+- `baseline-target-sha` overrides detection with an explicit commit.
+
+The resolver then uses a baseline published from exactly that commit, otherwise the newest baseline
+published from an **ancestor** of it (found with `repos.compareCommits`; at most 100 comparisons per
+lookup, after which the lookup reports `missing` and says the search was capped). Baselines from a
+newer (descendant) or unrelated (diverged) commit are never used. `actions/resolve-baseline`
+accepts the same commit as `target-sha`; leaving it empty keeps the unbound behavior.
+
+When the checkout is neither the PR head nor its merge ref, or the baseline repository differs
+from the PR repository (the PR base commit does not exist there), the action warns and resolves
+unbound as before. Set `baseline-target-sha` to bind in those cases. A GitHub API failure while
+detecting the target is a lookup error (`resolution-status: error`), not a silent fallback.
+The resolver outputs `target-sha` and `distance` (commits between the baseline source commit and
+the target; `0` for an exact match), which `pr-diff` records in the summary as `baselineTargetSha`
+and `baselineDistance` and the PR comment shows next to the baseline sha.
+
+Binding applies to the artifact-based comparison used by `provider: "local"`. With
+`provider: "snap"` the hosted diff still compares against Snap's latest accepted baseline, which is
+chosen server-side.
+
 ## Drift artifact
 
 The pull request drift bundle contains:
@@ -278,7 +307,9 @@ but still fails if other comparable routes changed.
   "baselineManifestPath": "...",
   "currentManifestPath": "...",
   "baselineArtifactName": "ui-foundation-snapdrift-baseline",
-  "baselineSourceSha": "abc1234"
+  "baselineSourceSha": "abc1234",
+  "baselineTargetSha": "def5678",
+  "baselineDistance": 2
 }
 ```
 
@@ -287,6 +318,8 @@ but still fails if other comparable routes changed.
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `captureCompatibility` | `{ status, reason? }?` | Local profile-level compatibility: `verified`, `unverified`, or `incompatible`; route identity errors are separate |
+| `baselineTargetSha` | `string?` | Commit the baseline was bound to (the PR base commit); omitted when the baseline was resolved unbound |
+| `baselineDistance` | `number?` | Commits between `baselineSourceSha` and `baselineTargetSha` (`0` for an exact match); a non-negative integer, other values are ignored |
 | `dashboardUrl` | `string?` | Snap dashboard URL for the run (set by `SnapProvider`; omitted by `LocalProvider`) |
 | `comparisonPolicy` | `{ "version": 1 \| 2, "threshold": number }?` | Effective comparison policy used by the adapter (deprecated v1 is synthesized from `diff.threshold` when not configured) |
 
@@ -682,6 +715,10 @@ inputs, and map the returned decision to step outputs:
   running all routes (`changed_files_truncated`), and an empty list maps to
   `no_changed_files`. Other reasons come from
   `selectRoutesForChangedFiles`.
+- `resolveBaselineTargetSha` finds the base-branch commit the checked-out PR tree is
+  built on (merge-ref checkout: first parent of the merge commit; PR-head checkout: merge
+  base with the base branch) so `actions/pr-diff` can bind the baseline to it, and reports
+  `unrecognized-checkout` with no target for any other checkout.
 - `resolvePullRequestScope` composes the above with the
   explicit-route/force-run/missing-PR shortcuts and the
   `snapdrift_scope_check_failed` fallback warning.
@@ -737,6 +774,8 @@ These are for custom orchestration only. Wrapper actions set them automatically.
 | `SNAPDRIFT_SUMMARY_MARKDOWN_PATH` | `compare-results.mjs` | Summary markdown path |
 | `SNAPDRIFT_BASELINE_ARTIFACT_NAME` | `compare-results.mjs` | Baseline artifact label to embed in the report |
 | `SNAPDRIFT_BASELINE_SOURCE_SHA` | `compare-results.mjs` | Baseline source SHA to embed in the report |
+| `SNAPDRIFT_BASELINE_TARGET_SHA` | `compare-results.mjs` | Commit the baseline was bound to, to embed in the report |
+| `SNAPDRIFT_BASELINE_DISTANCE` | `compare-results.mjs` | Commits between the baseline source and its target (non-negative integer) to embed in the report |
 | `SNAPDRIFT_ENFORCE_OUTCOME` | `compare-results.mjs` | Set to `0` to disable enforcement in direct CLI usage |
 | `SNAPDRIFT_CAPTURE_CONCURRENCY` | `capture-routes.mjs` | Max concurrent route captures across all viewport groups combined (positive integer, default `5`). Each local attempt uses a fresh browser context. Set to `1` to fully serialize captures without sharing storage. |
 

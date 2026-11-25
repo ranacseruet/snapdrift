@@ -1,7 +1,7 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
-import { escapeMarkdown } from './pr-comment.mjs';
+import { DEFAULT_SNAPDRIFT_ICON_URL, DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, describeBaselineBinding, formatPercentage, formatViewport } from './constants.mjs';
+import { escapeMarkdown, formatCodeSpan } from './pr-comment.mjs';
 import { getAlignmentNotes } from './alignment-notes.mjs';
 
 /** @typedef {import('../../manifest/types/index').VisualDiffSummary} DriftSummary */
@@ -121,7 +121,11 @@ export function makeMarkdown(summaryData) {
     metaItems.push(`baseline \`${summaryData.baselineArtifactName}\``);
   }
   if (summaryData.baselineSourceSha) {
-    metaItems.push(`sha \`${summaryData.baselineSourceSha}\``);
+    const binding = describeBaselineBinding(summaryData);
+    const bindingNote = binding
+      ? ` (${binding.label}${binding.matchesTarget ? '' : ` ${formatCodeSpan(binding.targetSha)}`})`
+      : '';
+    metaItems.push(`sha \`${summaryData.baselineSourceSha}\`${bindingNote}`);
   }
   if (metaItems.length > 0) {
     lines.push('');

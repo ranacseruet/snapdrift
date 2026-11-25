@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { fetchPullRequestFiles, resolveScopeDecision, resolvePullRequestScope, upsertPullRequestReportComment } from '../lib/github-requests.mjs';
+import { fetchPullRequestFiles, resolveBaselineTargetSha, resolveScopeDecision, resolvePullRequestScope, upsertPullRequestReportComment } from '../lib/github-requests.mjs';
 
 const config = {
   routes: [
@@ -153,5 +153,97 @@ describe('upsertPullRequestReportComment', () => {
     ]);
     await upsertPullRequestReportComment({ github, ...options });
     expect(github.operations[0]).toEqual(['updateComment', { ...repository, comment_id: 2, body: options.body }]);
+  });
+});
+
+describe('resolveBaselineTargetSha', () => {
+  const sha = (char) => char.repeat(40);
+  const HEAD = sha('a');
+  const BASE_TIP = sha('b');
+  const MERGE_BASE = sha('c');
+  const MERGE_COMMIT = sha('d');
+
+  function targetClient({ pr, comparison, commit } = {}) {
+    const pull = pr === undefined ? { head: { sha: HEAD }, base: { sha: sha('9'), ref: 'main' } } : pr;
+    const github = {
+      rest: {
+        pulls: { get: jest.fn(async () => ({ data: pull })) },
+        repos: {
+          compareCommits: jest.fn(async () => ({ data: comparison ?? { merge_base_commit: { sha: MERGE_BASE } } })),
+          getCommit: jest.fn(async () => ({ data: commit ?? { parents: [{ sha: BASE_TIP }, { sha: HEAD }] } }))
+        }
+      }
+    };
+    return github;
+  }
+  const resolve = (github, checkedOutSha) => resolveBaselineTargetSha({ github, ...repository, pullNumber: 7, checkedOutSha });
+
+  it('uses the merge base of the PR head and its base branch when the PR head is checked out', async () => {
+    const github = targetClient();
+    expect(await resolve(github, HEAD)).toEqual({ targetSha: MERGE_BASE, reason: 'pr-head-merge-base' });
+    expect(github.rest.pulls.get).toHaveBeenCalledWith({ ...repository, pull_number: 7 });
+    expect(github.rest.repos.compareCommits).toHaveBeenCalledWith({ ...repository, base: 'main', head: HEAD, per_page: 1 });
+    expect(github.rest.repos.getCommit).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the base sha when the base ref is missing', async () => {
+    const github = targetClient({ pr: { head: { sha: HEAD }, base: { sha: BASE_TIP } } });
+    await resolve(github, HEAD);
+    expect(github.rest.repos.compareCommits).toHaveBeenCalledWith(expect.objectContaining({ base: BASE_TIP }));
+  });
+
+  it('uses the first parent when the PR merge ref is checked out', async () => {
+    const github = targetClient();
+    expect(await resolve(github, MERGE_COMMIT)).toEqual({ targetSha: BASE_TIP, reason: 'merge-ref-base' });
+    expect(github.rest.repos.getCommit).toHaveBeenCalledWith({ ...repository, ref: MERGE_COMMIT });
+    expect(github.rest.repos.compareCommits).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a single-parent commit', { parents: [{ sha: BASE_TIP }] }],
+    ['a merge whose second parent is not the PR head', { parents: [{ sha: BASE_TIP }, { sha: sha('e') }] }],
+    ['an octopus merge', { parents: [{ sha: BASE_TIP }, { sha: HEAD }, { sha: sha('e') }] }]
+  ])('reports an unrecognized checkout for %s', async (_label, commit) => {
+    expect(await resolve(targetClient({ commit }), MERGE_COMMIT)).toEqual({ targetSha: null, reason: 'unrecognized-checkout' });
+  });
+
+  it.each(['', 'not-a-sha', undefined])('reports an unrecognized checkout without calling GitHub for checked-out sha %p', async (checkedOutSha) => {
+    const github = targetClient();
+    expect(await resolve(github, checkedOutSha)).toEqual({ targetSha: null, reason: 'unrecognized-checkout' });
+    expect(github.rest.pulls.get).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 1.5, NaN])('rejects invalid pull request number %p', async (pullNumber) => {
+    await expect(resolveBaselineTargetSha({ github: targetClient(), ...repository, pullNumber, checkedOutSha: HEAD }))
+      .rejects.toThrow('valid pull request number');
+  });
+
+  it.each([
+    ['a missing pull request', null, 'expected head and base records'],
+    ['a missing base', { head: { sha: HEAD } }, 'expected head and base records'],
+    ['a non-sha head', { head: { sha: 'abc' }, base: { sha: BASE_TIP, ref: 'main' } }, 'pull request head.sha'],
+    ['a non-sha base', { head: { sha: HEAD }, base: { sha: 7, ref: 'main' } }, 'pull request base.sha']
+  ])('rejects %s', async (_label, pr, message) => {
+    await expect(resolve(targetClient({ pr }), HEAD)).rejects.toThrow(message);
+  });
+
+  it.each([
+    ['no merge base commit', {}],
+    ['a non-sha merge base', { merge_base_commit: { sha: 'abc' } }]
+  ])('rejects a comparison with %s', async (_label, comparison) => {
+    await expect(resolve(targetClient({ comparison }), HEAD)).rejects.toThrow('merge_base_commit.sha');
+  });
+
+  it.each([
+    ['no parents array', {}, 'expected a parents array'],
+    ['a non-sha first parent', { parents: [{ sha: 'abc' }, { sha: HEAD }] }, 'first parent sha']
+  ])('rejects a commit with %s', async (_label, commit, message) => {
+    await expect(resolve(targetClient({ commit }), MERGE_COMMIT)).rejects.toThrow(message);
+  });
+
+  it('propagates request failures', async () => {
+    const github = targetClient();
+    github.rest.pulls.get.mockRejectedValue(new Error('rate limited'));
+    await expect(resolve(github, HEAD)).rejects.toThrow('rate limited');
   });
 });

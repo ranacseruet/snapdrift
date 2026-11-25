@@ -79,6 +79,10 @@ inputs:
     description: Branch that publishes the baseline.
     required: false
     default: main
+  baseline-target-sha:
+    description: Optional commit SHA to bind the baseline to. The newest baseline published from this commit or its closest ancestor is used. When empty, the target is detected from the checked-out commit (the base tip for a pull request merge-ref checkout, the merge base for a PR-head checkout).
+    required: false
+    default: ''
   comment-on-pr:
     description: Whether to publish the SnapDrift PR report.
     required: false
@@ -128,6 +132,12 @@ outputs:
   baseline-resolution-status:
     description: 'Baseline lookup status: found, missing, or error.'
     value: ${{ steps.pr-diff.outputs.baseline-resolution-status }}
+  baseline-target-sha:
+    description: Commit the baseline was bound to, or empty when the baseline was resolved unbound.
+    value: ${{ steps.pr-diff.outputs.baseline-target-sha }}
+  baseline-distance:
+    description: Commits between the baseline source commit and the target commit, or empty when unbound.
+    value: ${{ steps.pr-diff.outputs.baseline-distance }}
   status:
     description: Final SnapDrift status.
     value: ${{ steps.pr-diff.outputs.status }}
@@ -176,6 +186,7 @@ runs:
         baseline-repository: ${{ inputs.baseline-repository }}
         baseline-workflow-id: ${{ inputs.baseline-workflow-id }}
         baseline-branch: ${{ inputs.baseline-branch }}
+        baseline-target-sha: ${{ inputs.baseline-target-sha }}
         artifact-retention-days: ${{ inputs.artifact-retention-days }}
         comment-on-pr: ${{ inputs.comment-on-pr }}
         max-changed-rows: ${{ inputs.max-changed-rows }}

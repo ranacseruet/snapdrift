@@ -180,7 +180,11 @@ jobs:
 ## What the wrapper does
 
 - Resolves route scope unless `route-ids` is passed explicitly
-- Downloads the latest successful `main` baseline
+- Downloads the successful `main` baseline matching the commit the PR was built on: the
+  baseline published from the PR's base commit (the merge-ref checkout's base tip, or the merge
+  base for a PR-head checkout), else the newest one published from an ancestor of it. Newer or
+  unrelated baselines are never used, and the PR comment shows the baseline sha, its distance
+  from that base commit, and the target. See [binding the baseline](contracts.md#binding-the-baseline-to-the-pr-base-commit)
 - Captures current frames
 - Writes a skipped report when scope is irrelevant or the baseline is missing
 - Stages and uploads the drift artifact
@@ -209,12 +213,15 @@ limit is reached, the actions run all configured routes with scope reason
 | `baseline-repository` | current repo | Read baselines from another repo (`owner/name`) |
 | `baseline-workflow-id` | `ci.yml` | Override the baseline workflow id or filename |
 | `baseline-branch` | `main` | Override the branch the baseline was published from |
+| `baseline-target-sha` | detected | Bind the baseline to this commit (or its closest ancestor with a baseline) instead of the detected PR base commit |
 | `artifact-retention-days` | `30` | Retention period for the uploaded diff artifact |
 | `comment-on-pr` | `true` | Set to `false` to suppress the PR report upsert |
 | `max-changed-rows` | `20` | Max changed-route rows shown in the PR comment before truncation |
 | `max-error-rows` | `10` | Max error rows shown in the PR comment before truncation |
 
-The `pr-diff` action also exposes outputs you can use in subsequent steps: `should-run`, `scope-reason`, `selected-route-ids`, `baseline-found`, `baseline-resolution-status`, `status`, `summary-path`, `markdown-path`, `artifact-name`, `bundle-dir`. `baseline-resolution-status` is `found`, `missing`, or `error`; `missing` is the intentional first-baseline case, while `error` means the GitHub lookup failed and causes local comparisons or local Snap fallbacks to fail. Healthy hosted Snap diffs can continue without the downloaded GitHub artifact. See the wrapper action's `outputs:` block for the canonical list.
+The `pr-diff` action also exposes outputs you can use in subsequent steps: `should-run`, `scope-reason`, `selected-route-ids`, `baseline-found`, `baseline-resolution-status`, `baseline-target-sha`, `baseline-distance`, `status`, `summary-path`, `markdown-path`, `artifact-name`, `bundle-dir`. `baseline-resolution-status` is `found`, `missing`, or `error`; `missing` is the intentional first-baseline case, while `error` means the GitHub lookup failed and causes local comparisons or local Snap fallbacks to fail. Healthy hosted Snap diffs can continue without the downloaded GitHub artifact.
+
+Baseline binding needs a checkout of the PR merge ref (the `actions/checkout` default on `pull_request`) or of the PR head. For other checkouts, or when `baseline-repository` points at a different repository, the action warns and uses the newest baseline; set `baseline-target-sha` to bind explicitly. Binding applies to the artifact-based (`provider: "local"`) comparison; with `provider: "snap"` the hosted diff still uses Snap's latest accepted baseline, chosen server-side. See the wrapper action's `outputs:` block for the canonical list.
 
 ## Hosted Snap provider
 
@@ -303,7 +310,8 @@ The `pr-diff` wrapper composes the following low-level steps. They're still avai
 - `actions/capture` — capture routes and emit `results.json` + `manifest.json`
 - `actions/compare` — diff current capture against a baseline
 - `actions/scope` — decide whether to run and which routes to select from changed files
-- `actions/resolve-baseline` — find and download the latest successful baseline artifact; its
+- `actions/resolve-baseline` — find and download the latest successful baseline artifact (or, with
+  `target-sha`, the one from that commit or its closest ancestor); its
   `resolution-status` output distinguishes `found`, `missing`, and `error`; the action fails for
   `error`, while `missing` remains the intentional first-baseline result
 - `actions/stage` — assemble the baseline or diff bundle for upload

@@ -1,5 +1,5 @@
 name: SnapDrift Resolve Baseline
-description: Resolve and download the latest successful SnapDrift baseline from main.
+description: Resolve and download the latest successful SnapDrift baseline from main, optionally bound to a target commit.
 
 branding:
   icon: download-cloud
@@ -29,6 +29,10 @@ inputs:
     description: Branch that publishes the baseline.
     required: false
     default: main
+  target-sha:
+    description: Optional commit SHA to bind the baseline to. The baseline published from this commit, or from its closest ancestor, is used; newer or unrelated baselines are ignored. When empty, the newest baseline is used.
+    required: false
+    default: ''
   download-path:
     description: Directory where the artifact should be downloaded.
     required: false
@@ -50,6 +54,12 @@ outputs:
   run-id:
     description: Workflow run id that produced the baseline.
     value: ${{ steps.resolve.outputs.run_id }}
+  target-sha:
+    description: Target commit the baseline was bound to, or empty when resolved unbound.
+    value: ${{ steps.resolve.outputs.target_sha }}
+  distance:
+    description: Commits between the baseline-producing commit and the target commit, or empty when resolved unbound.
+    value: ${{ steps.resolve.outputs.distance }}
   message:
     description: Resolution message for a missing or failed lookup.
     value: ${{ steps.resolve.outputs.message }}
@@ -77,6 +87,7 @@ runs:
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_WORKFLOW_ID: ${{ inputs.workflow-id }}
         INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_TARGET_SHA: ${{ inputs.target-sha }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -113,13 +124,16 @@ runs:
               repository,
               workflowId: process.env.INPUT_WORKFLOW_ID || 'ci.yml',
               branch: process.env.INPUT_BRANCH || 'main',
-              artifactName
+              artifactName,
+              targetSha: process.env.INPUT_TARGET_SHA || ''
             });
             core.setOutput('found', String(result.found));
             core.setOutput('resolution_status', result.resolutionStatus);
             core.setOutput('artifact_name', result.artifactName);
             core.setOutput('head_sha', result.headSha || '');
             core.setOutput('run_id', result.runId || '');
+            core.setOutput('target_sha', result.targetSha || '');
+            core.setOutput('distance', result.distance === undefined ? '' : String(result.distance));
             core.setOutput('message', result.message);
           } catch (error) {
             setLookupError(error);

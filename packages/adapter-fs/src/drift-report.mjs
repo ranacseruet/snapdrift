@@ -42,6 +42,25 @@ function resolveProfileFullPage(profile) {
 }
 
 /**
+ * Commit distance between the baseline source and its target. Anything other
+ * than a non-negative integer (or its decimal string form) is ignored, since
+ * the distance is informational and must not fail a report.
+ *
+ * @param {unknown} value
+ * @returns {number | undefined}
+ */
+function parseBaselineDistance(value) {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value >= 0 ? value : undefined;
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/**
  * @param {{
  *   configPath?: string,
  *   baselineResultsPath?: string,
@@ -54,7 +73,9 @@ function resolveProfileFullPage(profile) {
  *   comparisonPolicy?: ComparisonPolicy,
  *   routeIds?: Iterable<string>,
  *   baselineArtifactName?: string,
- *   baselineSourceSha?: string
+ *   baselineSourceSha?: string,
+ *   baselineTargetSha?: string,
+ *   baselineDistance?: number | string
  * }} [options]
  * @returns {Promise<{ summary: DriftSummary, markdown: string }>}
  */
@@ -103,6 +124,8 @@ export async function generateDriftReport(options = {}) {
 
   const envBaselineArtifactName = readFirstDefinedEnv(['SNAPDRIFT_BASELINE_ARTIFACT_NAME']) || '';
   const envBaselineSourceSha = readFirstDefinedEnv(['SNAPDRIFT_BASELINE_SOURCE_SHA']) || '';
+  const envBaselineTargetSha = readFirstDefinedEnv(['SNAPDRIFT_BASELINE_TARGET_SHA']) || '';
+  const baselineDistance = parseBaselineDistance(options.baselineDistance ?? readFirstDefinedEnv(['SNAPDRIFT_BASELINE_DISTANCE']));
 
   /** @type {DriftSummary} */
   const summary = {
@@ -126,6 +149,8 @@ export async function generateDriftReport(options = {}) {
     comparisonPolicy: { ...comparisonPolicy },
     baselineArtifactName: options.baselineArtifactName || envBaselineArtifactName || undefined,
     baselineSourceSha: options.baselineSourceSha || envBaselineSourceSha || undefined,
+    baselineTargetSha: options.baselineTargetSha || envBaselineTargetSha || undefined,
+    baselineDistance,
     baselineAvailable: true,
     captureCompatibility,
     message: captureCompatibility.status === 'unverified' ? captureCompatibility.reason : undefined

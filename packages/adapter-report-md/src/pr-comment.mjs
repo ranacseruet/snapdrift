@@ -1,6 +1,6 @@
 // @ts-check
 
-import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, formatPercentage, formatViewport } from './constants.mjs';
+import { DEFAULT_SNAPDRIFT_REPO_URL, DIFF_IMAGE_LEGEND, STATUS_ICONS, STATUS_LABELS, describeBaselineBinding, formatPercentage, formatViewport } from './constants.mjs';
 import { getAlignmentNotes } from './alignment-notes.mjs';
 
 export const PR_COMMENT_MARKER = '<!-- snapdrift-report -->';
@@ -281,7 +281,11 @@ export function buildReportCommentBody(summary, meta = {}) {
   }
   if (summary.baselineSourceSha) {
     const sha = /** @type {string} */ (summary.baselineSourceSha);
-    metaItems.push(`sha \`${sha.slice(0, 7)}\``);
+    const binding = describeBaselineBinding(summary);
+    const bindingNote = binding
+      ? ` (${binding.label}${binding.matchesTarget ? '' : ` ${formatCodeSpan(binding.targetSha)}`})`
+      : '';
+    metaItems.push(`sha \`${sha.slice(0, 7)}\`${bindingNote}`);
   }
   if (meta.runUrl && /^https?:\/\//.test(meta.runUrl)) {
     metaItems.push(`[View run](${meta.runUrl})`);
